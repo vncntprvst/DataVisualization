@@ -1,12 +1,14 @@
 
 [Behavior,Performance]=processBehaviorData;
 keepSessions=find(mean(vertcat(Performance.ReportSides),2)>30);
+Performance=Performance(keepSessions);
+Behavior=Behavior(keepSessions);
 % [~,orderDate]=sort([Behavior(keepSessions).fileRecordingDate]);
 [~,orderDate]=sort(([Behavior(keepSessions).fileRecordingDate]-...
     datetime(year(min([Behavior(keepSessions).fileRecordingDate])),1,1))+...
     [Behavior.fileStartTime]);
-Performance=Performance(keepSessions(orderDate));
-Behavior=Behavior(keepSessions(orderDate));
+Performance=Performance(orderDate);
+Behavior=Behavior(orderDate);
 % average side bias
 avgpcReportSides=vertcat(Performance.ReportSides)./repmat(sum(vertcat(Performance.ReportSides),2),1,2)*100;
 
