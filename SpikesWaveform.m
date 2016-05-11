@@ -1,4 +1,4 @@
-%% Align and display rasters and sdf
+%% Get spike times and waveforms 
 
 %% Get file path
 [fileName,dirName] = uigetfile({'*.mat; *.hdf5','Processed data';'*.dat','Flat data';...
