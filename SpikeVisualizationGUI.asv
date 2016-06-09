@@ -185,7 +185,7 @@ else
         plot(handles.UnsortedUnits_Axes,mean(selectWF),'linewidth',2,'Color',cmap(unitP,:));
         patch([1:length(wfSEM),fliplr(1:length(wfSEM))],...
             [mean(selectWF)-wfSEM,fliplr(mean(selectWF)+wfSEM)],...
-            cmap(unitP,:),'EdgeColor','none','FaceAlpha',0.5,'Parent', handles.UnsortedUnits_Axes);
+            cmap(unitP,:),'EdgeColor','none','FaceAlpha',0.2);
         set(gca,'xtick',linspace(0,size(waveForms(:,handles.subset{selectedUnits(unitP)}),1),5),...
             'xticklabel',round(linspace(-round(size(waveForms(:,handles.subset{selectedUnits(unitP)}),1)/2),...
             round(size(waveForms(:,handles.subset{selectedUnits(unitP)}),1)/2),5)/(double(samplingRate)/1000),2),'TickDir','out');
@@ -522,8 +522,6 @@ waveForms=handles.Spikes.inGUI.Waveforms{electrodeNum};
 % spikeTimes=handles.Spikes.inGUI.SpikeTimes{electrodeNum};
 % samplingRate=handles.Spikes.Online_Sorting.samplingRate(electrodeNum);
 
-waveForms=waveForms(:,unitsIdx==0);
-
 %make cluster classes 0 (unsorted), and -1 (hidden)
 clusterClasses=ones(size(waveForms,2),1)*-1;
 clusterClasses(handles.subset{1})=0;%mark subset visible (might be all of them)
@@ -533,6 +531,6 @@ clusterClasses=clusterClasses(unitsIdx==0);%remove those already sorted
 InteractiveClassification(waveForms,clusterClasses,0); % viewClasses=0
 
 
-% unitsIdx
+unitsIdx
 %  Update handles structure
 guidata(hObject, handles);

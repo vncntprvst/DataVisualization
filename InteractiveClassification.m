@@ -26,7 +26,8 @@ end
 
 %get line handles
 lineH=findobj(gca,'Type', 'line');%in reverse order
-
+%ignore the ones that have been overlayed
+lineH=lineH(1:size(waveforms,2));
 %draw selection line / rectangle
 lineSelecIdx=SelectLines(waveforms);
 
