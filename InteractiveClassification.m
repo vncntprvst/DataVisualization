@@ -1,8 +1,15 @@
-function InteractiveClassification(waveforms,clusterClasses,viewClasses)
+function clusterClasses=InteractiveClassification(waveforms,clusterClasses,viewClasses)
 
+% class -1 is hidden
+% class -10 cannot change
+viewClasses=[viewClasses,-10];
 switch nargin
     case 0
-        if ~exist('waveforms','var')
+        lineH=findobj(gca,'Type', 'line');
+        if ~isempty([lineH.YData])
+            waveforms=reshape([lineH.YData],size([lineH.YData],2)/size(lineH,1),size(lineH,1));
+            waveforms=waveforms';
+        elseif ~exist('waveforms','var')
             % example waveforms, one per row
             waveforms=[(sin(-10:0)+rand(1,11));...
                 (sin(-10:0)+rand(1,11));...
@@ -26,24 +33,39 @@ end
 
 %get line handles
 lineH=findobj(gca,'Type', 'line');%in reverse order
-%ignore the ones that have been overlayed
-lineH=lineH(1:size(waveforms,2));
+
 %draw selection line / rectangle
 lineSelecIdx=SelectLines(waveforms);
 
-%% actions
-%set class 
-prompt='Set waveform class value';
-name='Waveform classification';
-numlines=1;
-defaultanswer={'0'};
-setClass=str2double(inputdlg(prompt,name,numlines,defaultanswer));
-clusterClasses(lineSelecIdx)=setClass;
-
-% disappear
-% set(lineH(flip(lineSelecIdx)),'Visible','off')
-set(lineH(flip(~ismember(clusterClasses,viewClasses))),'Visible','off')
-
+if sum(lineSelecIdx)>0
+    disp(['crossed waveform(s) ' num2str(find(lineSelecIdx')) ', Tag(s) ']);
+    try
+    disp(lineH(flip(lineSelecIdx)).Tag);
+        figure;plot(waveforms(lineSelecIdx,:)');hold on
+    plot(lineH(flip(lineSelecIdx)).YData)
+    catch
+    end
+    lineSelecIdx(clusterClasses==-10)=0;
+    %show selection
+    set(lineH(flip(lineSelecIdx)),'Color',[0.7 0.5 0.2]);
+    uistack(lineH(flip(lineSelecIdx)),'top');
+    uistack(findobj(gca,'Type', 'patch'),'top');
+    %% actions
+    %set class
+    prompt='Set waveform class value';
+    name='Waveform classification';
+    numlines=1;
+    defaultanswer={'0'};
+    setClass=str2double(inputdlg(prompt,name,numlines,defaultanswer));
+    if ~isempty(setClass)
+        clusterClasses(lineSelecIdx)=setClass;
+        % disappear
+        % set(lineH(flip(lineSelecIdx)),'Visible','off')
+        set(lineH(flip(~ismember(clusterClasses,viewClasses))),'Visible','off')
+    else
+        set(lineH(flip(lineSelecIdx)),'Color',[0 0 0 0.2]);
+    end
+end
 % delete
 % delete(lineH(flip(lineSelecIdx))) % delete line
 % drawnow()
