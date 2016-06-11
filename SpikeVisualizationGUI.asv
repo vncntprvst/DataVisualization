@@ -299,10 +299,9 @@ waveForms=fliplr(reshape([lineH(visibleLines).YData],...
     1),size(lineH(visibleLines),1)));
 waveForms=waveForms';%one waveform per row
 
-% foo=fliplr(reshape([lineH(~visibleLines).YData],...
-%     size([lineH(~visibleLines).YData],2)/size(lineH(~visibleLines),...
-%     1),size(lineH(~visibleLines),1)));
-% figure;hold on;plot(foo,'k');
+figure;;hold on
+    plot(lineH(~visibleLines).YData,'linewidth',1.5);
+
 
 %This is the unsorted units plot
 % make cluster classes 0 (unsorted), and -1 (hidden)

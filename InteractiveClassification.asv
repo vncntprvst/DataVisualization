@@ -33,7 +33,7 @@ end
 
 %get line handles
 lineH=findobj(gca,'Type', 'line');%in reverse order
-visibleLines=find(cellfun(@(x) strcmp(x,'on'), {lineH.Visible}));
+visibleLines=cellfun(@(x) strcmp(x,'on'), {lineH.Visible});
 % [lineH(~visibleLines).Visible]=deal('on');
 %draw selection line / rectangle
 lineSelecIdx=SelectLines(waveforms);
@@ -42,18 +42,18 @@ if sum(lineSelecIdx)>0
     disp(['crossed waveform(s) ' num2str(find(lineSelecIdx')) ', Tag(s) ']);
     try
     {lineH(flip(lineSelecIdx)).Tag}
-%         figure;plot(waveforms(lineSelecIdx,:)');hold on
-%         lineWF=fliplr(reshape([lineH(visibleLines).YData],...
-%     size([lineH(visibleLines).YData],2)/size(lineH(visibleLines),...
-%     1),size(lineH(visibleLines),1)));
-% lineWF=lineWF';%one waveform per row
-%         plot(lineWF(lineSelecIdx,:)')
+        figure;plot(waveforms(lineSelecIdx,:)');hold on
+        lineWF=fliplr(reshape([lineH(visibleLines).YData],...
+    size([lineH(visibleLines).YData],2)/size(lineH(visibleLines),...
+    1),size(lineH(visibleLines),1)));
+lineWF=lineWF';%one waveform per row
+        plot(lineWF(lineSelecIdx,:))
     catch
     end
     lineSelecIdx(clusterClasses==-10)=0;
     %show selection
-    set(lineH(visibleLines(flip(lineSelecIdx))),'Color',[0.7 0.5 0.2]);
-    uistack(lineH(visibleLines(flip(lineSelecIdx))),'top');
+    set(lineH(flip(lineSelecIdx)&visibleLines),'Color',[0.7 0.5 0.2]);
+    uistack(lineH(flip(lineSelecIdx)&visibleLines),'top');
     uistack(findobj(gca,'Type', 'patch'),'top');
     %% actions
     %set class
@@ -66,9 +66,9 @@ if sum(lineSelecIdx)>0
         clusterClasses(lineSelecIdx)=setClass;
         % disappear
         % set(lineH(flip(lineSelecIdx)),'Visible','off')
-        set(lineH(visibleLines(flip(~ismember(clusterClasses,viewClasses)))),'Visible','off')
+        set(lineH(flip(~ismember(clusterClasses,viewClasses))),'Visible','off')
     else
-        set(lineH(visibleLines(flip(lineSelecIdx))),'Color',[0 0 0 0.2]);
+        set(lineH(flip(lineSelecIdx)),'Color',[0 0 0 0.2]);
     end
 end
 % delete
