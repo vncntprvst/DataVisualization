@@ -1,8 +1,8 @@
-function clusterClasses=InteractiveClassification(waveforms,clusterClasses,viewClasses)
+function [clusterClasses,lineSelecIdx]=InteractiveClassification(waveforms,clusterClasses,viewClasses)
 
 % class -1 is hidden
 % class -10 cannot change
-viewClasses=[viewClasses,-10];
+% viewClasses=[viewClasses,-10];
 switch nargin
     case 0
         lineH=findobj(gca,'Type', 'line');
@@ -50,7 +50,7 @@ if sum(lineSelecIdx)>0
 %         plot(lineWF(lineSelecIdx,:)')
     catch
     end
-    lineSelecIdx(clusterClasses==-10)=0;
+%     lineSelecIdx(clusterClasses==-10)=0;
     %show selection
     set(lineH(visibleLines(flip(lineSelecIdx))),'Color',[0.7 0.5 0.2]);
     uistack(lineH(visibleLines(flip(lineSelecIdx))),'top');

@@ -2,7 +2,7 @@ function varargout = SpikeVisualizationGUI(varargin)
 % MATLAB code for SpikeVisualizationGUI.fig
 
 
-% Last Modified by GUIDE v2.5 10-Jun-2016 17:55:40
+% Last Modified by GUIDE v2.5 13-Jun-2016 20:24:22
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -42,7 +42,8 @@ if ~isempty(varargin)
 else
     % open user input window
 end
-
+colormapSeed=colormap(lines);
+handles.cmap=[colormapSeed(1:7,:);(colormap(lines)+flipud(colormap(copper)))/2];
 handles=LoadSpikes(handles);
 
 % Update handles structure
@@ -53,6 +54,15 @@ guidata(hObject, handles);
 
 %% Load data function
 function handles=LoadSpikes(handles)
+if isfield(handles,'subset')
+    handles = rmfield(handles,'subset');
+end
+if isfield(handles,'spikeFile')
+    handles = rmfield(handles,'spikeFile');
+end
+if isfield(handles,'Spikes')
+    handles = rmfield(handles,'Spikes');
+end
 % function declaration
 axis_name= @(x) sprintf('Chan %.0f',x);
 if strcmp(handles.fname,'')
@@ -61,13 +71,13 @@ else
     cd(handles.exportdir);
     userinfo=UserDirInfo;
     exportDirListing=dir;
-    handles.spikeFile={exportDirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_spikes'),...
+    handles.spikeFile={exportDirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_spikes.'),...
         {exportDirListing.name},'UniformOutput',false))).name};
     if size(handles.spikeFile,2)>1
         nameComp=cellfun(@(x) sum(ismember(x,handles.fname)) ,handles.spikeFile);
         if abs(diff(nameComp))<2 %that can be tricky for some files
             %select the most recent
-            fileDates=datenum({exportDirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_spikes'),...
+            fileDates=datenum({exportDirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_spikes.'),...
                 {exportDirListing.name},'UniformOutput',false))).date});
             handles.spikeFile=handles.spikeFile{fileDates==max(fileDates)};
         else
@@ -76,39 +86,85 @@ else
     else
         handles.spikeFile=handles.spikeFile{:};
     end
+%     handles.exportdir='C:\Data\export\PrV75_61_optostim2_BR_6Ch_SyncCh_CAR';
+%     cd(handles.exportdir);
+%     handles.spikeFile='PrV75_61_optostim2_BR_6Ch_SyncCh_CAR_Ch3.mat';
     set(handles.FileName,'string',[handles.exportdir userinfo.slash handles.spikeFile])
     
     %% Load spike data
-    spikeData=load(handles.spikeFile);
-    handles=catstruct(handles,spikeData);
-    clear spikeData;
-    
-    %% Set number of electrodes and units, select electrode with most units and spikes
-    set(handles.SelectElectrode_LB,'string',num2str(handles.Spikes.Offline_Threshold.electrode'));
+    if isfield(handles,'offlineSpikeSort')
+        if logical(regexp(handles.offlineSpikeSort,'Ch\d+.')) % Spike2
+            Spikes.Offline_Sorting=LoadSpikeData([handles.offlineSpikeSortDir...
+                handles.offlineSpikeSort],handles.rec_info.numRecChan,30000);
+        elseif logical(regexp(handles.offlineSpikeSort,'.hdf5'))
+            Spikes.Offline_Sorting=LoadSpikeData([handles.offlineSpikeSortDir...
+                handles.offlineSpikeSort],handles.rec_info.numRecChan);
+        end
+    else
+        spikeData=load(handles.spikeFile);
+        handles=catstruct(handles,spikeData);
+        clear spikeData;
+    end
+   
     if isfield(handles.Spikes,'Online_Sorting') || isfield(handles.Spikes,'Offline_Sorting')
         if isfield(handles.Spikes,'Offline_Sorting') %preferred
             set(handles.Spikes_SortOff_RB,'value',1);
             set(handles.Spikes_SortOn_RB,'value',0);
-            handles.Units=handles.Spikes.Offline_Sorting.Units;
-            handles.SpikeTimes=handles.Spikes.Offline_Sorting.SpikeTimes;
-            handles.Waveforms=handles.Spikes.Offline_Sorting.Waveforms;
+            handles.Spikes.inGUI.Units=handles.Spikes.Offline_Sorting.Units;
+            handles.Spikes.inGUI.SpikeTimes=handles.Spikes.Offline_Sorting.SpikeTimes;
+            handles.Spikes.inGUI.Waveforms=handles.Spikes.Offline_Sorting.Waveforms;
+            handles.Spikes.inGUI.samplingRate=handles.Spikes.Offline_Sorting.samplingRate;
         else
             set(handles.Spikes_SortOff_RB,'value',0);
             set(handles.Spikes_SortOn_RB,'value',1);
             handles.Spikes.inGUI.Units=handles.Spikes.Online_Sorting.Units;
             handles.Spikes.inGUI.SpikeTimes=handles.Spikes.Online_Sorting.SpikeTimes;
             handles.Spikes.inGUI.Waveforms=handles.Spikes.Online_Sorting.Waveforms;
+            handles.Spikes.inGUI.samplingRate=handles.Spikes.Online_Sorting.samplingRate;
         end
-        numUnits=cellfun(@(x) sum(length(x)*unique(x)), handles.Spikes.inGUI.Units);
-        electrodeNum=find(numUnits==max(numUnits),1);
-        set(handles.SelectElectrode_LB,'value',electrodeNum);
-    else
-        set(handles.SelectElectrode_LB,'value',1)
     end
     
+    % downsample spike times to 1 millisecond bins
+%     spikeTimes=handles.Spikes.inGUI.SpikeTimes;
+    for chNum=1:size(handles.Spikes.inGUI.samplingRate,1)
+        handles.Spikes.inGUI.samplingRate(chNum,2)=1000;
+        handles.Spikes.inGUI.SpikeTimes{chNum,2}=...
+            handles.Spikes.inGUI.SpikeTimes{chNum,1}/...
+            (handles.Spikes.inGUI.samplingRate(chNum,1)/...
+            handles.Spikes.inGUI.samplingRate(chNum,2));
+        
+%         spikeTimeIdx=zeros(1,size(Spikes.Offline_Threshold.data{ChExN,1},2));
+%         spikeTimeIdx(Spikes.Offline_Threshold.data{ChExN,1})=1;
+%         
+%         binSize=1;
+%         numBin=ceil(max(spikeTimes{chNum})/...
+%             (handles.Spikes.inGUI.samplingRate(chNum,1)/...
+%             handles.Spikes.inGUI.samplingRate(chNum,2))/binSize);
+%         % binspikeTime = histogram(double(spikeTimes), numBin); %plots directly histogram
+%         [data,binEdges] = histcounts(double(spikeTimes{chNum}),...
+%             linspace(0,max(double(spikeTimes{chNum})),numBin));
+%         data(data>1)=1; %no more than 1 spike per ms
+    end
+    
+    %% Set number of electrodes and units, 
+    % if opening GUI, select electrode with most units and spikes
+    if strcmp(get(handles.SelectElectrode_LB,'string'),'none')
+        set(handles.SelectElectrode_LB,'string',num2str(handles.Spikes.Offline_Threshold.electrode'));
+        if isfield(handles.Spikes,'Online_Sorting') || isfield(handles.Spikes,'Offline_Sorting')
+            numUnits=cellfun(@(x) sum(length(x)*unique(x)), handles.Spikes.inGUI.Units);
+            electrodeNum=find(numUnits==max(numUnits),1);
+            set(handles.SelectElectrode_LB,'value',electrodeNum);
+        else
+            set(handles.SelectElectrode_LB,'value',1)
+        end
+    else
+        electrodeNum=get(handles.SelectElectrode_LB,'value');
+    end
+        
     %% initialize variables
     unitsIdx=handles.Spikes.inGUI.Units{electrodeNum};
     waveForms=handles.Spikes.inGUI.Waveforms{electrodeNum};
+        
     % how many units on that electrode?
     unitsID=unique(unitsIdx); %number of clustered units
     set(handles.SelectUnit_LB,'string',num2str(unitsID'));
@@ -116,12 +172,16 @@ else
     
     %% take out big ouliers
     WFmeanZ=mean(abs(zscore(single(waveForms'))),2);
-    figure('name', 'Artifacts','position',[30   500   500   400]);
-    plot(waveForms(:,WFmeanZ>6)','linewidth',2.5); hold on;
-    plot(mean(waveForms,2),'linewidth',2.5);
-    legend({'Artifact','Mean waveforms'});
-    title('Potential artifacts removed, mean sigma > 6');
-    handles.Spikes.inGUI.Units{electrodeNum}(WFmeanZ>6)=-9;%artifacts
+    % if more than one, plot it and keep
+    if sum(WFmeanZ>6)>1
+        figure('name', 'Artifacts','position',[30   500   500   400]);
+        plot(waveForms(:,WFmeanZ>6)','linewidth',2.5); hold on;
+        plot(mean(waveForms,2),'linewidth',2.5);
+        legend({'Artifact','Mean waveforms'});
+        title('Potential artifacts removed, mean sigma > 6');
+    else
+        handles.Spikes.inGUI.Units{electrodeNum}(WFmeanZ>6)=-9;%artifacts
+    end
     
     % here's how this can work:
     %     Spikes detected from threshold are the benchmark (unit code = 0).
@@ -131,14 +191,129 @@ else
     handles=Plot_Sorted_WF(handles);
     Plot_Mean_WF(handles);
     Plot_Raster_TW(handles);
+    Plot_ISI(handles);
+    Plot_ACG(handles);
+    Plot_XCG(handles);
 end
+
+%% Plot ISI
+function Plot_ISI(handles)
+
+% get which unit to plot
+if get(handles.ShowAllUnits_RB,'value')
+    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    selectedUnitsListIdx=find(unitID>0);
+    selectedUnits=unitID(selectedUnitsListIdx);
+    % keep the first one
+else
+    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
+    selectedUnits=unitID(selectedUnitsListIdx);
+end
+if isempty(selectedUnits)
+    cla(handles.ISI_Axes);
+    return
+end
+electrodeNum=get(handles.SelectElectrode_LB,'value');
+spikeTimes=handles.Spikes.inGUI.SpikeTimes{electrodeNum,1};
+unitsIdx=handles.Spikes.inGUI.Units{electrodeNum};
+samplingRate=handles.Spikes.inGUI.samplingRate(electrodeNum,1);
+
+%keep the most numerous if more than one
+if size(selectedUnits,1)>1
+    keepU=1;
+    for uidx=1:size(selectedUnits,1)
+        if sum(unitsIdx==selectedUnits(uidx))>sum(unitsIdx==selectedUnits(keepU))
+            keepU=uidx;
+        end
+    end
+    selectedUnits=selectedUnits(keepU);    
+end
+
+unitST=spikeTimes(unitsIdx==selectedUnits);
+% compute interspike interval
+ISI=diff(unitST)/(samplingRate/1000);
+axes(handles.ISI_Axes); hold on; 
+cla(handles.ISI_Axes);
+set(handles.ISI_Axes,'Visible','on');
+ISIhist=histogram(double(ISI),0:5:max(ISI)+1);  %,'Normalization','probability'
+ISIhist.FaceColor = handles.cmap(unitID(unitID==selectedUnits),:);
+ISIhist.EdgeColor = 'k';
+xlabel('Inter-spike Interval distribution (ms)')
+axis('tight');box off;
+set(gca,'xlim',[0 100],'Color','white','FontSize',10,'FontName','calibri');
+hold off
+
+%% Plot autocorrelogram
+function Plot_ACG(handles)
+% get which unit to plot
+if get(handles.ShowAllUnits_RB,'value')
+    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    selectedUnitsListIdx=find(unitID>0);
+    selectedUnits=unitID(selectedUnitsListIdx);
+    % keep the first one
+else
+    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
+    selectedUnits=unitID(selectedUnitsListIdx);
+end
+if isempty(selectedUnits)
+    cla(handles.ACG_Axes);
+    return
+end
+
+electrodeNum=get(handles.SelectElectrode_LB,'value');
+spikeTimes=handles.Spikes.inGUI.SpikeTimes{electrodeNum,1};
+unitsIdx=handles.Spikes.inGUI.Units{electrodeNum};
+samplingRate=handles.Spikes.inGUI.samplingRate(electrodeNum,1);
+
+%keep the most numerous if more than one
+if size(selectedUnits,1)>1
+    keepU=1;
+    for uidx=1:size(selectedUnits,1)
+        if sum(unitsIdx==selectedUnits(uidx))>sum(unitsIdx==selectedUnits(keepU))
+            keepU=uidx;
+        end
+    end
+    selectedUnits=selectedUnits(keepU);    
+end
+%get unit spike times
+unitST=spikeTimes(unitsIdx==selectedUnits);
+% change to ms timescale
+unitST=unitST/(samplingRate/1000);
+%get ISI
+ISI=diff(unitST)/(samplingRate/1000);
+%bin
+spikeTimeIdx=zeros(1,unitST(end));
+spikeTimeIdx(unitST)=1;
+binSize=5;
+numBin=ceil(size(spikeTimeIdx,2)/binSize);
+binUnits = histcounts(double(unitST), linspace(0,size(spikeTimeIdx,2),numBin));
+binUnits(binUnits>1)=1; %no more than 1 spike per ms
+% compute autocorrelogram 
+[ACG,lags]=xcorr(double(binUnits),200,'unbiased'); %'coeff'
+ACG(lags==0)=0;
+axes(handles.ACG_Axes); hold on; 
+cla(handles.ACG_Axes);
+set(handles.ACG_Axes,'Visible','on');
+ACGh=bar(lags,ACG);
+ACGh.FaceColor = handles.cmap(unitID(unitID==selectedUnits),:);
+ACGh.EdgeColor = 'none';
+axis('tight');box off;
+xlabel('Autocorrelogram (5 ms bins)')
+set(gca,'xlim',[-100 100],'Color','white','FontSize',10,'FontName','calibri');
+hold off
+
+%% Plot cross-correlogram
+function Plot_XCG(handles)
+
 
 %% Plot Unsorted Spikes
 function handles=Plot_Unsorted_WF(handles)
 electrodeNum=get(handles.SelectElectrode_LB,'value');
 waveForms=handles.Spikes.inGUI.Waveforms{electrodeNum};
 unitsIdx=handles.Spikes.inGUI.Units{electrodeNum};
-samplingRate=handles.Spikes.Online_Sorting.samplingRate(electrodeNum);
+samplingRate=handles.Spikes.inGUI.samplingRate(electrodeNum,1);
 %% Plot unsorted spikes
 if sum(unitsIdx==0)>2000 %then only plot subset of waveforms
     subset=find(unitsIdx==0);
@@ -146,14 +321,14 @@ if sum(unitsIdx==0)>2000 %then only plot subset of waveforms
 else
     handles.subset{1}=find(unitsIdx==0);
 end
-axes(handles.UnsortedUnits_Axes); hold on;colormap lines; cmap=colormap;
+axes(handles.UnsortedUnits_Axes); hold on;
 cla(handles.UnsortedUnits_Axes);
 set(handles.UnsortedUnits_Axes,'Visible','on');
 plot(waveForms(:,handles.subset{1}),'linewidth',1,'Color',[0 0 0 0.2]);
 lineH=flipud(findobj(gca,'Type', 'line'));
 % childH=flipud(get(gca,'Children'));
 for lineTag=1:size(lineH,1)
-    lineH(lineTag).Tag=num2str(handles.subset{1}(lineTag));
+    lineH(lineTag).Tag=num2str(handles.subset{1}(lineTag)); %Tag the unit ID
 end
 % foo=reshape([lineH.YData],size([lineH.YData],2)/size(lineH,1),size(lineH,1));
 % faa=reshape([childH.YData],size([childH.YData],2)/size(childH,1),size(childH,1));
@@ -176,9 +351,9 @@ function handles=Plot_Sorted_WF(handles)
 electrodeNum=get(handles.SelectElectrode_LB,'value');
 waveForms=handles.Spikes.inGUI.Waveforms{electrodeNum};
 unitsIdx=handles.Spikes.inGUI.Units{electrodeNum};
-samplingRate=handles.Spikes.Online_Sorting.samplingRate(electrodeNum);
+samplingRate=handles.Spikes.inGUI.samplingRate(electrodeNum,1);
 % selected unit ids
-axes(handles.SortedUnits_Axes); hold on;colormap lines; cmap=colormap;
+axes(handles.SortedUnits_Axes); hold on;%colormap lines; cmap=colormap;
 cla(handles.SortedUnits_Axes);
 set(handles.SortedUnits_Axes,'Visible','on');
 if get(handles.ShowAllUnits_RB,'value')
@@ -197,7 +372,23 @@ for unitP=1:length(selectedUnits)
     else
         handles.subset{selectedUnitsListIdx(unitP)}=find(unitsIdx==selectedUnits(unitP));
     end
-    plot(waveForms(:,handles.subset{selectedUnitsListIdx(unitP)}),'linewidth',1,'Color',[cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4]);
+    plot(waveForms(:,handles.subset{selectedUnitsListIdx(unitP)}),...
+        'linewidth',1,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
+        'Tag',num2str(selectedUnits(unitP)));
+    lineH=flipud(findobj(gca,'Type', 'line'));
+    passedTags=0;
+    for lineTag=1:size(lineH,1)
+        % check if it's the right cluster
+        if strcmp(lineH(lineTag).Tag,num2str(selectedUnits(unitP)))
+            %apply corresponding Tag
+            lineH(lineTag).Tag=num2str(handles.subset{selectedUnitsListIdx(unitP)}(lineTag-passedTags)); %Tag the unit ID
+        else
+            passedTags=passedTags+1;
+        end
+    end
+%     figure;hold on
+%     plot(lineH(lineTag).YData);
+%     plot(waveForms(:,handles.subset{selectedUnitsListIdx(unitP)}(lineTag-passedTags)))
 end
 set(gca,'xtick',linspace(0,size(waveForms(:,handles.subset{selectedUnitsListIdx(unitP)}),1),5),...
     'xticklabel',round(linspace(-round(size(waveForms(:,handles.subset{selectedUnitsListIdx(unitP)}),1)/2),...
@@ -214,8 +405,8 @@ function Plot_Mean_WF(handles)
 electrodeNum=get(handles.SelectElectrode_LB,'value');
 waveForms=handles.Spikes.inGUI.Waveforms{electrodeNum};
 unitsIdx=handles.Spikes.inGUI.Units{electrodeNum};
-samplingRate=handles.Spikes.Online_Sorting.samplingRate(electrodeNum);
-axes(handles.MeanSortedUnits_Axes); hold on;colormap lines; cmap=colormap;
+samplingRate=handles.Spikes.inGUI.samplingRate(electrodeNum,1);
+axes(handles.MeanSortedUnits_Axes); hold on;%colormap lines; 
 cla(handles.MeanSortedUnits_Axes);
 set(handles.MeanSortedUnits_Axes,'Visible','on');
 if get(handles.ShowAllUnits_RB,'value')
@@ -228,22 +419,22 @@ else
     selectedUnits=unitID(selectedUnitsListIdx);
 end
 for unitP=1:length(selectedUnits)
-    selectWF=single(waveForms(:,handles.subset{selectedUnitsListIdx(unitP)})');
+    selectWF=single(waveForms(:,unitsIdx==selectedUnits(unitP))');
     if ~isnan(mean(selectWF))
-        plot(mean(selectWF),'linewidth',2,'Color',[cmap(unitID(selectedUnitsListIdx(unitP)),:),0.7]);
+        plot(mean(selectWF),'linewidth',2,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.7]);
         wfSEM=std(selectWF)/ sqrt(size(selectWF,2)); %standard error of the mean
         wfSEM = wfSEM * 1.96; % 95% of the data will fall within 1.96 standard deviations of a normal distribution
         patch([1:length(wfSEM),fliplr(1:length(wfSEM))],...
             [mean(selectWF)-wfSEM,fliplr(mean(selectWF)+wfSEM)],...
-            cmap(unitID(selectedUnitsListIdx(unitP)),:),'EdgeColor','none','FaceAlpha',0.2);
+            handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),'EdgeColor','none','FaceAlpha',0.2);
         %duplicate mean unit over unsorted plot
-        %             plot(handles.UnsortedUnits_Axes,mean(selectWF),'linewidth',2,'Color',cmap(unitP,:));
+        %             plot(handles.UnsortedUnits_Axes,mean(selectWF),'linewidth',2,'Color',handles.cmap(unitP,:));
         if unitP==1
             delete(findobj(handles.UnsortedUnits_Axes,'Type', 'patch'));
         end
         patch([1:length(wfSEM),fliplr(1:length(wfSEM))],...
             [mean(selectWF)-wfSEM,fliplr(mean(selectWF)+wfSEM)],...
-            cmap(unitID(selectedUnitsListIdx(unitP)),:),'EdgeColor','none','FaceAlpha',0.5,'Parent', handles.UnsortedUnits_Axes);
+            handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),'EdgeColor','none','FaceAlpha',0.5,'Parent', handles.UnsortedUnits_Axes);
     end
 end
 set(gca,'xtick',linspace(0,size(waveForms(:,handles.subset{selectedUnitsListIdx(unitP)}),1),5),...
@@ -259,19 +450,8 @@ hold off
 function  Plot_Raster_TW(handles)
 %% plot rasters
 electrodeNum=get(handles.SelectElectrode_LB,'value');
-spikeTimes=handles.Spikes.inGUI.SpikeTimes{electrodeNum};
-% downsample to 1 millisecond bins
-%         Spikes.Offline_Threshold.samplingRate(ChExN,2)=1000;
-%         Spikes.Offline_Threshold.type{ChExN,2}='downSampled';
-%         spikeTimeIdx=zeros(1,size(Spikes.Offline_Threshold.data{ChExN,1},2));
-%         spikeTimeIdx(Spikes.Offline_Threshold.data{ChExN,1})=1;
-%         spikeTimes=find(Spikes.Offline_Threshold.data{ChExN,1});
-%         binSize=1;
-%         numBin=ceil(size(spikeTimeIdx,2)/(Spikes.Offline_Threshold.samplingRate(ChExN,1)/Spikes.Offline_Threshold.samplingRate(ChExN,2))/binSize);
-%         % binspikeTime = histogram(double(spikeTimes), numBin); %plots directly histogram
-%         [Spikes.Offline_Threshold.data{ChExN,2},Spikes.Offline_Threshold.binEdges{ChExN}] = histcounts(double(spikeTimes), linspace(0,size(spikeTimeIdx,2),numBin));
-%         Spikes.Offline_Threshold.data{ChExN,2}(Spikes.Offline_Threshold.data{ChExN,2}>1)=1; %no more than 1 spike per ms
-%
+spikeTimes=handles.Spikes.inGUI.SpikeTimes{electrodeNum,2};
+
 % plot 10 sec or 2000 waveforms max
 
 % --- Executes on mouse press over axes background.
@@ -285,8 +465,8 @@ electrodeNum=get(handles.SelectElectrode_LB,'value');
 %% initialize variables
 unitsIdx=find(handles.Spikes.inGUI.Units{electrodeNum}==0);
 % waveForms=handles.Spikes.inGUI.Waveforms{electrodeNum};
-% spikeTimes=handles.Spikes.inGUI.SpikeTimes{electrodeNum};
-% samplingRate=handles.Spikes.Online_Sorting.samplingRate(electrodeNum);
+% spikeTimes=handles.Spikes.inGUI.SpikeTimes{electrodeNum,2};
+% samplingRate=handles.Spikes.inGUI.samplingRate(electrodeNum,1);
 
 lineH=findobj(gca,'Type', 'line');
 
@@ -330,18 +510,83 @@ handles.Spikes.inGUI.Units{electrodeNum}(unitsIdx(logical(clusterClasses)))=...
     clusterClasses(logical(clusterClasses));
 unitsID=unique(handles.Spikes.inGUI.Units{electrodeNum});
 set(handles.SelectUnit_LB,'String',num2str(unitsID(unitsID>=0)'))
-if get(handles.ShowAllUnits_RB,'value')
+if find(clusterClasses(logical(clusterClasses))>0,1)
     handles=Plot_Sorted_WF(handles);
     Plot_Mean_WF(handles);
+    Plot_ISI(handles);
+    Plot_ACG(handles);
+    Plot_XCG(handles);
 end
+%  Update handles structure
+guidata(hObject, handles);
+
+% --- Executes on mouse press over axes background.
+function SortedUnits_Axes_ButtonDownFcn(hObject, eventdata, handles)
+electrodeNum=get(handles.SelectElectrode_LB,'value');
+
+%% initialize variables
+unitID=str2num(get(handles.SelectUnit_LB,'string'));
+% for uIdxNum=1:length(unitsID)
+%     unitsIdx{uIdxNum}=find(handles.Spikes.inGUI.Units{electrodeNum}==unitsID(uIdxNum));
+% end
+unitsIdx=handles.Spikes.inGUI.Units{electrodeNum};
+
+lineH=findobj(gca,'Type', 'line');
+visibleLines=cellfun(@(x) strcmp(x,'on'), {lineH.Visible});
+
+waveForms=fliplr(reshape([lineH(visibleLines).YData],...
+    size([lineH(visibleLines).YData],2)/size(lineH(visibleLines),...
+    1),size(lineH(visibleLines),1)));
+waveForms=waveForms';%one waveform per row
+
+linesTags=flip(cellfun(@(x) str2double(x), {lineH(visibleLines).Tag}));
+% ismember(find(unitsIdx==2),linesClasses)
+clusterClasses=unitsIdx(linesTags)';
+% figure;hold on
+% plot(waveForms(530:537,:)','r')
+% plot(waveForms(1:8,:)','b')
+if get(handles.ShowAllUnits_RB,'value')
+    selectedUnitsListIdx=find(unitID>0);
+    viewClasses=unitID(selectedUnitsListIdx);
+else
+    selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
+    viewClasses=unitID(selectedUnitsListIdx);
+end
+
+[clusterClasses,lineSelecIdx]=InteractiveClassification(waveForms,clusterClasses,viewClasses); % viewClasses=0
+% foo=handles.Spikes.inGUI.Waveforms{electrodeNum}; foo=foo';
+% figure;plot(foo(unitsIdx(logical(clusterClasses)),:)');hold on
+% plot(lineH(flip(logical(clusterClasses))).YData)
+% 
+% waveForms=handles.Spikes.inGUI.Waveforms{electrodeNum};
+% figure; plot(waveForms(:,linesTags(lineSelecIdx)))
+if lineSelecIdx==0
+    return
+end
+handles.Spikes.inGUI.Units{electrodeNum}(linesTags(lineSelecIdx))=...
+    clusterClasses(lineSelecIdx);
+unitsID=unique(handles.Spikes.inGUI.Units{electrodeNum});
+set(handles.SelectUnit_LB,'String',num2str(unitsID(unitsID>=0)'))
+if find(clusterClasses(logical(clusterClasses))>0,1)
+    handles=Plot_Sorted_WF(handles);
+end
+if find(clusterClasses(logical(clusterClasses))==0,1)
+    handles=Plot_Unsorted_WF(handles);
+end
+Plot_Mean_WF(handles);
+Plot_ISI(handles);
+Plot_ACG(handles);
+Plot_XCG(handles);
 %  Update handles structure
 guidata(hObject, handles);
 
 %% --- Executes on selection change in SelectElectrode_LB.
 function SelectElectrode_LB_Callback(hObject, eventdata, handles)
-% hObject    handle to SelectElectrode_LB (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
+if strcmp(get(gcf,'SelectionType'),'normal')
+handles=LoadSpikes(handles);
+% Update handles structure
+guidata(hObject, handles);
+end
 
 %% Get chanel and unit selection
 %     channelMenu=get(handles.SelectElectrode_LB,'string');
@@ -365,6 +610,9 @@ if strcmp(get(gcf,'SelectionType'),'normal')
     %        contents{get(hObject,'Value')}
     handles=Plot_Sorted_WF(handles);
     Plot_Mean_WF(handles);
+    Plot_ISI(handles);
+    Plot_ACG(handles);
+    Plot_XCG(handles);
     % elseif strcmp(get(gcf,'SelectionType'),'open') % double click
     % else
     %  Update handles structure
@@ -376,6 +624,10 @@ function ShowAllUnits_RB_Callback(hObject, eventdata, handles)
 if get(hObject,'Value')
     handles=Plot_Sorted_WF(handles);
     Plot_Mean_WF(handles);
+    Plot_ISI(handles);
+    Plot_ACG(handles);
+    Plot_XCG(handles);
+    guidata(hObject, handles);
 end
 
 % --- Executes on mouse press over axes background.
@@ -390,6 +642,30 @@ function MeanSortedUnits_Axes_ButtonDownFcn(hObject, eventdata, handles)
 %  Update handles structure
 guidata(hObject, handles);
 
+%% --- Executes on button press in PreviewTh_PB.
+function PreviewTh_PB_Callback(hObject, eventdata, handles)
+noppDatFile=[cell2mat(regexp(handles.spikeFile,'.+(?=\_\w+\_\w+\.)','match')) '_nopp'];
+handles.PreviewTh_PB.ForegroundColor=[0.2 0.5 0.7];
+[status,cmdout]=RunSpykingCircus(cd,noppDatFile,'previewspkc');
+handles.PreviewTh_PB.ForegroundColor=[0.3490 0.2000 0.3294];
+
+%% --- Executes on button press in GetSortedSpikes_PB.
+function GetSortedSpikes_PB_Callback(hObject, eventdata, handles)
+noppDatFile=[cell2mat(regexp(handles.spikeFile,'.+(?=\_\w+\_\w+\.)','match')) '_nopp'];
+[status,cmdout]=RunSpykingCircus(cd,noppDatFile,'runspkc,exportspikes');
+if handles.GetSortedSpikes_PB.ForegroundColor(1)==0.3490
+    handles.GetSortedSpikes_PB.ForegroundColor=[0.2 0.5 0.7];
+else
+    handles.GetSortedSpikes_PB.ForegroundColor=[0.3490 0.2000 0.3294];
+end
+
+%% --- Executes on button press in RefineSort_PB.
+function RefineSort_PB_Callback(hObject, eventdata, handles)
+noppDatFile=[cell2mat(regexp(handles.spikeFile,'.+(?=\_\w+\_\w+\.)','match')) '_nopp'];
+handles.RefineSort_PB.ForegroundColor=[0.2 0.5 0.7];
+[status,cmdout]=RunSpykingCircus(cd,noppDatFile,'startGUI');
+handles.RefineSort_PB.ForegroundColor=[0.3490 0.2000 0.3294];
+
 %% --- Outputs from this function are returned to the command line.
 function varargout = SpikeVisualizationGUI_OutputFcn(hObject, eventdata, handles)
 % varargout  cell array for returning output args (see VARARGOUT);
@@ -403,12 +679,12 @@ varargout{1} = handles.output;
 
 %% --- Executes on button press in Spikes_SortOff_RB.
 function Spikes_SortOff_RB_Callback(hObject, eventdata, handles)
-% hObject    handle to Spikes_SortOff_RB (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
 
-% Hint: get(hObject,'Value') returns toggle state of Spikes_SortOff_RB
-
+[handles.offlineSpikeSort,handles.offlineSpikeSortDir] = uigetfile({'*.mat;*.hdf5','All Data Formats';...
+    '*.*','All Files' },'Export folder',handles.exportdir);
+handles=LoadSpikes(handles);
+% Update handles structure
+guidata(hObject, handles);
 
 %% --- Executes on button press in radiobutton2.
 function radiobutton2_Callback(hObject, eventdata, handles)
@@ -591,11 +867,7 @@ function Spikes_SortOn_RB_Callback(hObject, eventdata, handles)
 % Hint: get(hObject,'Value') returns toggle state of Spikes_SortOn_RB
 
 
-%% --- Executes on button press in PB_GetSortedSpikes.
-function PB_GetSortedSpikes_Callback(hObject, eventdata, handles)
-% hObject    handle to PB_GetSortedSpikes (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
+
 
 % --- Executes during object creation, after setting all properties.
 function SelectUnit_LB_CreateFcn(hObject, eventdata, handles)
@@ -667,4 +939,8 @@ function Reload_PB_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 
-
+% --- Executes on button press in Save_PB.
+function Save_PB_Callback(hObject, eventdata, handles)
+    userinfo=UserDirInfo;
+    save([handles.exportdir userinfo.slash cell2mat(regexp(handles.fname,'.+(?=\.)','match'))...
+        '_spikesResorted'],'-struct','handles','Spikes','-v7.3');

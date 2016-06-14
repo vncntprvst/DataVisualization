@@ -24,6 +24,8 @@ if strfind(fileName,'.mat')
     Spikes.Offline_SpkSort.SpikeTimes{3,1}=uint32(nw_401.times*rec_info.samplingRate);
     Spikes.Offline_SpkSort.Waveforms{3,1}=nw_401.values;
     
+    ResortedSpikes=load('C:\Data\export\PrV75_61_BR_8Ch\PrV75_61_opt_stim_2003_spikesResorted.mat');
+    
 %     try
 %         Behavior=processBehaviorData;
 %     catch
@@ -40,9 +42,11 @@ elseif strfind(fileName,'.hdf5')
 end
 
 %get clusters spiketimes
-for clusNum=min(unique(Spikes.Offline_SpkSort.Units{3,1})):max(unique(Spikes.Offline_SpkSort.Units{3,1}))   
-    Ch3.(['Clus' num2str(clusNum)]).SpikeTimes=Spikes.Offline_SpkSort.SpikeTimes{KeepChans,1}(Spikes.Offline_SpkSort.Units{KeepChans,1}==clusNum);
-    Ch3.(['Clus' num2str(clusNum)]).Waveforms=Spikes.Offline_SpkSort.Waveforms{KeepChans,1}(Spikes.Offline_SpkSort.Units{KeepChans,1}==clusNum,:);
+for clusNum=min(unique(ResortedSpikes.Spikes.inGUI.Units{3,1})):max(unique(ResortedSpikes.Spikes.inGUI.Units{3,1}))   
+%     Ch3.(['Clus' num2str(clusNum)]).SpikeTimes=Spikes.Offline_SpkSort.SpikeTimes{KeepChans,1}(Spikes.Offline_SpkSort.Units{KeepChans,1}==clusNum);
+%     Ch3.(['Clus' num2str(clusNum)]).Waveforms=Spikes.Offline_SpkSort.Waveforms{KeepChans,1}(Spikes.Offline_SpkSort.Units{KeepChans,1}==clusNum,:);
+    Ch3.(['Clus' num2str(clusNum+1)]).SpikeTimes=ResortedSpikes.Spikes.inGUI.SpikeTimes{KeepChans,1}(ResortedSpikes.Spikes.inGUI.Units{KeepChans,1}==clusNum);
+    Ch3.(['Clus' num2str(clusNum+1)]).Waveforms=ResortedSpikes.Spikes.inGUI.Waveforms{KeepChans,1}(:,ResortedSpikes.Spikes.inGUI.Units{KeepChans,1}==clusNum)';
 end
 % Ch3.Clus1.Waveforms=ExtractChunks(rawData(3,:),Ch3.Clus1.SpikeTimes,82,'tzero');
 
@@ -61,7 +65,6 @@ axis('tight');box off;
 xlabel('Time (ms)')
 ylabel('Voltage (uV) x10 amp')
 set(gca,'Color','white','FontSize',12,'FontName','calibri');
-
 
 % by subplots
 figure;
