@@ -40,10 +40,35 @@ if ~isempty(varargin)
         set(handles.FileName,'string','');
     end
 else
+    userinfo=UserDirInfo;
+    %% get most recently changed data folder
+    exportDir=regexprep(userinfo.directory,'\\\w+$','\\export');
+    dataDirListing=dir(exportDir);
+    %removing dots
+    dataDirListing=dataDirListing(cellfun('isempty',cellfun(@(x) strfind(x,'.'),...
+        {dataDirListing.name},'UniformOutput',false)));
+    %removing other folders
+    dataDirListing=dataDirListing(cellfun('isempty',cellfun(@(x)...
+        regexp('list | all | unwanted | folders | here ',x),...
+        {dataDirListing.name},'UniformOutput',false)));
+    [~,fDateIdx]=sort([dataDirListing.datenum],'descend');
+    recentDataFolder=[exportDir userinfo.slash dataDirListing(fDateIdx(1)).name userinfo.slash];
+
     % open user input window
+    [handles.spikeFile,handles.exportDir] = uigetfile({'*.mat;*.hdf5','Export Formats';...
+        '*.dat','Raw data';'*.*','All Files' },'Most recent data',recentDataFolder);
+    if handles.spikeFile==0
+    handles.spikeFile='';
+    handles.exportDir=recentDataFolder;
+    end
 end
+%define figure colormap
 colormapSeed=colormap(lines);
-handles.cmap=[colormapSeed(1:7,:);(colormap(lines)+flipud(colormap(copper)))/2];
+handles.cmap=[colormapSeed(1:7,:);(colormapSeed+flipud(colormap(copper)))/2];
+
+if isfield(handles,'spikeFile') && sum(strfind(handles.spikeFile,'.dat'))
+    GetSortedSpikes_PB_Callback(hObject, handles);
+end
 handles=LoadSpikes(handles);
 
 % Update handles structure
@@ -65,31 +90,34 @@ if isfield(handles,'Spikes')
 end
 % function declaration
 axis_name= @(x) sprintf('Chan %.0f',x);
-if strcmp(handles.fname,'')
+
+if isfield(handles,'fname') && strcmp(handles.fname,'')
     set(handles.FileName,'string','')
 else
-    cd(handles.exportdir);
-    userinfo=UserDirInfo;
-    exportDirListing=dir;
-    handles.spikeFile={exportDirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_spikes.'),...
-        {exportDirListing.name},'UniformOutput',false))).name};
-    if size(handles.spikeFile,2)>1
-        nameComp=cellfun(@(x) sum(ismember(x,handles.fname)) ,handles.spikeFile);
-        if abs(diff(nameComp))<2 %that can be tricky for some files
-            %select the most recent
-            fileDates=datenum({exportDirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_spikes.'),...
-                {exportDirListing.name},'UniformOutput',false))).date});
-            handles.spikeFile=handles.spikeFile{fileDates==max(fileDates)};
+    if ~isfield(handles,'spikeFile')
+        cd(handles.exportDir);
+        userinfo=UserDirInfo;
+        exportDirListing=dir;
+        handles.spikeFile={exportDirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_spikes.'),...
+            {exportDirListing.name},'UniformOutput',false))).name};
+        if size(handles.spikeFile,2)>1
+            nameComp=cellfun(@(x) sum(ismember(x,handles.fname)) ,handles.spikeFile);
+            if abs(diff(nameComp))<2 %that can be tricky for some files
+                %select the most recent
+                fileDates=datenum({exportDirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_spikes.'),...
+                    {exportDirListing.name},'UniformOutput',false))).date});
+                handles.spikeFile=handles.spikeFile{fileDates==max(fileDates)};
+            else
+                handles.spikeFile=handles.spikeFile{nameComp==max(nameComp)};
+            end
         else
-            handles.spikeFile=handles.spikeFile{nameComp==max(nameComp)};
+            handles.spikeFile=handles.spikeFile{:};
         end
-    else
-        handles.spikeFile=handles.spikeFile{:};
     end
-%     handles.exportdir='C:\Data\export\PrV75_61_optostim2_BR_6Ch_SyncCh_CAR';
-%     cd(handles.exportdir);
+%     handles.exportDir='C:\Data\export\PrV75_61_optostim2_BR_6Ch_SyncCh_CAR';
+%     cd(handles.exportDir);
 %     handles.spikeFile='PrV75_61_optostim2_BR_6Ch_SyncCh_CAR_Ch3.mat';
-    set(handles.FileName,'string',[handles.exportdir userinfo.slash handles.spikeFile])
+    set(handles.FileName,'string',[handles.exportDir userinfo.slash handles.spikeFile])
     
     %% Load spike data
     if isfield(handles,'offlineSpikeSort')
@@ -301,7 +329,7 @@ ACGh.FaceColor = handles.cmap(unitID(unitID==selectedUnits),:);
 ACGh.EdgeColor = 'none';
 axis('tight');box off;
 xlabel('Autocorrelogram (5 ms bins)')
-set(gca,'xlim',[-100 100],'Color','white','FontSize',10,'FontName','calibri');
+set(gca,'xlim',[-100 100],'Color','white','FontSize',10,'FontName','calibri','TickDir','out');
 hold off
 
 %% Plot cross-correlogram
@@ -598,11 +626,7 @@ end
 %     unitsSelected=unitMenu(unitsSelected);
 
 
-% Hints: contents = cellstr(get(hObject,'String')) returns SelectElectrode_LB contents as cell array
-%        contents{get(hObject,'Value')} returns selected item from SelectElectrode_LB
-
-% --- Executes on selection change in SelectUnit_LB.
-
+%% --- Executes on selection change in SelectUnit_LB.
 function SelectUnit_LB_Callback(hObject, eventdata, handles)
 set(handles.ShowAllUnits_RB,'value',0)
 if strcmp(get(gcf,'SelectionType'),'normal')
@@ -619,7 +643,7 @@ if strcmp(get(gcf,'SelectionType'),'normal')
     guidata(hObject, handles);
 end
 
-% --- Executes on button press in ShowAllUnits_RB.
+%% --- Executes on button press in ShowAllUnits_RB.
 function ShowAllUnits_RB_Callback(hObject, eventdata, handles)
 if get(hObject,'Value')
     handles=Plot_Sorted_WF(handles);
@@ -630,11 +654,8 @@ if get(hObject,'Value')
     guidata(hObject, handles);
 end
 
-% --- Executes on mouse press over axes background.
+%% --- Executes on mouse press over axes background.
 function MeanSortedUnits_Axes_ButtonDownFcn(hObject, eventdata, handles)
-% hObject    handle to MeanSortedUnits_Axes (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
 
 % InteractiveClassification; % viewClasses=0
 
@@ -668,10 +689,6 @@ handles.RefineSort_PB.ForegroundColor=[0.3490 0.2000 0.3294];
 
 %% --- Outputs from this function are returned to the command line.
 function varargout = SpikeVisualizationGUI_OutputFcn(hObject, eventdata, handles)
-% varargout  cell array for returning output args (see VARARGOUT);
-% hObject    handle to figure
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
 
 % Get default command line output from handles structure
 varargout{1} = handles.output;
@@ -681,38 +698,19 @@ varargout{1} = handles.output;
 function Spikes_SortOff_RB_Callback(hObject, eventdata, handles)
 
 [handles.offlineSpikeSort,handles.offlineSpikeSortDir] = uigetfile({'*.mat;*.hdf5','All Data Formats';...
-    '*.*','All Files' },'Export folder',handles.exportdir);
+    '*.*','All Files' },'Export folder',handles.exportDir);
 handles=LoadSpikes(handles);
 % Update handles structure
 guidata(hObject, handles);
 
 %% --- Executes on button press in radiobutton2.
 function radiobutton2_Callback(hObject, eventdata, handles)
-% hObject    handle to radiobutton2 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of radiobutton2
-
-
 
 function edit1_Callback(hObject, eventdata, handles)
-% hObject    handle to edit1 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of edit1 as text
-%        str2double(get(hObject,'String')) returns contents of edit1 as a double
-
 
 %% --- Executes during object creation, after setting all properties.
 function edit1_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to edit1 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
 
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
@@ -720,22 +718,11 @@ end
 
 %% --- Executes on selection change in listbox1.
 function listbox1_Callback(hObject, eventdata, handles)
-% hObject    handle to listbox1 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: contents = cellstr(get(hObject,'String')) returns listbox1 contents as cell array
-%        contents{get(hObject,'Value')} returns selected item from listbox1
 
 
 %% --- Executes during object creation, after setting all properties.
 function listbox1_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to listbox1 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
 
-% Hint: listbox controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
@@ -743,18 +730,10 @@ end
 
 %% --- Executes on button press in pushbutton1.
 function pushbutton1_Callback(hObject, eventdata, handles)
-% hObject    handle to pushbutton1 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
 
 %% --- Executes during object creation, after setting all properties.
 function SelectElectrode_LB_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to SelectElectrode_LB (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
 
-% Hint: listbox controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
@@ -762,185 +741,83 @@ end
 
 %% --- Executes on slider movement.
 function slider1_Callback(hObject, eventdata, handles)
-% hObject    handle to slider1 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'Value') returns position of slider
-%        get(hObject,'Min') and get(hObject,'Max') to determine range of slider
-
 
 %% --- Executes during object creation, after setting all properties.
 function slider1_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to slider1 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
 
-% Hint: slider controls usually have a light gray background.
 if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor',[.9 .9 .9]);
 end
 
-
 %% --- Executes on button press in pushbutton3.
 function pushbutton3_Callback(hObject, eventdata, handles)
-% hObject    handle to pushbutton3 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
 
 %% --- Executes on button press in pushbutton4.
 function pushbutton4_Callback(hObject, eventdata, handles)
-% hObject    handle to pushbutton4 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
 
 %% --- Executes on button press in pushbutton5.
 function pushbutton5_Callback(hObject, eventdata, handles)
-% hObject    handle to pushbutton5 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
 
 %% --- Executes on button press in Spikes_Th_RB.
 function Spikes_Th_RB_Callback(hObject, eventdata, handles)
-% hObject    handle to Spikes_Th_RB (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of Spikes_Th_RB
-
 
 %% --- Executes on selection change in listbox2.
 function listbox2_Callback(hObject, eventdata, handles)
-% hObject    handle to listbox2 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: contents = cellstr(get(hObject,'String')) returns listbox2 contents as cell array
-%        contents{get(hObject,'Value')} returns selected item from listbox2
-
 
 %% --- Executes during object creation, after setting all properties.
 function listbox2_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to listbox2 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
 
-% Hint: listbox controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
 
-
-
 function edit2_Callback(hObject, eventdata, handles)
-% hObject    handle to edit2 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of edit2 as text
-%        str2double(get(hObject,'String')) returns contents of edit2 as a double
 
 
 %% --- Executes during object creation, after setting all properties.
 function edit2_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to edit2 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
 
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
-
 
 %% --- Executes on button press in Spikes_SortOn_RB.
 function Spikes_SortOn_RB_Callback(hObject, eventdata, handles)
-% hObject    handle to Spikes_SortOn_RB (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
 
-% Hint: get(hObject,'Value') returns toggle state of Spikes_SortOn_RB
-
-
-
-
-% --- Executes during object creation, after setting all properties.
+%% --- Executes during object creation, after setting all properties.
 function SelectUnit_LB_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to SelectUnit_LB (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
 
-% Hint: listbox controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
 
-
-% --- Executes on slider movement.
+%% --- Executes on slider movement.
 function TW_slider_Callback(hObject, eventdata, handles)
-% hObject    handle to TW_slider (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
 
-% Hints: get(hObject,'Value') returns position of slider
-%        get(hObject,'Min') and get(hObject,'Max') to determine range of slider
-
-
-% --- Executes during object creation, after setting all properties.
+%% --- Executes during object creation, after setting all properties.
 function TW_slider_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to TW_slider (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
 
-% Hint: slider controls usually have a light gray background.
 if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor',[.9 .9 .9]);
 end
 
-
-% --- Executes on button press in TWplus_PB.
+%% --- Executes on button press in TWplus_PB.
 function TWplus_PB_Callback(hObject, eventdata, handles)
-% hObject    handle to TWplus_PB (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
 
-
-% --- Executes on button press in TWminus_PB.
+%% --- Executes on button press in TWminus_PB.
 function TWminus_PB_Callback(hObject, eventdata, handles)
-% hObject    handle to TWminus_PB (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
 
-
-% --- Executes on button press in TWall_PB.
+%% --- Executes on button press in TWall_PB.
 function TWall_PB_Callback(hObject, eventdata, handles)
-% hObject    handle to TWall_PB (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
 
-
-% --- Executes on button press in LoadFile_PB.
+%% --- Executes on button press in LoadFile_PB.
 function LoadFile_PB_Callback(hObject, eventdata, handles)
-% hObject    handle to LoadFile_PB (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
 
-
-% --- Executes on button press in Reload_PB.
+%% --- Executes on button press in Reload_PB.
 function Reload_PB_Callback(hObject, eventdata, handles)
-% hObject    handle to Reload_PB (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
 
-
-% --- Executes on button press in Save_PB.
+%% --- Executes on button press in Save_PB.
 function Save_PB_Callback(hObject, eventdata, handles)
     userinfo=UserDirInfo;
-    save([handles.exportdir userinfo.slash cell2mat(regexp(handles.fname,'.+(?=\.)','match'))...
+    save([handles.exportDir userinfo.slash cell2mat(regexp(handles.fname,'.+(?=\.)','match'))...
         '_spikesResorted'],'-struct','handles','Spikes','-v7.3');
