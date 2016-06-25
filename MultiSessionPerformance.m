@@ -1,16 +1,16 @@
 
 [Behavior,Performance]=processBehaviorData;
-keepSessions=find(mean(vertcat(Performance.ReportSides),2)>30);
+keepSessions=find(mean(vertcat(Performance.CorrectSides),2)>30);
 Performance=Performance(keepSessions);
 Behavior=Behavior(keepSessions);
 % [~,orderDate]=sort([Behavior(keepSessions).fileRecordingDate]);
-[~,orderDate]=sort(([Behavior(keepSessions).fileRecordingDate]-...
-    datetime(year(min([Behavior(keepSessions).fileRecordingDate])),1,1))+...
+[~,orderDate]=sort(([Behavior.fileRecordingDate]-...
+    datetime(year(min([Behavior.fileRecordingDate])),1,1))+...
     [Behavior.fileStartTime]);
 Performance=Performance(orderDate);
 Behavior=Behavior(orderDate);
 % average side bias
-avgpcReportSides=vertcat(Performance.ReportSides)./repmat(sum(vertcat(Performance.ReportSides),2),1,2)*100;
+avgpcCorrectSides=vertcat(Performance.CorrectSides)./repmat(sum(vertcat(Performance.CorrectSides),2),1,2)*100;
 
 % Evolution of performance
 evolPerf=[Performance.overallPerf];
@@ -42,9 +42,9 @@ cmap = colormap(gcf);
 
 % plot side bias
 subplot(2,2,1)
-bar(mean(avgpcReportSides));
+bar(mean(avgpcCorrectSides));
 hold on
-errorbar(mean(avgpcReportSides),std(avgpcReportSides,1),'kx','LineWidth',1)
+errorbar(mean(avgpcCorrectSides),std(avgpcCorrectSides,1),'kx','LineWidth',1)
 set(gca,'xticklabel',{'Left','Right'})
 set(gca,'Color','white','TickDir','out')
 ylabel('Percentage Side Choice')
