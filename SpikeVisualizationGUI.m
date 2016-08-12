@@ -2,7 +2,7 @@ function varargout = SpikeVisualizationGUI(varargin)
 % MATLAB code for SpikeVisualizationGUI.fig
 
 
-% Last Modified by GUIDE v2.5 11-Aug-2016 15:20:24
+% Last Modified by GUIDE v2.5 12-Aug-2016 18:40:42
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -99,6 +99,7 @@ else
         handles.fname=handles.rec_info.exportname;
     end
     if handles.fileLoaded==0 & strfind(handles.spikeFile,'Resorted.mat')
+        cd(handles.exportDir);
         spikeData=load(handles.spikeFile);
         handles = rmfield(handles,{'spikeFile','exportDir'});
         if isfield(handles,'rec_info')
@@ -386,9 +387,11 @@ else
     selectedUnits=unitID(selectedUnitsListIdx);
 end
 if isempty(selectedUnits)
-    cla(handles.ISI_Axes);
+    cla(handles.ISI_Axes_short);
+    cla(handles.ISI_Axes_long);
     return
 end
+% get data values
 electrodeNum=get(handles.SelectElectrode_LB,'value');
 spikeTimes=handles.Spikes.HandSort.SpikeTimes{electrodeNum,1};
 unitsIdx=handles.Spikes.HandSort.Units{electrodeNum};
@@ -404,20 +407,32 @@ if sum(size(selectedUnits))>1
     end
     selectedUnits=selectedUnits(keepU);    
 end
-
+%spike times for that unit
 unitST=spikeTimes(unitsIdx==selectedUnits);
 % compute interspike interval
 if ~isempty(diff(unitST))
     ISI=diff(unitST)/(samplingRate/1000);
-    axes(handles.ISI_Axes); hold on; 
-    cla(handles.ISI_Axes);
-    set(handles.ISI_Axes,'Visible','on');
+    axes(handles.ISI_Axes_short); hold on; 
+    cla(handles.ISI_Axes_short);
+    set(handles.ISI_Axes_short,'Visible','on'); 
+    ISIhist=histogram(double(ISI),0:max(ISI)+1);  %,'Normalization','probability'
+    ISIhist.FaceColor = handles.cmap(unitID(unitID==selectedUnits),:);
+    ISIhist.EdgeColor = 'k';
+    xlabel('Interspike Interval (ms)')
+    axis('tight');box off;
+    set(gca,'xlim',[0 40],'XTick',linspace(0,40,5),'XTickLabel',linspace(0,40,5),...
+        'TickDir','out','Color','white','FontSize',10,'FontName','Calibri');
+    hold off
+    axes(handles.ISI_Axes_long); hold on; 
+    cla(handles.ISI_Axes_long);
+    set(handles.ISI_Axes_long,'Visible','on');
     ISIhist=histogram(double(ISI),0:5:max(ISI)+1);  %,'Normalization','probability'
     ISIhist.FaceColor = handles.cmap(unitID(unitID==selectedUnits),:);
     ISIhist.EdgeColor = 'k';
-    xlabel('Inter-spike Interval distribution (ms)')
+    xlabel('Interspike Interval (ms)')
     axis('tight');box off;
-    set(gca,'xlim',[0 100],'Color','white','FontSize',10,'FontName','Times');
+    set(gca,'xlim',[0 200],'XTick',linspace(0,200,5),'XTickLabel',linspace(0,200,5),...
+        'TickDir','out','Color','white','FontSize',10,'FontName','Calibri');
     hold off
 end
 
@@ -478,12 +493,68 @@ ACGh.FaceColor = handles.cmap(unitID(unitID==selectedUnits),:);
 ACGh.EdgeColor = 'none';
 axis('tight');box off;
 xlabel('Autocorrelogram (5 ms bins)')
-set(gca,'xlim',[-50 50],'Color','white','FontSize',10,'FontName','Times','TickDir','out');
+set(gca,'xlim',[-50 50],'Color','white','FontSize',10,'FontName','Calibri','TickDir','out');
 hold off
 
 %% Plot cross-correlogram
 function Plot_XCG(handles)
+% get which unit to plot
+if get(handles.ShowAllUnits_RB,'value')
+    cla(handles.XCorr_Axes);
+    return
+else
+    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
+    selectedUnits=unitID(selectedUnitsListIdx);
+end
+if isempty(selectedUnits)
+    cla(handles.XCorr_Axes);
+    return
+end
 
+electrodeNum=get(handles.SelectElectrode_LB,'value');
+spikeTimes=handles.Spikes.HandSort.SpikeTimes{electrodeNum,1};
+unitsIdx=handles.Spikes.HandSort.Units{electrodeNum};
+samplingRate=handles.Spikes.HandSort.samplingRate(electrodeNum,1);
+
+%keep the most numerous if more than one
+if length(selectedUnits)~=2
+        cla(handles.XCorr_Axes);
+    return
+end
+%get units spike times
+unitST{1}=spikeTimes(unitsIdx==selectedUnits(1));
+unitST{2}=spikeTimes(unitsIdx==selectedUnits(2));
+% change to ms timescale
+unitST{1}=unitST{1}/(samplingRate/1000);
+unitST{2}=unitST{2}/(samplingRate/1000);
+
+%bin
+spikeTimeIdx{1}=zeros(1,unitST{1}(end));
+spikeTimeIdx{1}(unitST{1})=1;
+spikeTimeIdx{2}=zeros(1,unitST{2}(end));
+spikeTimeIdx{2}(unitST{2})=1;
+binSize=5;
+numBin=max(ceil(size(spikeTimeIdx{1},2)/binSize),ceil(size(spikeTimeIdx{2},2)/binSize));
+binUnits{1} = histcounts(double(unitST{1}), linspace(0,size(spikeTimeIdx{1},2),numBin));
+binUnits{1}(binUnits{1}>1)=1; %no more than 1 spike per ms
+binUnits{2} = histcounts(double(unitST{2}), linspace(0,size(spikeTimeIdx{2},2),numBin));
+binUnits{2}(binUnits{2}>1)=1; %no more than 1 spike per ms
+
+% compute autocorrelogram 
+[XCG,lags]=xcorr(double(binUnits{1}),double(binUnits{2}),200,'unbiased'); %'coeff'
+XCG(lags==0)=0;
+axes(handles.XCorr_Axes); hold on; 
+cla(handles.XCorr_Axes);
+set(handles.XCorr_Axes,'Visible','on');
+XCGh=bar(lags,XCG);
+XCGh.FaceColor = (handles.cmap(unitID(unitID==selectedUnits(1)),:)+...
+    handles.cmap(unitID(unitID==selectedUnits(2)),:))/2;
+XCGh.EdgeColor = 'none';
+axis('tight');box off;
+xlabel('CrossCorrelogram (5 ms bins)')
+set(gca,'xlim',[-50 50],'Color','white','FontSize',10,'FontName','Calibri','TickDir','out');
+hold off
 
 %% Plot Unsorted Spikes
 function handles=Plot_Unsorted_WF(handles)
@@ -527,7 +598,7 @@ axis('tight');box off;
 xlabel('Time (ms)');
 ylabelh=ylabel('Voltage (\muV)');
 set(ylabelh,'interpreter','tex');
-set(gca,'Color','white','FontSize',10,'FontName','Times');
+set(gca,'Color','white','FontSize',10,'FontName','Calibri');
 
 %% Plot clusters
 function handles=Plot_Sorted_WF(handles)
@@ -605,7 +676,7 @@ set(gca,'XTick',linspace(0,size(waveForms(:,handles.subset{selectedUnitsListIdx(
 axis('tight');box off;
 xlabel('Time (ms)');
 ylabelh=ylabel('Voltage (\muV)');
-set(gca,'Color','white','FontSize',10,'FontName','Times');
+set(gca,'Color','white','FontSize',10,'FontName','Calibri');
 hold off
 
 %% Plot mean waveforms
@@ -638,7 +709,7 @@ for unitP=1:length(selectedUnits)
         patch([1:length(wfSEM),fliplr(1:length(wfSEM))],...
             [mean(selectWF)-wfSEM,fliplr(mean(selectWF)+wfSEM)],...
             handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),'EdgeColor','none','FaceAlpha',0.2);
-        %duplicate mean unit over unsorted plot
+        %duplicate mean unit waveform over unsorted plot
         %             plot(handles.UnsortedUnits_Axes,mean(selectWF),'linewidth',2,'Color',handles.cmap(unitP,:));
         if unitP==1
             delete(findobj(handles.UnsortedUnits_Axes,'Type', 'patch'));
@@ -646,6 +717,7 @@ for unitP=1:length(selectedUnits)
         patch([1:length(wfSEM),fliplr(1:length(wfSEM))],...
             [mean(selectWF)-wfSEM,fliplr(mean(selectWF)+wfSEM)],...
             handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),'EdgeColor','none','FaceAlpha',0.5,'Parent', handles.UnsortedUnits_Axes);
+        set(handles.UnsortedUnits_Axes,'Color','white','FontSize',10,'FontName','Calibri');
     end
 end
 set(gca,'XTick',linspace(0,size(waveForms(:,handles.subset{selectedUnitsListIdx(unitP)}),1),5),...
@@ -657,7 +729,7 @@ set(gca,'XTick',linspace(0,size(waveForms(:,handles.subset{selectedUnitsListIdx(
 axis('tight');box off;
 xlabel('Time (ms)');
 ylabelh=ylabel('Voltage (\muV)');
-set(gca,'Color','white','FontSize',10,'FontName','Times');
+set(gca,'Color','white','FontSize',10,'FontName','Calibri');
 hold off
 
 function  Plot_Raster_TW(handles)
