@@ -21,7 +21,7 @@ else
     % add code for .dat?
 end
 
-KeepChans=1:5;
+KeepChans=[1,4,9,15,16];%1:5;
 rawData=rawData(KeepChans,:);
 
 %% plot raw data excerpt
@@ -84,8 +84,8 @@ cmap=colormap;
 
 %% plot best channel with "trials"
 figure; hold on;
-colormap lines; cmap=colormap;
-plot(rawData(1,:),'Color',cmap(1,:));
+cmap=colormap(lines);
+plot(rawData(5,:),'Color',cmap(1,:));
 yLims=get(gca,'ylim');
 for TTLNum=1:size(Trials.start,1)
     patch([Trials.start(TTLNum,2)*30:Trials.end(TTLNum,2)*30,...
