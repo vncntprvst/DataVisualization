@@ -86,7 +86,10 @@ handles.rawDataInfo=whos('-file',[fileName{:} '_raw.mat']);
 handles.rawData = matfile([fileName{:} '_raw.mat']);
 handles.rawDataInfo.excerptSize=handles.rec_info.samplingRate/2; %1 second as default (-:+ around loc)
 handles.rawDataInfo.excerptLocation=round(handles.rawDataInfo.size(2)/2); %mid-recording as default
+% plot "raw" (filtered) trace 
 DisplayRawData(handles);
+% plot spike rasters
+DisplayRasters(handles);
 
 function DisplayRawData(handles)
 electrodeNum=get(handles.SelectElectrode_LB,'value');
@@ -94,7 +97,7 @@ dataExcerpt=handles.rawData.(handles.rawDataInfo.name)(:,handles.rawDataInfo.exc
     handles.rawDataInfo.excerptSize:handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize-1);
 preprocOption={'CAR','all'};
 dataExcerpt=PreProcData(dataExcerpt,handles.rec_info.samplingRate,preprocOption);
-axes(handles.TimeRaster_Axes); hold on;
+axes(handles.TimeRaster_Axes);
 cla(handles.TimeRaster_Axes);
 set(handles.TimeRaster_Axes,'Visible','on');
 plot(handles.TimeRaster_Axes,int32(dataExcerpt(electrodeNum,:)));
@@ -105,6 +108,54 @@ set(handles.TimeRaster_Axes,'ytick',[],'yticklabel',[]); %'ylim'
 axis('tight');box off;
 set(handles.TimeRaster_Axes,'Color','white','FontSize',12,'FontName','calibri');
 
+function DisplayRasters(handles)
+electrodeNum=get(handles.SelectElectrode_LB,'value');
+axes(handles.TimeRaster_Axes); hold on 
+% get which unit to plot
+if get(handles.ShowAllUnits_RB,'value')
+    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    selectedUnitsListIdx=find(unitID>0);
+    selectedUnits=unitID(selectedUnitsListIdx);
+else
+    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
+    selectedUnits=unitID(selectedUnitsListIdx);
+end
+if isfield(handles.Spikes,'Online_Sorting')
+    if ~isempty(handles.Spikes.Online_Sorting.SpikeTimes)
+        for unitP=1:size(selectedUnits,1)
+            spkTimes=handles.Spikes.Online_Sorting.SpikeTimes{electrodeNum}(...
+                (handles.Spikes.Online_Sorting.SpikeTimes{electrodeNum}>=...
+                handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize) &...
+                (handles.Spikes.Online_Sorting.SpikeTimes{electrodeNum}<...
+                handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize) &...
+                handles.Spikes.Online_Sorting.Units{electrodeNum}==unitID(selectedUnitsListIdx(unitP)));
+            rasterHeight=ones(1,size(spkTimes,2))*max(get(gca,'ylim'))/4*3;
+            wfWidthComp=round(size(handles.Spikes.Online_Sorting.Waveforms{electrodeNum},1)/2); %will substract 1/2 wf width to raster times
+            plot(spkTimes-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize)-wfWidthComp,...
+                rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
+                'linestyle','none','Marker','v');
+        end
+    end
+end
+if isfield(handles.Spikes,'Offline_Sorting')
+    if ~isempty(handles.Spikes.Online_Sorting.SpikeTimes)
+        for unitP=1:size(selectedUnits,1)
+            spkTimes=handles.Spikes.Offline_Sorting.SpikeTimes{electrodeNum}(...
+                (handles.Spikes.Offline_Sorting.SpikeTimes{electrodeNum}>=...
+                handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize) &...
+                (handles.Spikes.Offline_Sorting.SpikeTimes{electrodeNum}<...
+                handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize) &...
+                handles.Spikes.Offline_Sorting.Units{electrodeNum}==unitID(selectedUnitsListIdx(unitP)));
+            rasterHeight=ones(1,size(spkTimes,2))*(min(get(gca,'ylim'))/4*3);
+            wfWidthComp=round(size(handles.Spikes.Offline_Sorting.Waveforms{electrodeNum},1)/2); %will substract 1/2 wf width to raster times
+            plot(spkTimes-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize)-wfWidthComp,...
+                rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
+                'linestyle','none','Marker','^');
+        end
+    end
+end
+hold off
 
 %% Load data function
 function handles=LoadSpikes(handles)
@@ -921,11 +972,15 @@ guidata(hObject, handles);
 function SelectElectrode_LB_Callback(hObject, ~, handles)
 if strcmp(get(gcf,'SelectionType'),'normal')
 handles=LoadSpikes(handles);
+% plot "raw" (filtered) trace 
+DisplayRawData(handles);
+% plot spike rasters
+DisplayRasters(handles);
 % Update handles structure
 guidata(hObject, handles);
 end
 
-%% Get chanel and unit selection
+%% Get channel and unit selection
 %     channelMenu=get(handles.SelectElectrode_LB,'string');
 %     channelSelected=get(handles.SelectElectrode_LB,'value');
 %     channelSelected=channelMenu(channelSelected);
@@ -1029,6 +1084,10 @@ set(handles.Spikes_Th_RB,'value',0);
     '*.*','All Files' },'Export folder',handles.exportDir);
 handles.fileLoaded=0;
 handles=LoadSpikes(handles);
+% plot "raw" (filtered) trace 
+DisplayRawData(handles);
+% plot spike rasters
+DisplayRasters(handles);
 % Update handles structure
 guidata(hObject, handles);
 
