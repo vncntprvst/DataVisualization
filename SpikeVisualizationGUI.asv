@@ -97,11 +97,15 @@ dataExcerpt=PreProcData(dataExcerpt,handles.rec_info.samplingRate,preprocOption)
 axes(handles.TimeRaster_Axes); hold on;
 cla(handles.TimeRaster_Axes);
 set(handles.TimeRaster_Axes,'Visible','on');
+
 plot(handles.TimeRaster_Axes,int32(dataExcerpt(electrodeNum,:)));
+
 set(handles.TimeRaster_Axes,'xtick',linspace(0,handles.rec_info.samplingRate*2,4),...
     'xticklabel',round(linspace(round(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize)/handles.rec_info.samplingRate,...
     round(handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize)/handles.rec_info.samplingRate,4)),'TickDir','out');
+
 set(handles.TimeRaster_Axes,'ytick',[],'yticklabel',[]); %'ylim'
+
 axis('tight');box off;
 set(handles.TimeRaster_Axes,'Color','white','FontSize',12,'FontName','calibri');
 
