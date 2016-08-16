@@ -2,7 +2,7 @@ function varargout = SpikeVisualizationGUI(varargin)
 % MATLAB code for SpikeVisualizationGUI.fig
 
 
-% Last Modified by GUIDE v2.5 12-Aug-2016 18:40:42
+% Last Modified by GUIDE v2.5 15-Aug-2016 17:08:01
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -86,6 +86,23 @@ handles.rawDataInfo=whos('-file',[fileName{:} '_raw.mat']);
 handles.rawData = matfile([fileName{:} '_raw.mat']);
 handles.rawDataInfo.excerptSize=handles.rec_info.samplingRate/2; %1 second as default (-:+ around loc)
 handles.rawDataInfo.excerptLocation=round(handles.rawDataInfo.size(2)/2); %mid-recording as default
+set(handles.TW_slider,'max',handles.rawDataInfo.size(2))
+set(handles.TW_slider,'value',handles.rawDataInfo.excerptLocation);
+% set(handles.TW_slider,'sliderstep',[0.01 max([0.01,...
+%     handles.rawDataInfo.excerptSize/handles.rawDataInfo.size(2)])]);
+% plot "raw" (filtered) trace 
+DisplayRawData(handles);
+% plot spike rasters
+DisplayRasters(handles);
+
+%% --- Executes on slider movement.
+function TW_slider_Callback(hObject, ~, handles)
+handles.rawDataInfo.excerptLocation=round(get(handles.TW_slider,'value'));
+if handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize<1
+    handles.rawDataInfo.excerptLocation=handles.rawDataInfo.excerptSize+1;
+elseif handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize>handles.rawDataInfo.size(2)
+    handles.rawDataInfo.excerptLocation=handles.rawDataInfo.size(2)-handles.rawDataInfo.excerptSize;
+end
 % plot "raw" (filtered) trace 
 DisplayRawData(handles);
 % plot spike rasters
@@ -107,6 +124,7 @@ set(handles.TimeRaster_Axes,'xtick',linspace(0,handles.rec_info.samplingRate*2,4
 set(handles.TimeRaster_Axes,'ytick',[],'yticklabel',[]); %'ylim'
 axis('tight');box off;
 set(handles.TimeRaster_Axes,'Color','white','FontSize',12,'FontName','calibri');
+
 
 function DisplayRasters(handles)
 electrodeNum=get(handles.SelectElectrode_LB,'value');
@@ -130,11 +148,13 @@ if isfield(handles.Spikes,'Online_Sorting')
                 (handles.Spikes.Online_Sorting.SpikeTimes{electrodeNum}<...
                 handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize) &...
                 handles.Spikes.Online_Sorting.Units{electrodeNum}==unitID(selectedUnitsListIdx(unitP)));
-            rasterHeight=ones(1,size(spkTimes,2))*max(get(gca,'ylim'))/4*3;
-            wfWidthComp=round(size(handles.Spikes.Online_Sorting.Waveforms{electrodeNum},1)/2); %will substract 1/2 wf width to raster times
-            plot(spkTimes-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize)-wfWidthComp,...
-                rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
-                'linestyle','none','Marker','v');
+            if ~isempty(spkTimes)
+                rasterHeight=ones(1,size(spkTimes,2))*max(get(gca,'ylim'))/4*3;
+                wfWidthComp=round(size(handles.Spikes.Online_Sorting.Waveforms{electrodeNum},1)); %will substract wf width to raster times
+                plot(spkTimes-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize)-wfWidthComp,...
+                    rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
+                    'linestyle','none','Marker','v');
+            end
         end
     end
 end
@@ -147,11 +167,12 @@ if isfield(handles.Spikes,'Offline_Sorting')
                 (handles.Spikes.Offline_Sorting.SpikeTimes{electrodeNum}<...
                 handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize) &...
                 handles.Spikes.Offline_Sorting.Units{electrodeNum}==unitID(selectedUnitsListIdx(unitP)));
-            rasterHeight=ones(1,size(spkTimes,2))*(min(get(gca,'ylim'))/4*3);
-            wfWidthComp=round(size(handles.Spikes.Offline_Sorting.Waveforms{electrodeNum},1)/2); %will substract 1/2 wf width to raster times
-            plot(spkTimes-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize)-wfWidthComp,...
-                rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
-                'linestyle','none','Marker','^');
+            if ~isempty(spkTimes)
+                rasterHeight=ones(1,size(spkTimes,2))*(min(get(gca,'ylim'))/4*3);
+                plot(spkTimes-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
+                    rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
+                    'linestyle','none','Marker','^');
+            end
         end
     end
 end
@@ -695,7 +716,14 @@ if get(handles.ShowAllUnits_RB,'value') %all units
     selectedUnits=unitID(selectedUnitsListIdx);
 else %or selected units
     unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    if unitID==0
+        return;
+    end
     selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
+    if isempty(selectedUnitsListIdx) & ~isempty(unitID)
+        set(handles.SelectUnit_LB,'value',1);
+        selectedUnitsListIdx=1;
+    end
     if sum(~ismember(unique(unitsIdx(unitsIdx>=0)),unitID))>0
         unitID=unique(unitsIdx);
     end
@@ -773,6 +801,9 @@ if get(handles.ShowAllUnits_RB,'value')
     selectedUnits=unitID(selectedUnitsListIdx);
 else
     unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    if unitID==0
+        return;
+    end
     selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
     if selectedUnitsListIdx(end)>length(unitID)
         selectedUnitsListIdx=length(unitID);
@@ -782,7 +813,7 @@ end
 for unitP=1:length(selectedUnits)
     selectWF=single(waveForms(:,unitsIdx==selectedUnits(unitP))');
     if ~isnan(mean(selectWF))
-        plot(mean(selectWF),'linewidth',2,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.7]);
+        lineh(unitP)=plot(mean(selectWF),'linewidth',2,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.7]);
         wfSEM=std(selectWF)/ sqrt(size(selectWF,2)); %standard error of the mean
         wfSEM = wfSEM * 1.96; % 95% of the data will fall within 1.96 standard deviations of a normal distribution
         patch([1:length(wfSEM),fliplr(1:length(wfSEM))],...
@@ -804,7 +835,7 @@ set(gca,'XTick',linspace(0,size(waveForms(:,handles.subset{selectedUnitsListIdx(
     round(size(waveForms(:,handles.subset{selectedUnitsListIdx(unitP)}),1)/2),5)/(double(samplingRate)/1000),2),'TickDir','out');
 % ordinateLabels=str2num(get(gca,'YTickLabel'))/4;
 % set(gca,'YTickLabel',num2str(ordinateLabels));
-% legend('Unclustered waveforms','location','southeast')
+legend(lineh,{num2str(selectedUnits)},'location','southeast');
 axis('tight');box off;
 xlabel('Time (ms)');
 ylabelh=ylabel('Voltage (\muV)');
@@ -820,9 +851,8 @@ spikeTimes=handles.Spikes.HandSort.SpikeTimes{electrodeNum,2};
 
 % --- Executes on mouse press over axes background.
 function UnsortedUnits_Axes_ButtonDownFcn(hObject, ~, handles)
-% hObject    handle to UnsortedUnits_Axes (see GCBO)
-% ~  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
+% left click to start selection line
+% right click to end it
 
 electrodeNum=get(handles.SelectElectrode_LB,'value');
 
@@ -867,9 +897,20 @@ if sum(cellfun(@(x) sum(x), {lineH.Color})~=0)
 end
 
 clusterClasses=InteractiveClassification(waveForms,clusterClasses,0); % viewClasses=0
-% foo=handles.Spikes.HandSort.Waveforms{electrodeNum}; foo=foo';
-% figure;plot(foo(unitsIdx(logical(clusterClasses)),:)');hold on
-% plot(lineH(flip(logical(clusterClasses))).YData)
+% find similar waveforms that were not plotted
+% if numel(find(handles.Spikes.HandSort.Units{electrodeNum}==0))>numel(clusterClasses) &...
+%         sum(logical(clusterClasses))
+%     meanSelectedWF=mean(handles.Spikes.HandSort.Waveforms{electrodeNum}(:,...
+%         unitsIdx(logical(clusterClasses))),2);
+%     allWF=handles.Spikes.HandSort.Waveforms{electrodeNum}(:,unitsIdx);
+%     for wfNum=1:size(allWF,2)
+%         ccVal(wfNum)=median(xcorr(double(allWF(:,wfNum)'),...
+%             double(meanSelectedWF')),2);
+%     end
+%     figure; 
+%     plot(allWF(:,unitsIdx(logical(clusterClasses)))')
+% end
+
 handles.Spikes.HandSort.Units{electrodeNum}(unitsIdx(logical(clusterClasses)))=...
     clusterClasses(logical(clusterClasses));
 unitsID=unique(handles.Spikes.HandSort.Units{electrodeNum});
@@ -1160,76 +1201,8 @@ Plot_Mean_WF(handles);
 % Update handles structure
 guidata(hObject, handles);
 
-%% --- Executes on button press in radiobutton2.
-% function radiobutton2_Callback(hObject, ~, handles)
-
-function edit1_Callback(hObject, ~, handles)
-
-%% --- Executes during object creation, after setting all properties.
-function edit1_CreateFcn(hObject, ~, handles)
-
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-
-%% --- Executes on selection change in listbox1.
-function listbox1_Callback(~, ~, ~)
-
-
-%% --- Executes during object creation, after setting all properties.
-function listbox1_CreateFcn(hObject, ~, handles)
-
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-
-%% --- Executes on button press in pushbutton1.
-function pushbutton1_Callback(~, ~, handles)
-
 %% --- Executes during object creation, after setting all properties.
 function SelectElectrode_LB_CreateFcn(hObject, ~, handles)
-
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-
-%% --- Executes on slider movement.
-function slider1_Callback(hObject, ~, handles)
-
-%% --- Executes during object creation, after setting all properties.
-function slider1_CreateFcn(hObject, ~, handles)
-
-if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor',[.9 .9 .9]);
-end
-
-%% --- Executes on button press in pushbutton3.
-function pushbutton3_Callback(hObject, ~, handles)
-
-%% --- Executes on button press in pushbutton4.
-function pushbutton4_Callback(hObject, ~, handles)
-
-%% --- Executes on button press in pushbutton5.
-function pushbutton5_Callback(hObject, ~, handles)
-
-%% --- Executes on selection change in listbox2.
-function listbox2_Callback(hObject, ~, handles)
-
-%% --- Executes during object creation, after setting all properties.
-function listbox2_CreateFcn(hObject, ~, handles)
-
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-function edit2_Callback(hObject, ~, handles)
-
-
-%% --- Executes during object creation, after setting all properties.
-function edit2_CreateFcn(hObject, ~, handles)
 
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
@@ -1242,14 +1215,11 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
     set(hObject,'BackgroundColor','white');
 end
 
-%% --- Executes on slider movement.
-function TW_slider_Callback(hObject, ~, handles)
-
 %% --- Executes during object creation, after setting all properties.
 function TW_slider_CreateFcn(hObject, ~, handles)
 
 if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor',[.9 .9 .9]);
+    set(hObject,'BackgroundColor',[.839 .91 .851]);
 end
 
 %% --- Executes on button press in TWplus_PB.
