@@ -41,15 +41,42 @@ colormap lines;
 cmap = colormap(gcf);
 
 % plot side bias
-subplot(2,2,1)
-bar(mean(avgpcCorrectSides));
-hold on
-errorbar(mean(avgpcCorrectSides),std(avgpcCorrectSides,1),'kx','LineWidth',1)
-set(gca,'xticklabel',{'Left','Right'})
-set(gca,'Color','white','TickDir','out')
+subplot(2,2,1); hold on;
+try %if violin plot is available
+    % rather than a square plot, make it thinner
+    violinPlot(avgpcCorrectSides(:, 1), 'histOri', 'left', 'widthDiv', [2 1], 'showMM', 0, ...
+        'color',  mat2cell(cmap(1, : ), 1));
+    
+    violinPlot(avgpcCorrectSides(:, 2), 'histOri', 'right', 'widthDiv', [2 2], 'showMM', 0, ...
+        'color',  mat2cell(cmap(2, : ), 1));
+    set(gca, 'xtick', [0.6 1.4], 'xticklabel', {'Left','Right'}, 'xlim', [0.2 1.8]);
+    
+    % add significance stars for each bar (Not needed here)
+    %     xticks = get(gca, 'xtick');
+    %     for side = 1:2,
+    %         [~, pval] = ttest(avgpcCorrectSides(:, side));
+    % %         yval = max(avgpcCorrectSides(:, side)) * 1.2; % plot this on top of the bar
+    %         yval = 6; % plot below
+    %         mysigstar(gca, xticks(side), yval, pval);
+    %         % if mysigstar gets just 1 xpos input, it will only plot stars
+    %     end
+    
+    % significance star for the difference
+    [~, pval] = ttest(avgpcCorrectSides(:, 1), avgpcCorrectSides(:, 2));
+    % if mysigstar gets 2 xpos inputs, it will draw a line between them and the
+    % sigstars on top
+    mysigstar(gca, xticks, max(max(avgpcCorrectSides)) * 1.1, pval);
+    
+catch
+    bar(mean(avgpcCorrectSides));
+    hold on
+    errorbar(mean(avgpcCorrectSides),std(avgpcCorrectSides,1),'kx','LineWidth',1)
+    set(gca,'xticklabel',{'Left','Right'})
+    set(gca,'Color','white','TickDir','out')
+end
 ylabel('Percentage Side Choice')
 title('Correct answers, Left vs Right')
-
+    
 % Success rate
 subplot(2,2,2)
 plot(evolPerf,'LineWidth',1.5,'Color',cmap(4,:))
@@ -74,9 +101,19 @@ end
 plot(1:max(size(dprime)),1.5*ones(1,max(size(dprime))),'k--','LineWidth',1.5)
 axis(gca,'tight'); box off;
 set(gca,'Color','white','TickDir','out')
-set(gca,'ylim',[floor(min([0 get(gca,'ylim')])) max([2 get(gca,'ylim')])])
+set(gca,'ylim',[floor(min([0 get(gca,'ylim')])) max([2 get(gca,'ylim')])]);
+try
+set(gca,'xtick',linspace(1,size(Behavior,2),size(Behavior,2)));
+set(gca,'xticklabel',cellfun(@(recdate) datestr(recdate,'mmm-dd'), {Behavior.fileRecordingDate},'UniformOutput',false))
+catch
+end
 xlabel('Session')
 ylabel('Performance (d'')')
-legend({'Random trials','Block trials','Discrimination performance criterion'},'location','SouthEast')
+if ~isempty(sessTypeNum)
+    legend({'Random trials','Block trials','Discrimination performance criterion'},'location','SouthEast');
+else
+    legend({'Random trials','Discrimination performance criterion'},'location','SouthEast');
+end
+
 title('Texture detection performance')
 
