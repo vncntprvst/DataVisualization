@@ -2,7 +2,7 @@ function varargout = SpikeVisualizationGUI(varargin)
 % MATLAB code for SpikeVisualizationGUI.fig
 
 
-% Last Modified by GUIDE v2.5 15-Aug-2016 17:08:01
+% Last Modified by GUIDE v2.5 30-Aug-2016 11:01:42
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -282,7 +282,7 @@ else
                 %then import
                 cd(handles.offlineSort_SpikeDir);
                 handles.Spikes.Offline_Sorting=LoadSpikeData(handles.offlineSort_SpikeFile,...
-                    handles.rec_info.numRecChan,handles.rec_info.samplingRate,rawData);
+                    handles.rawDataInfo.size(1),handles.rec_info.samplingRate,rawData);
                 clear rawData;
             end
             cd(handles.exportDir);
@@ -458,7 +458,11 @@ else
     %     May want to extract waveforms, but most important is the time.
     %     Sorted units (whatever the source) "color" those units. One spike per ms max.
     handles=Plot_Unsorted_WF(handles);
-    handles=Plot_Sorted_WF(handles);
+    if get(handles.ShowWF_CB,'value')
+        handles=Plot_Sorted_WF(handles);
+    else
+        cla(handles.SortedUnits_Axes);
+    end
     Plot_Mean_WF(handles);
     Plot_Raster_TW(handles);
     Plot_ISI(handles);
@@ -663,9 +667,10 @@ waveForms=handles.Spikes.HandSort.Waveforms{electrodeNum};
 unitsIdx=handles.Spikes.HandSort.Units{electrodeNum};
 samplingRate=handles.Spikes.HandSort.samplingRate(electrodeNum,1);
 %% Plot unsorted spikes
-if sum(unitsIdx==0)>2000 %then only plot subset of waveforms
+numWFtoPlot=str2double(get(handles.ShowHowManyWF_ET,'string'));
+if sum(unitsIdx==0)>numWFtoPlot %then only plot subset of waveforms
     subset=find(unitsIdx==0);
-    handles.subset{1}=subset(1:ceil(sum(unitsIdx==0)/2000):end);
+    handles.subset{1}=subset(1:ceil(sum(unitsIdx==0)/numWFtoPlot):end);
 else
     handles.subset{1}=find(unitsIdx==0);
 end
@@ -727,18 +732,19 @@ else %or selected units
     if sum(~ismember(unique(unitsIdx(unitsIdx>=0)),unitID))>0
         unitID=unique(unitsIdx);
     end
-    if selectedUnitsListIdx(end)>length(unitID)
+    if isempty(selectedUnitsListIdx) || selectedUnitsListIdx(end)>length(unitID)
         selectedUnitsListIdx=length(unitID);
     end
     selectedUnits=unitID(selectedUnitsListIdx);
     selectedUnitsListIdx=selectedUnitsListIdx(selectedUnits>0);
     selectedUnits=selectedUnits(selectedUnits>0);
 end
+numWFtoPlot=str2double(get(handles.ShowHowManyWF_ET,'string'));
 for unitP=1:length(selectedUnits)
     %if there are too many waveforms to plot
-    if sum(unitsIdx==selectedUnits(unitP))>2000 %then only plot subset of waveforms
+    if sum(unitsIdx==selectedUnits(unitP))>numWFtoPlot %then only plot subset of waveforms
         subset=find(unitsIdx==selectedUnits(unitP));
-        handles.subset{selectedUnitsListIdx(unitP)}=subset(1:round(sum(unitsIdx==selectedUnits(unitP))/2000):end);
+        handles.subset{selectedUnitsListIdx(unitP)}=subset(1:round(sum(unitsIdx==selectedUnits(unitP))/numWFtoPlot):end);
     else
         handles.subset{selectedUnitsListIdx(unitP)}=find(unitsIdx==selectedUnits(unitP));
     end
@@ -805,12 +811,22 @@ else
         return;
     end
     selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
-    if selectedUnitsListIdx(end)>length(unitID)
+    if isempty(selectedUnitsListIdx) || selectedUnitsListIdx(end)>length(unitID)
         selectedUnitsListIdx=length(unitID);
     end
     selectedUnits=unitID(selectedUnitsListIdx);
 end
+numWFtoPlot=str2double(get(handles.ShowHowManyWF_ET,'string'));
 for unitP=1:length(selectedUnits)
+    %if subset is not defined
+    if size(handles.subset,2)<selectedUnitsListIdx(unitP) || isempty(handles.subset{selectedUnitsListIdx(unitP)})
+        if sum(unitsIdx==selectedUnits(unitP))>numWFtoPlot %then only plot subset of waveforms
+            subset=find(unitsIdx==selectedUnits(unitP));
+            handles.subset{selectedUnitsListIdx(unitP)}=subset(1:round(sum(unitsIdx==selectedUnits(unitP))/numWFtoPlot):end);
+        else
+            handles.subset{selectedUnitsListIdx(unitP)}=find(unitsIdx==selectedUnits(unitP));
+        end
+    end
     selectWF=single(waveForms(:,unitsIdx==selectedUnits(unitP))');
     if ~isnan(mean(selectWF))
         lineh(unitP)=plot(mean(selectWF),'linewidth',2,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.7]);
@@ -835,10 +851,12 @@ set(gca,'XTick',linspace(0,size(waveForms(:,handles.subset{selectedUnitsListIdx(
     round(size(waveForms(:,handles.subset{selectedUnitsListIdx(unitP)}),1)/2),5)/(double(samplingRate)/1000),2),'TickDir','out');
 % ordinateLabels=str2num(get(gca,'YTickLabel'))/4;
 % set(gca,'YTickLabel',num2str(ordinateLabels));
-legend(lineh,{num2str(selectedUnits)},'location','southeast');
+if exist('selectWF','var')
+    legend(lineh,{num2str(selectedUnits)},'location','southeast');
+end
 axis('tight');box off;
 xlabel('Time (ms)');
-ylabelh=ylabel('Voltage (\muV)');
+ylabel('Voltage (\muV)');
 set(gca,'Color','white','FontSize',10,'FontName','Calibri');
 hold off
 
@@ -847,7 +865,7 @@ function  Plot_Raster_TW(handles)
 electrodeNum=get(handles.SelectElectrode_LB,'value');
 spikeTimes=handles.Spikes.HandSort.SpikeTimes{electrodeNum,2};
 
-% plot 10 sec or 2000 waveforms max
+% plot 10 sec or numWFtoPlot waveforms max
 
 % --- Executes on mouse press over axes background.
 function UnsortedUnits_Axes_ButtonDownFcn(hObject, ~, handles)
@@ -931,7 +949,11 @@ if max(get(handles.SelectUnit_LB,'value'))>length(str2num(get(handles.SelectUnit
     set(handles.SelectUnit_LB,'value',newSelection);
 end
 if find(clusterClasses>0,1)
-    handles=Plot_Sorted_WF(handles);
+    if get(handles.ShowWF_CB,'value')
+        handles=Plot_Sorted_WF(handles);
+    else
+        cla(handles.SortedUnits_Axes);
+    end
     Plot_Mean_WF(handles);
     Plot_ISI(handles);
     Plot_ACG(handles);
@@ -997,7 +1019,75 @@ unitSelection(unitsID(unitSelection)==0)=unitSelection(unitsID(unitSelection)==0
 set(handles.SelectUnit_LB,'Value',unitSelection);
 set(handles.SelectUnit_LB,'String',num2str(unitsID(unitsID>=0)))
 if find(clusterClasses>0,1)
-    handles=Plot_Sorted_WF(handles);
+    if get(handles.ShowWF_CB,'value')
+        handles=Plot_Sorted_WF(handles);
+    else
+        cla(handles.SortedUnits_Axes);
+    end
+end
+if find(clusterClasses==0,1)
+    handles=Plot_Unsorted_WF(handles);
+end
+Plot_Mean_WF(handles);
+Plot_ISI(handles);
+Plot_ACG(handles);
+Plot_XCG(handles);
+%  Update handles structure
+guidata(hObject, handles);
+
+%% --- Executes on mouse press over axes background.
+function MeanSortedUnits_Axes_ButtonDownFcn(hObject, ~, handles)
+unitID=str2num(get(handles.SelectUnit_LB,'string'));
+electrodeNum=get(handles.SelectElectrode_LB,'value');
+
+%% initialize variables
+unitsIdx=handles.Spikes.HandSort.Units{electrodeNum};
+
+lineH=findobj(gca,'Type', 'line');
+visibleLines=cellfun(@(x) strcmp(x,'on'), {lineH.Visible});
+
+waveForms=fliplr(reshape([lineH(visibleLines).YData],...
+    size([lineH(visibleLines).YData],2)/size(lineH(visibleLines),...
+    1),size(lineH(visibleLines),1)));
+waveForms=waveForms';%one waveform per row
+
+[clusterClasses,viewClasses]=deal(flip(cellfun(@(x) str2double(x), {lineH(visibleLines).DisplayName})));
+% figure;hold on
+% plot(waveForms(1,:)','r')
+% plot(waveForms(3,:)','b')
+
+[newClasses,lineSelecIdx]=InteractiveClassification(waveForms,clusterClasses,viewClasses); % viewClasses=0
+% foo=handles.Spikes.HandSort.Waveforms{electrodeNum}; foo=foo';
+% figure;plot(foo(unitsIdx(logical(clusterClasses)),:)');hold on
+% plot(lineH(flip(logical(clusterClasses))).YData)
+% 
+% waveForms=handles.Spikes.HandSort.Waveforms{electrodeNum};
+% figure; plot(waveForms(:,linesTags(lineSelecIdx)))
+if lineSelecIdx==0
+    return
+end
+changeUnits=clusterClasses(clusterClasses~=unique(newClasses(lineSelecIdx)) & lineSelecIdx');
+for chgu=1:length(changeUnits)
+    handles.Spikes.HandSort.Units{electrodeNum}(unitsIdx==changeUnits(chgu))=...
+        unique(newClasses(lineSelecIdx));
+end
+unitsID=unique(handles.Spikes.HandSort.Units{electrodeNum});
+%Check if unit selection still works
+unitSelection=get(handles.SelectUnit_LB,'Value');
+if get(handles.ShowAllUnits_RB,'value')
+    unitSelection=find(unitsID>0);
+else
+    unitSelection=unitSelection(ismember(unitSelection,(1:numel(unitsID))));
+end
+unitSelection(unitsID(unitSelection)==0)=unitSelection(unitsID(unitSelection)==0)+1;
+set(handles.SelectUnit_LB,'Value',unitSelection);
+set(handles.SelectUnit_LB,'String',num2str(unitsID(unitsID>=0)))
+if find(clusterClasses>0,1)
+    if get(handles.ShowWF_CB,'value')
+        handles=Plot_Sorted_WF(handles);
+    else
+        cla(handles.SortedUnits_Axes);
+    end
 end
 if find(clusterClasses==0,1)
     handles=Plot_Unsorted_WF(handles);
@@ -1037,7 +1127,11 @@ set(handles.ShowAllUnits_RB,'value',0)
 if strcmp(get(gcf,'SelectionType'),'normal')
     %     = cellstr(get(hObject,'String'))
     %        contents{get(hObject,'Value')}
-    handles=Plot_Sorted_WF(handles);
+    if get(handles.ShowWF_CB,'value')
+        handles=Plot_Sorted_WF(handles);
+    else
+        cla(handles.SortedUnits_Axes);
+    end
     Plot_Mean_WF(handles);
     Plot_ISI(handles);
     Plot_ACG(handles);
@@ -1051,22 +1145,17 @@ end
 %% --- Executes on button press in ShowAllUnits_RB.
 function ShowAllUnits_RB_Callback(hObject, ~, handles)
 if get(hObject,'Value')
-    handles=Plot_Sorted_WF(handles);
+    if get(handles.ShowWF_CB,'value')
+        handles=Plot_Sorted_WF(handles);
+    else
+        cla(handles.SortedUnits_Axes);
+    end
     Plot_Mean_WF(handles);
     Plot_ISI(handles);
     Plot_ACG(handles);
     Plot_XCG(handles);
     guidata(hObject, handles);
 end
-
-%% --- Executes on mouse press over axes background.
-function MeanSortedUnits_Axes_ButtonDownFcn(hObject, ~, handles)
-
-% InteractiveClassification; % viewClasses=0
-
-% unitsIdx
-%  Update handles structure
-guidata(hObject, handles);
 
 %% --- Executes on button press in PreviewTh_PB.
 function PreviewTh_PB_Callback(hObject, ~, handles)
@@ -1169,12 +1258,13 @@ confirm = questdlg('Realign Spikes Waveforms?', ...
 switch confirm
     case 'Yes'
         % first load raw traces
-        fileName=regexp(handles.spikeFile,'.+(?=_\w+.\w+$)','match');
-        load([fileName{:} '_raw.mat']);
+%         fileName=regexp(handles.spikeFile,'.+(?=_\w+.\w+$)','match');
+%         load([fileName{:} '_raw.mat']);
         selectedEl=get(handles.SelectElectrode_LB,'value');
+        rawData=handles.rawData.(handles.rawDataInfo.name)(selectedEl,:);
         %then re-align (current waveforms, raw data, spike times, unit IDs)
         Spikes=ReAlignSpikes(handles.Spikes.HandSort.Waveforms{selectedEl,1},...
-            rawData(selectedEl,:),...
+            rawData,...
             handles.Spikes.HandSort.SpikeTimes{selectedEl,1},...
             handles.Spikes.HandSort.Units{selectedEl,1});
         handles.Spikes.HandSort.Waveforms(selectedEl)=Spikes.Waveforms;
@@ -1196,7 +1286,11 @@ switch confirm
         %OK
 end
 handles=Plot_Unsorted_WF(handles);
-handles=Plot_Sorted_WF(handles);
+if get(handles.ShowWF_CB,'value')
+    handles=Plot_Sorted_WF(handles);
+else
+    cla(handles.SortedUnits_Axes);
+end
 Plot_Mean_WF(handles);
 % Update handles structure
 guidata(hObject, handles);
@@ -1276,3 +1370,65 @@ function Save_PB_Callback(hObject, ~, handles)
     save([handles.exportDir  cell2mat(regexp(handles.spikeFile,'.+(?=_spikes)','match'))...
         '_spikesResorted'],'-struct','handles','spikeFile','exportDir',...
         'Spikes','rec_info','subset','-v7.3');
+
+% --- Executes on button press in ShowWF_CB.
+function ShowWF_CB_Callback(hObject, eventdata, handles)
+% if get(handles.ShowWF_CB,'value')
+%     set(handles.HideWF_CB,'value',1);
+% else
+%     set(handles.HideWF_CB,'value',0);
+% end
+
+% --- Executes on button press in ShowUWF_CB.
+function ShowUWF_CB_Callback(hObject, eventdata, handles)
+% hObject    handle to ShowUWF_CB (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of ShowUWF_CB
+
+
+
+function ShowHowManyUWF_ET_Callback(hObject, eventdata, handles)
+% hObject    handle to ShowHowManyUWF_ET (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of ShowHowManyUWF_ET as text
+%        str2double(get(hObject,'String')) returns contents of ShowHowManyUWF_ET as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function ShowHowManyUWF_ET_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to ShowHowManyUWF_ET (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+function edit4_Callback(hObject, eventdata, handles)
+% hObject    handle to edit4 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of edit4 as text
+%        str2double(get(hObject,'String')) returns contents of edit4 as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function edit4_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to edit4 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end

@@ -39,17 +39,22 @@ visibleLines=find(cellfun(@(x) strcmp(x,'on'), {lineH.Visible}));
 lineSelecIdx=SelectLines(waveforms);
 
 if sum(lineSelecIdx)>0
-    disp(['crossed waveform(s) ' num2str(find(lineSelecIdx')) ', Tag(s) ']);
+    disp(['crossed waveform(s) ' num2str(find(lineSelecIdx'))]);
     try
-    {lineH(flip(lineSelecIdx)).Tag}
-%         figure;plot(waveforms(lineSelecIdx,:)');hold on
-%         lineWF=fliplr(reshape([lineH(visibleLines).YData],...
-%     size([lineH(visibleLines).YData],2)/size(lineH(visibleLines),...
-%     1),size(lineH(visibleLines),1)));
-% lineWF=lineWF';%one waveform per row
-%         plot(lineWF(lineSelecIdx,:)')
+        disp(['with tag(s) ' num2str(viewClasses(lineSelecIdx'))]);
     catch
     end
+%     disp(['crossed waveform(s) ' num2str(find(lineSelecIdx')) ', Tag(s) ']);
+%     try
+%     {lineH(flip(lineSelecIdx)).Tag}
+% %         figure;plot(waveforms(lineSelecIdx,:)');hold on
+% %         lineWF=fliplr(reshape([lineH(visibleLines).YData],...
+% %     size([lineH(visibleLines).YData],2)/size(lineH(visibleLines),...
+% %     1),size(lineH(visibleLines),1)));
+% % lineWF=lineWF';%one waveform per row
+% %         plot(lineWF(lineSelecIdx,:)')
+%     catch
+%     end
 %     lineSelecIdx(clusterClasses==-10)=0;
     %show selection
     set(lineH(visibleLines(flip(lineSelecIdx))),'Color',[0.7 0.5 0.2]);

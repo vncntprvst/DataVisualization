@@ -5,9 +5,13 @@ if logical(regexp(fName,'Ch\d+.')) %from Spike2
     Spikes.SpikeTimes{Electrodes,1}=uint32(nw_401.times*samplingRate);
     Spikes.Waveforms{Electrodes,1}=nw_401.values;
     Spikes.samplingRate(Electrodes,1)=samplingRate;
-elseif strfind(fName,'.hdf5') %Intan / Open-Ephys
+elseif strfind(fName,'.hdf5') % Spyking Circus
     fName=regexp(fName,'\w+(?=\.\w+\.)','match','once');
-    templateToEl=h5read([fName '.templates.hdf5'],['/electrodes']);
+    try
+        templateToEl=h5read([fName '.templates.hdf5'],'/electrodes');
+    catch
+        templateToEl=h5read([fName '.clusters.hdf5'],'/electrodes');
+    end
     for elNum=1:Electrodes
         try
             %Clusters data (including non-clustered spikes)

@@ -31,10 +31,14 @@ for ElNum=1:size(RawTraces,1)
     for unit=1:length(uniqIDs)
         meanWF=mean(Spikes.Waveforms{ElNum,1}(UnitIDs==uniqIDs(unit),:));
 %         plot(meanWF);
-        thWF=meanWF<-std(meanWF);
+        thWF=meanWF<min([-std(meanWF) min(meanWF)/2]); %crappy wf have low std
         minimas = find(diff(thWF) >= 1,1)+1;
         deriveWF=diff(meanWF);      %  plot(deriveWF)
-        wfPeak(unit)=minimas-find(deriveWF(minimas:-1:1)>0,1)+2;
+        try
+            wfPeak(unit)=minimas-find(deriveWF(minimas:-1:1)>0,1)+2;
+        catch %no peak before trough: align to first value by default 
+            wfPeak(unit)=1;
+        end
     end
     for unit=1:length(uniqIDs)
         if wfPeak(unit)>min(wfPeak)
