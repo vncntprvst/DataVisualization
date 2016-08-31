@@ -31,13 +31,13 @@ elseif strfind(fName,'.hdf5') % Spyking Circus
             % sort times, and adjust unit orders
             [Spikes.SpikeTimes{elNum,1},timeIdx]=sort(Spikes.SpikeTimes{elNum,1});
             Spikes.Units{elNum,1}=Spikes.Units{elNum,1}(timeIdx);
-            % extract spike waveforms
+            % extract spike waveforms foo=Spikes.Waveforms{elNum,1}(Spikes.Units{elNum,1}==7,:);
             if isa(rawData,'memmapfile') % reading electrode data from .dat file
                 Spikes.Waveforms{elNum,1}=ExtractChunks(rawData.Data(elNum:electrodes:max(size(rawData.Data))),...
-                    Spikes.SpikeTimes{elNum,1},40,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
+                    Spikes.SpikeTimes{elNum,1},50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
             else
                 Spikes.Waveforms{elNum,1}=ExtractChunks(rawData(elNum,:),...
-                    Spikes.SpikeTimes{elNum,1},40,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
+                    Spikes.SpikeTimes{elNum,1},50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
             end
             % scale to resolution
             Spikes.Waveforms{elNum,1}=Spikes.Waveforms{elNum,1}.*resolution;

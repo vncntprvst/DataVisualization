@@ -81,8 +81,16 @@ guidata(hObject, handles);
 function handles=LoadRawData(handles)
 % first load raw traces
 fileName=regexp(handles.spikeFile,'.+(?=_\w+.\w+$)','match');
-% load([fileName{:} '_raw.mat']);
 handles.rawDataInfo=whos('-file',[fileName{:} '_raw.mat']);
+if strfind([fileName{:} '_raw.mat'],'nopp')
+handles.rawDataInfo.preproc=0;
+else
+% if "raw" data has been pre-processed already, either load unprocessed, do
+% not process later
+        %                 fileName=[fileName{1} '.dat'];
+%                 rawData = memmapfile(fileName,'Format','int16');
+handles.rawDataInfo.preproc=1;
+end
 handles.rawData = matfile([fileName{:} '_raw.mat']);
 handles.rawDataInfo.excerptSize=handles.rec_info.samplingRate/2; %1 second as default (-:+ around loc)
 handles.rawDataInfo.excerptLocation=round(handles.rawDataInfo.size(2)/2); %mid-recording as default
@@ -95,25 +103,14 @@ DisplayRawData(handles);
 % plot spike rasters
 DisplayRasters(handles);
 
-%% --- Executes on slider movement.
-function TW_slider_Callback(hObject, ~, handles)
-handles.rawDataInfo.excerptLocation=round(get(handles.TW_slider,'value'));
-if handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize<1
-    handles.rawDataInfo.excerptLocation=handles.rawDataInfo.excerptSize+1;
-elseif handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize>handles.rawDataInfo.size(2)
-    handles.rawDataInfo.excerptLocation=handles.rawDataInfo.size(2)-handles.rawDataInfo.excerptSize;
-end
-% plot "raw" (filtered) trace
-DisplayRawData(handles);
-% plot spike rasters
-DisplayRasters(handles);
-
 function DisplayRawData(handles)
 electrodeNum=get(handles.SelectElectrode_LB,'value');
 dataExcerpt=handles.rawData.(handles.rawDataInfo.name)(:,handles.rawDataInfo.excerptLocation-...
     handles.rawDataInfo.excerptSize:handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize-1);
-preprocOption={'CAR','all'};
-dataExcerpt=PreProcData(dataExcerpt,handles.rec_info.samplingRate,preprocOption);
+if handles.rawDataInfo.preproc==0
+    preprocOption={'CAR','all'};
+    dataExcerpt=PreProcData(dataExcerpt,handles.rec_info.samplingRate,preprocOption);
+end
 axes(handles.TimeRaster_Axes);
 cla(handles.TimeRaster_Axes);
 set(handles.TimeRaster_Axes,'Visible','on');
@@ -127,7 +124,6 @@ set(handles.TimeRaster_Axes,'xtick',linspace(0,handles.rec_info.samplingRate*2,4
 set(handles.TimeRaster_Axes,'ytick',[],'yticklabel',[]); %'ylim'
 axis('tight');box off;
 set(handles.TimeRaster_Axes,'Color','white','FontSize',12,'FontName','calibri');
-
 
 function DisplayRasters(handles)
 electrodeNum=get(handles.SelectElectrode_LB,'value');
@@ -180,6 +176,19 @@ if isfield(handles.Spikes,'Offline_Sorting')
     end
 end
 hold off
+
+%% --- Executes on slider movement.
+function TW_slider_Callback(hObject, ~, handles)
+handles.rawDataInfo.excerptLocation=round(get(handles.TW_slider,'value'));
+if handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize<1
+    handles.rawDataInfo.excerptLocation=handles.rawDataInfo.excerptSize+1;
+elseif handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize>handles.rawDataInfo.size(2)
+    handles.rawDataInfo.excerptLocation=handles.rawDataInfo.size(2)-handles.rawDataInfo.excerptSize;
+end
+% plot "raw" (filtered) trace
+DisplayRawData(handles);
+% plot spike rasters
+DisplayRasters(handles);
 
 %% Load data function
 function handles=LoadSpikes(handles)
@@ -481,7 +490,6 @@ else
             cla(handles.SortedUnits_Axes);
         end
         Plot_Mean_WF(handles);
-        Plot_Raster_TW(handles);
         Plot_ISI(handles);
         Plot_ACG(handles);
         Plot_XCG(handles);
@@ -882,10 +890,10 @@ ylabel('Voltage (\muV)');
 set(gca,'Color','white','FontSize',10,'FontName','Calibri');
 hold off
 
-function  Plot_Raster_TW(handles)
-%% plot rasters
-electrodeNum=get(handles.SelectElectrode_LB,'value');
-spikeTimes=handles.Spikes.HandSort.SpikeTimes{electrodeNum,2};
+% function  Plot_Raster_TW(handles)
+% %% plot rasters
+% electrodeNum=get(handles.SelectElectrode_LB,'value');
+% spikeTimes=handles.Spikes.HandSort.SpikeTimes{electrodeNum,2};
 
 % plot 10 sec or numWFtoPlot waveforms max
 
