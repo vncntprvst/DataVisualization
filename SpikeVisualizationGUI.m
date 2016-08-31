@@ -81,46 +81,23 @@ guidata(hObject, handles);
 function handles=LoadRawData(handles)
 % first load raw traces
 fileName=regexp(handles.spikeFile,'.+(?=_\w+.\w+$)','match');
-try
-    handles.rawDataInfo=whos('-file',['LifengMouse_CNO__10mnBR_9Ch_CAR_raw.mat']);
-    handles.rawDataInfo=rmfield
-handles.rawDataInfo,  bytes','global','sparse','complex','nesting','persistent'});  if strfind([fileName{:} '_raw.mat'],'nopp')
-        handles.rawDataInfo.preproc=0;
-    else
-        % if "raw" data has been pre-processed already, do
-        % not process later
-        handles.rawDataInfo.preproc=1;
-    end
-    handles.rawData = matfile([fileName{:} '_raw.mat']);
-catch % try to load from .dat file
-    if isfield(handles,'offlineSort_SpikeFile')
-        fileName=regexp(handles.offlineSort_SpikeFile,'.+?(?=\.)','match');
-        fileName=[fileName{1} '.dat'];
-  
-      ha%nmdlesrlwData = memmapfile(fileName,'Format','int16');
-        handles.rawDataInfo= 
-struct('%name','rawData',...
-            'size',size(handles.rawData.Data),...
-            'numChan',numel(handles.rec_info.exportedChan),...
-            'source','dat');   
-%cfid  =  fopen([fileName(1:ed'.params'],'r'f.);
-arams=fread(fid,'*char')';
-fclose(fid);dfooms = re
-igefe(dftPa    rams,filtefilter_done      = )\w.\w'matchafms = regexprep(params,'(?<=correct_lag    = )\w+(?= )',userParamh;
-
-Dat
-eaI
-enbn.excerp
-tSizendl
-es.rec_ihandles.rawDataInfo.preproc=01nfo.samp
-eRat
-e/2;handles.rawDataInfo.preproc=01 %1 second as default (-:+ around loc)
+handles.rawDataInfo=whos('-file',[fileName{:} '_raw.mat']);
+if strfind([fileName{:} '_raw.mat'],'nopp')
+handles.rawDataInfo.preproc=0;
+else
+% if "raw" data has been pre-processed already, either load unprocessed, do
+% not process later
+        %                 fileName=[fileName{1} '.dat'];
+%                 rawData = memmapfile(fileName,'Format','int16');
+handles.rawDataInfo.preproc=1;
+end
+handles.rawData = matfile([fileName{:} '_raw.mat']);
+handles.rawDataInfo.excerptSize=handles.rec_info.samplingRate/2; %1 second as default (-:+ around loc)
 handles.rawDataInfo.excerptLocation=round(handles.rawDataInfo.size(2)/2); %mid-recording as default
-set(handles.TW_sli
-der,'maxfclose(fid);',handles.rawDataInfo.size(2))
+set(handles.TW_slider,'max',handles.rawDataInfo.size(2))
 set(handles.TW_slider,'value',handles.rawDataInfo.excerptLocation);
 % set(handles.TW_slider,'sliderstep',[0.01 max([0.01,...
-% m    handles.rawDataInfo.exc)ertSize/handles.rawDataInfo.size(2)])]);
+%     handles.rawDataInfo.excerptSize/handles.rawDataInfo.size(2)])]);
 % plot "raw" (filtered) trace
 DisplayRawData(handles);
 % plot spike rasters
@@ -130,20 +107,14 @@ function DisplayRawData(handles)
 electrodeNum=get(handles.SelectElectrode_LB,'value');
 dataExcerpt=handles.rawData.(handles.rawDataInfo.name)(:,handles.rawDataInfo.excerptLocation-...
     handles.rawDataInfo.excerptSize:handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize-1);
-if handles.rawDataInfo.prepr
-       
-e,'memmapfile')
-            
-        eexcerptWindow=handles.rawDataInfo.excerptLocation-...
-    handles.(rawDataInfo.excerptSize:handles*.rawDa)taInfo.excerptLocation+handle)..ra
-wDataInfo.excerptSize-1;
-==0
-    preprocOpti.d(
-les.rawDataInfo.excerptLocation-)-...
- -  andles.rawDataInfo.excerptSe:handles.r)awDatdataExcerpt=handles.rawData.rawData();aInfo.excerptLocation+handles.rawDataInfo.excerptSize-1;
-l'};
-    dataExcerpt=PreProcData   eeRaster_Axes,'Visible','on');
-plot(handles.TimeRaster_Axes,int32(dataExcerpt(elecNum,:)));
+if handles.rawDataInfo.preproc==0
+    preprocOption={'CAR','all'};
+    dataExcerpt=PreProcData(dataExcerpt,handles.rec_info.samplingRate,preprocOption);
+end
+axes(handles.TimeRaster_Axes);
+cla(handles.TimeRaster_Axes);
+set(handles.TimeRaster_Axes,'Visible','on');
+plot(handles.TimeRaster_Axes,int32(dataExcerpt(electrodeNum,:)));
 % threshold
 % plot(ones(1,size(dataExcerpt(electrodeNum,:),2))*7*mad(single(dataExcerpt(electrodeNum,:)))/1.7315,'k--')
 % plot(ones(1,size(dataExcerpt(electrodeNum,:),2))*-7*mad(single(dataExcerpt(electrodeNum,:)))/1.7315,'k--')
@@ -1323,13 +1294,9 @@ switch confirm
         rawData=handles.rawData.(handles.rawDataInfo.name)(selectedEl,:);
         %then re-align (current waveforms, raw data, spike times, unit IDs)
         Spikes=ReAlignSpikes(handles.Spikes.HandSort.Waveforms{selectedEl,1},...
-  
-        i  iaaDhandles.rawData,ata,...
-            ha    
-ndles.Spe.Ha
-ndSort.Spikes{selectedEl,1},...
-            ha
-ndles.Spikes.HandSort.Units{selectedEl,e1});
+            rawData,...
+            handles.Spikes.HandSort.SpikeTimes{selectedEl,1},...
+            handles.Spikes.HandSort.Units{selectedEl,1});
         handles.Spikes.HandSort.Waveforms(selectedEl)=Spikes.Waveforms;
         handles.Spikes.HandSort.Waveforms(selectedEl)=...
             cellfun(@(wfs) int16(wfs), handles.Spikes.HandSort.Waveforms{selectedEl},'UniformOutput',false); %256 units per channel max
