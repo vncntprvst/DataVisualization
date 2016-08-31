@@ -800,8 +800,7 @@ if exist('lineH','var')
     end
     firstOfClus=[1, find(diff(cellfun(@(col) sum(col), {lineH.Color})))+1];
     legH=legend(lineH(firstOfClus),{num2str(numUnits')},'location','southeast');
-    set(legH,'Box','Off','FontSize',7,'LineWidth',0.2,'Position',...
-        [0.54 legH.Position(2)+legH.Position(3)-0.01 0 0]);
+    set(legH,'Box','Off','FontSize',7,'LineWidth',0.2,'Position',[0.54 0.485 0 0]);
 end
 axis('tight');box off;
 set(gca,'Ylim',[min(min(waveForms)) max(max(waveForms))],'XTick',linspace(0,size(waveForms(:,handles.subset{selectedUnitsListIdx(unitP)}),1),5),...
@@ -873,8 +872,7 @@ set(gca,'XTick',linspace(0,size(waveForms(:,handles.subset{selectedUnitsListIdx(
 % ordinateLabels=str2num(get(gca,'YTickLabel'))/4;
 % set(gca,'YTickLabel',num2str(ordinateLabels));
 if exist('selectWF','var')
-    legH=legend(lineh,{num2str(selectedUnits)},'location','southeast');
-    set(legH,'Box','Off');
+    legend(lineh,{num2str(selectedUnits)},'location','southeast');
 end
 axis('tight');box off;
 xlabel('Time (ms)');
