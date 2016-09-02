@@ -1,4 +1,4 @@
-function Spikes=LoadSpikeData(fName,rawData,electrodes,samplingRate,resolution)
+function Spikes=LoadSpikeData(fName,rawData,electrodes,samplingRate,bitResolution)
 if logical(regexp(fName,'Ch\d+.')) %from Spike2
     load(fName)
     Spikes.Units{electrodes,1}=nw_401.codes(:,1);
@@ -40,7 +40,7 @@ elseif strfind(fName,'.hdf5') % Spyking Circus
                     Spikes.SpikeTimes{elNum,1},50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
             end
             % scale to resolution
-            Spikes.Waveforms{elNum,1}=Spikes.Waveforms{elNum,1}.*resolution;
+            Spikes.Waveforms{elNum,1}=Spikes.Waveforms{elNum,1}.*bitResolution;
             Spikes.samplingRate(elNum,1)=samplingRate;
         catch
         end
