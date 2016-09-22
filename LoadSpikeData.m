@@ -15,15 +15,15 @@ elseif strfind(fName,'.hdf5') % Spyking Circus
     for elNum=1:electrodes
         try
             %Clusters data (including non-clustered spikes)
-%             Spikes.Units{elNum,1}=h5read([fName '.clusters.hdf5'],['/clusters_' num2str(elNum-1)]);
-%             Spikes.SpikeTimes{elNum,1}=h5read([fName '.clusters.hdf5'],['/times_' num2str(elNum-1)]);
+            %             Spikes.Units{elNum,1}=h5read([fName '.clusters.hdf5'],['/clusters_' num2str(elNum-1)]);
+            %             Spikes.SpikeTimes{elNum,1}=h5read([fName '.clusters.hdf5'],['/times_' num2str(elNum-1)]);
             
             %Results, after fitting templates
             thisElTemplates=find(templateToEl==elNum-1)-1;
             [spktimes,units]=deal(cell(size(thisElTemplates,1),1));
             for templt=1:size(thisElTemplates,1)
-                 spktimes{templt}=h5read([fName '.result.hdf5'],['/spiketimes/temp_' num2str(thisElTemplates(templt))]);
-                 units{templt}=ones(size(spktimes{templt},1),1)*templt;
+                spktimes{templt}=h5read([fName '.result.hdf5'],['/spiketimes/temp_' num2str(thisElTemplates(templt))]);
+                units{templt}=ones(size(spktimes{templt},1),1)*templt;
             end
             % concatenate values
             Spikes.Units{elNum,1}=vertcat(units{:});
@@ -31,7 +31,7 @@ elseif strfind(fName,'.hdf5') % Spyking Circus
             % sort times, and adjust unit orders
             [Spikes.SpikeTimes{elNum,1},timeIdx]=sort(Spikes.SpikeTimes{elNum,1});
             Spikes.Units{elNum,1}=Spikes.Units{elNum,1}(timeIdx);
-            % extract spike waveforms foo=Spikes.Waveforms{elNum,1}(Spikes.Units{elNum,1}==7,:);
+            % extract spike waveforms 
             if isa(rawData,'memmapfile') % reading electrode data from .dat file
                 Spikes.Waveforms{elNum,1}=ExtractChunks(rawData.Data(elNum:electrodes:max(size(rawData.Data))),...
                     Spikes.SpikeTimes{elNum,1},50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
@@ -45,18 +45,66 @@ elseif strfind(fName,'.hdf5') % Spyking Circus
         catch
         end
     end
-elseif strfind(fName,'.mat') %Matlab export - all units unsorted by default
+elseif strfind(fName,'.mat')
     load(fName);
-    for elNum=1:numel(electrodes)
-        try
-            Spikes.Offline_Threshold.Units{elNum,1}=zeros(1,numel(find(Spikes.Offline_Threshold.data{electrodes(elNum)})));
-            Spikes.Offline_Threshold.SpikeTimes{elNum,1}=find(Spikes.Offline_Threshold.data{electrodes(elNum)});
-            Spikes.Offline_Threshold.Waveforms{elNum,1}=ExtractChunks(rawData(elNum,:),...
-                Spikes.Offline_Threshold.SpikeTimes{elNum,1},40,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
-            % 0.25 bit per uV, so divide by 4 - adjust according to
-            % recording system
-            Spikes.Offline_Threshold.Waveforms{elNum,1}=Spikes.Waveforms{elNum,1}./4;
-        catch
+    if strfind(fName,'rez') || strfind(fName,'_KS') %Kilosort
+        spikeTimes = uint64(rez.st3(:,1));
+        spikeTemplates = uint32(rez.st3(:,2));
+        templates=abs(rez.Wraw);
+        templateToEl=zeros(max(unique(spikeTemplates)),1);
+        for templNum=1:max(unique(spikeTemplates))
+            thatTemplate=squeeze(templates(:,:,templNum));
+            [elecRow,~] = ind2sub(size(thatTemplate),find(thatTemplate==max(max(thatTemplate))));
+            if size(elecRow,1)>1
+                if length(unique(elecRow))>1 %weird
+                    %                     then look for next biggest value?
+                    return
+                else
+                    elecRow=unique(elecRow);
+                end
+            end
+            templateToEl(templNum)=elecRow;
+        end
+        for elNum=1:electrodes
+            try
+                %Results, after fitting templates
+                thisElTemplates=find(templateToEl==elNum);
+                units=false(size(spikeTemplates,1),1);
+                for templt=1:size(thisElTemplates,1)
+                    units=units | spikeTemplates==thisElTemplates(templt);
+                end
+                Spikes.Units{elNum,1}=spikeTemplates(units);
+                Spikes.SpikeTimes{elNum,1}=spikeTimes(units);
+                % extract spike waveforms  rawData = memmapfile('example.dat','Format','int16');
+                if isa(rawData,'memmapfile') % reading electrode data from .dat file
+                    Spikes.Waveforms{elNum,1}=ExtractChunks(rawData.Data(elNum:electrodes:max(size(rawData.Data))),...
+                        Spikes.SpikeTimes{elNum,1},50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
+                else
+                    Spikes.Waveforms{elNum,1}=ExtractChunks(rawData(elNum,:),...
+                        Spikes.SpikeTimes{elNum,1},50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
+                end
+                % scale to resolution
+                Spikes.Waveforms{elNum,1}=Spikes.Waveforms{elNum,1}.*bitResolution;
+                Spikes.samplingRate(elNum,1)=samplingRate;
+            catch
+            end
+        end
+        
+    else
+        %Matlab export - all units unsorted by default
+        
+        
+        for elNum=1:numel(electrodes)
+            try
+                Spikes.Units{elNum,1}=zeros(1,numel(find(Spikes.data{electrodes(elNum)})));
+                Spikes.SpikeTimes{elNum,1}=find(Spikes.data{electrodes(elNum)});
+                Spikes.Waveforms{elNum,1}=ExtractChunks(rawData(elNum,:),...
+                    Spikes.SpikeTimes{elNum,1},40,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
+                % 0.25 bit per uV, so divide by 4 - adjust according to
+                % recording system
+                Spikes.Waveforms{elNum,1}=Spikes.Waveforms{elNum,1}./4;
+            catch
+            end
         end
     end
 end

@@ -6,7 +6,7 @@ Behavior=Behavior(keepSessions);
 % [~,orderDate]=sort([Behavior(keepSessions).fileRecordingDate]);
 [~,orderDate]=sort(([Behavior.fileRecordingDate]-...
     datetime(year(min([Behavior.fileRecordingDate])),1,1))+...
-    [Behavior.fileStartTime]);
+    [Behavior.fileStartTime_ms]);
 Performance=Performance(orderDate);
 Behavior=Behavior(orderDate);
 % average side bias

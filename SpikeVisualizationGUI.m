@@ -1,8 +1,9 @@
 function varargout = SpikeVisualizationGUI(varargin)
 % MATLAB code for SpikeVisualizationGUI.fig
-
-
 % Last Modified by GUIDE v2.5 30-Aug-2016 12:11:51
+% version 0.5 (sept 2016), tested in R2014b
+% Vincent Prevosto
+% email: vp35 at duke.edu
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -31,8 +32,8 @@ function SpikeVisualizationGUI_OpeningFcn(hObject, ~, handles, varargin)
 handles.output = hObject;
 
 if ~isempty(varargin)
-    handles=catstruct(handles,varargin{:}); % catstruct available here:
-    % http://www.mathworks.com/matlabcentral/fileexchange/7842-catstruct
+    handles=CatStruct(handles,varargin{:}); % CatStruct available here:
+    % http://www.mathworks.com/matlabcentral/fileexchange/7842-CatStruct
     
     if isfield(handles,'fname')
         set(handles.FileName,'string',handles.fname(1:end-4));
@@ -70,7 +71,9 @@ if isfield(handles,'spikeFile') && sum(strfind(handles.spikeFile,'.dat'))
     GetSortedSpikes_PB_Callback(hObject, handles);
 end
 handles.fileLoaded=0;
+guidata(hObject, handles);
 handles=LoadSpikes(handles);
+guidata(hObject, handles);
 handles=LoadRawData(handles);
 % Update handles structure
 guidata(hObject, handles);
@@ -80,30 +83,40 @@ guidata(hObject, handles);
 
 function handles=LoadRawData(handles)
 % first load raw traces
-fileName=regexp(handles.spikeFile,'.+(?=_\w+.\w+$)','match');
 try
-    handles.rawDataInfo=whos('-file',[fileName{:} '_raw.mat']);
+    if ~(isfield(handles,'datFile') && ~isempty(strfind(handles.datFile,'.mat')))
+        handles.datFile=regexp(handles.spikeFile,'.+(?=_\w+.\w+$)','match');
+        handles.datFile=[handles.datFile{:} '_raw.mat'];
+        handles.datDir=cd;
+    end
+    handles.rawDataInfo=whos('-file',fullfile(handles.datDir,handles.datFile));
     handles.rawDataInfo=rmfield(handles.rawDataInfo,...
         {'bytes','global','sparse','complex','nesting','persistent'});
-    if strfind([fileName{:} '_raw.mat'],'nopp')
+    if strfind(fullfile(handles.datDir,handles.datFile),'nopp')
         handles.rawDataInfo.preproc=0;
     else
         % if "raw" data has been pre-processed already, do
         % not process later
         handles.rawDataInfo.preproc=1;
     end
-    handles.rawData = matfile([fileName{:} '_raw.mat']);
+    handles.rawData = matfile(fullfile(handles.datDir,handles.datFile));
 catch % try to load from .dat file
-    if isfield(handles,'offlineSort_SpikeFile')
-        fileName=regexp(handles.offlineSort_SpikeFile,'.+?(?=\.)','match');
-        fileName=[fileName{1} '.dat'];
-        handles.rawData = memmapfile(fileName,'Format','int16');
+    if ~(isfield(handles,'datFile') && ~isempty(strfind(fullfile(handles.datDir,handles.datFile),'.dat')))
+        if isfield(handles,'offlineSort_SpikeFile')
+            handles.datFile=regexp(handles.offlineSort_SpikeFile,'.+?(?=\.)','match');
+            handles.datFile=[handles.datFile{1} '.dat'];
+            handles.datDir=cd;
+        else
+            % ask user for raw data file
+        end
+    end
+        handles.rawData = memmapfile(fullfile(handles.datDir,handles.datFile),'Format','int16');
         handles.rawDataInfo= struct('name','rawData',...
             'size',size(handles.rawData.Data),...
             'numChan',numel(handles.rec_info.exportedChan),...
             'source','dat');
         %check in params file if data was filtered
-        fid  = fopen([fileName(1:end-4) '.params'],'r');
+        fid  = fopen([fullfile(handles.datDir,handles.datFile(1:end-4)) '.params'],'r');
         if fid~=-1
             params=fread(fid,'*char')';
             if regexp(params,'(?<=filter_done      = )\w+(?= )','match','once')
@@ -111,13 +124,10 @@ catch % try to load from .dat file
             else
                 handles.rawDataInfo.preproc=0;
             end
+            fclose(fid);
         else
             handles.rawDataInfo.preproc=0;
         end
-        fclose(fid);
-    else
-        % ask user for raw data file
-    end
 end
 handles.rawDataInfo.excerptSize=handles.rec_info.samplingRate/2; %1 second as default (-:+ around loc)
 if isa(handles.rawData,'memmapfile')
@@ -134,9 +144,9 @@ DisplayRawData(handles);
 % plot spike rasters
 DisplayRasters(handles);
 
-function DisplayRawData(handles)
+function DisplayRawData(handles) 
 electrodeNum=get(handles.SelectElectrode_LB,'value');
-if isa(handles.rawData,'memmapfile')
+if isa(handles.rawData,'memmapfile') 
     excerptWindow=((handles.rawDataInfo.excerptLocation-...
         handles.rawDataInfo.excerptSize)*numel(handles.rec_info.exportedChan):...
         (handles.rawDataInfo.excerptLocation+...
@@ -149,7 +159,7 @@ else
         handles.rawDataInfo.excerptSize:handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize-1;
     dataExcerpt=handles.rawData.(handles.rawDataInfo.name)(:,excerptWindow);
 end
-if handles.rawDataInfo.preproc==0
+if handles.rawDataInfo.preproc==0 % raw data is presumed bandpassed filtered at this point
     preprocOption={'CAR','all'};
     dataExcerpt=PreProcData(dataExcerpt,handles.rec_info.samplingRate,preprocOption);
 end
@@ -173,6 +183,7 @@ set(handles.TimeRaster_Axes,'Color','white','FontSize',12,'FontName','calibri');
 % end
 
 function DisplayRasters(handles)
+% display color-coded markers for each identified spike
 electrodeNum=get(handles.SelectElectrode_LB,'value');
 axes(handles.TimeRaster_Axes); hold on
 % get which unit to plot
@@ -185,7 +196,7 @@ else
     selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
     selectedUnits=unitID(selectedUnitsListIdx);
 end
-if isfield(handles.Spikes,'Online_Sorting')
+if isfield(handles.Spikes,'Online_Sorting') % plot above trace
     if ~isempty(handles.Spikes.Online_Sorting.SpikeTimes)
         for unitP=1:size(selectedUnits,1)
             spkTimes=handles.Spikes.Online_Sorting.SpikeTimes{electrodeNum}(...
@@ -204,8 +215,7 @@ if isfield(handles.Spikes,'Online_Sorting')
         end
     end
 end
-if isfield(handles.Spikes,'Offline_Sorting')
-    if isfield(handles.Spikes,'Online_Sorting') && ~isempty(handles.Spikes.Online_Sorting.SpikeTimes)
+if isfield(handles.Spikes,'Offline_Sorting') % plot below trace
         for unitP=1:size(selectedUnits,1)
             spkTimes=handles.Spikes.Offline_Sorting.SpikeTimes{electrodeNum}(...
                 (handles.Spikes.Offline_Sorting.SpikeTimes{electrodeNum}>=...
@@ -220,7 +230,6 @@ if isfield(handles.Spikes,'Offline_Sorting')
                     'linestyle','none','Marker','^');
             end
         end
-    end
 end
 hold off
 
@@ -255,7 +264,11 @@ if isfield(handles,'fname') && strcmp(handles.fname,'')
     set(handles.FileName,'string','')
 else
     if ~isfield(handles,'fname') && isfield(handles,'rec_info')
-        handles.fname=handles.rec_info.exportname;
+        try
+            handles.fname=handles.rec_info.exportname;
+        catch
+            handles.fname=handles.datFile;
+        end
     end
     if handles.fileLoaded==0 & strfind(handles.spikeFile,'Resorted.mat')
         cd(handles.exportDir);
@@ -267,7 +280,7 @@ else
         if isfield(handles,'Spikes')
             handles = rmfield(handles,'Spikes');
         end
-        handles=catstruct(handles,spikeData);
+        handles=CatStruct(handles,spikeData);
         clear spikeData;
     elseif handles.fileLoaded==0
         %% load spike data from matlab export, if exists
@@ -294,10 +307,15 @@ else
         %         end
         if iscell(handles.spikeFile) && size(handles.spikeFile,2)>1
             % ask which export file is the good one
-            whichOne = listdlg('PromptString','Select correct spike file:',...
+            [whichOne,status] = listdlg('PromptString','Select correct spike file:',...
                 'SelectionMode','single',...
                 'ListString',handles.spikeFile);
-            handles.spikeFile=handles.spikeFile{whichOne};
+            if status==1
+                handles.spikeFile=handles.spikeFile{whichOne};
+            else
+                handles.spikeFile=[];
+            end
+            
             %             nameComp=cellfun(@(name) sum(ismember(handles.fname(1:end-4),...
             %                 name(1:size(handles.fname(1:end-4),2)))) ,handles.spikeFile);
             %             if abs(diff(nameComp))<2 %that can be tricky for some files
@@ -310,7 +328,11 @@ else
             %             end
         else
             if iscell(handles.spikeFile)
-                handles.spikeFile=handles.spikeFile{:};
+                try
+                    handles.spikeFile=handles.spikeFile{:};
+                catch
+                    handles.spikeFile=[];
+                end
             end
         end
         %     end
@@ -322,21 +344,53 @@ else
         %% Load spike data
         if ~isempty(handles.spikeFile) && ~get(handles.Spikes_HandSorted_RB,'value')
             spikeData=load(handles.spikeFile);
-            %also load recording info
-            fileName=regexp(handles.spikeFile,'.+(?=_\w+.mat$)','match');
-            recInfo=load([fileName{:} '_info.mat']);
-            %concatenate
-            if isfield(handles,'rec_info')
-                handles = rmfield(handles,'rec_info');
-            end
             if isfield(handles,'Spikes')
                 % This will delete all Spikes data inlcuding any changes to HandSort
                 % Might want to change that in future version
                 handles = rmfield(handles,'Spikes');
             end
-            handles=catstruct(handles,spikeData,recInfo);
+            handles=CatStruct(handles,spikeData);
             %clear
-            clear spikeData rec_info;
+            clear spikeData;
+        end
+        % check if we need to load recording info
+        if ~isfield(handles,'rec_info')
+            try
+                fileName=regexp(handles.spikeFile,'.+(?=_\w+.mat$)','match');
+                recInfo=load([fileName{:} '_info.mat']);
+            catch
+                [fileInfoName,fileInfoDir,FilterIndex] = uigetfile({'*.mat;*.txt','File Info Formats';...
+                    '*.*','All Files' },'Select file providing basic recording info, or cancel and enter info');
+                if FilterIndex==0 % display prompt
+                    prompt={'Sampling rate',...
+                        'Number of channels in spike-sorted file',...
+                        'uV/bit'};
+                    name='Data file information';
+                    numlines=1;
+                    defaultanswer={'30000','32','0.25'};
+                    options.Resize='on';
+                    options.WindowStyle='normal';
+                    info=inputdlg(prompt,name,numlines,defaultanswer,options);
+                    info=cellfun(@(field) str2double(field),info,'UniformOutput',false);
+                    info{2}=1:info{2};
+                    recInfo.rec_info=cell2struct(info, {'samplingRate','exportedChan','bitResolution'}, 1);
+                else
+                recInfo=load(fullfile(fileInfoDir,fileInfoName));
+                end
+            end
+            % just in case the field is named differently 
+            field = fieldnames(recInfo);
+            if ~strcmp(field{:},'rec_info')
+                [recInfo.('rec_info')] = recInfo.(field{:});
+                recInfo = rmfield(recInfo,field);
+            end
+            %concatenate
+            if isfield(handles,'rec_info')
+                handles = rmfield(handles,'rec_info');
+            end
+            handles=CatStruct(handles,recInfo);
+            %clear
+            clear recInfo;
         end
         if isfield(handles,'offlineSort_SpikeFile')
             if logical(regexp(handles.offlineSort_SpikeFile,'Ch\d+.')) % Spike2
@@ -345,13 +399,24 @@ else
                     handles.rec_info.numRecChan,handles.rec_info.samplingRate);
             elseif logical(regexp(handles.offlineSort_SpikeFile,'.hdf5')) % Spyking-Circus
                 % first load raw traces in memory
-                %from .mat file
-%                 fileName=regexp(handles.spikeFile,'.+(?=_\w+.\w+$)','match');
-%                 load([fileName{:} '_raw.mat']);
-                % better: map .dat file 
                 fileName=regexp(handles.offlineSort_SpikeFile,'.+?(?=\.)','match');
-                fileName=[fileName{1} '.dat'];
-                rawData = memmapfile(fileName,'Format','int16');
+                %                 fileName=[fileName{1} '.dat'];
+                if ~exist([fileName{1} '.dat'],'file') ||  ~exist([fileName{1} '.mat'],'file') % then ask where it is
+                    [handles.datFile,handles.datDir] = uigetfile({'*.dat;*.mat','Data Formats';...
+                        '*.*','All Files' },'Select data file for spike waveform extraction');
+                else
+                    if exist([fileName{1} '.dat'],'file')
+                        handles.datFile=[fileName{1} '.dat'];
+                    elseif exist([fileName{1} '.mat'],'file')
+                        handles.datFile=[fileName{1} '.mat'];
+                    end
+                    handles.datDir=cd;
+                end
+                if strfind(handles.datFile,'.mat') % .mat file contain rawData
+                    load(handles.datFile);
+                elseif strfind(handles.datFile,'.dat')
+                    rawData = memmapfile(fullfile(handles.datDir,handles.datFile),'Format','int16');
+                end
                 %then import
                 cd(handles.offlineSort_SpikeDir);
                 if ~isfield(handles.rec_info,'bitResolution') || isempty(handles.rec_info.bitResolution)
@@ -360,6 +425,33 @@ else
                 handles.Spikes.Offline_Sorting=LoadSpikeData(handles.offlineSort_SpikeFile,rawData,...
                     numel(handles.rec_info.exportedChan),handles.rec_info.samplingRate,handles.rec_info.bitResolution); %handles.rawDataInfo.size(1)
                 clear rawData;
+            elseif logical(regexp(handles.offlineSort_SpikeFile,'rez.mat')) % KiloSort
+                fileName=regexp(handles.offlineSort_SpikeFile,'.+?(?=\.)','match');
+                %                 fileName=[fileName{1} '.dat'];
+                if ~exist([fileName{1} '.dat'],'file') ||  ~exist([fileName{1} '.mat'],'file') % then ask where it is
+                    [handles.datFile,handles.datDir] = uigetfile({'*.dat;*.mat','Data Formats';...
+                        '*.*','All Files' },'Select data file for spike waveform extraction');
+                else
+                    if exist([fileName{1} '.dat'],'file')
+                        handles.datFile=[fileName{1} '.dat'];
+                    elseif exist([fileName{1} '.mat'],'file')
+                        handles.datFile=[fileName{1} '.mat'];
+                    end
+                    handles.datDir=cd;
+                end
+                if strfind(handles.datFile,'.mat') % .mat file contain rawData
+                    load(handles.datFile);
+                elseif strfind(handles.datFile,'.dat')
+                    rawData = memmapfile(fullfile(handles.datDir,handles.datFile),'Format','int16');
+                end
+                %then import
+                cd(handles.offlineSort_SpikeDir);
+                if ~isfield(handles.rec_info,'bitResolution') || isempty(handles.rec_info.bitResolution)
+                    handles.rec_info.bitResolution=0.25; %default 0.25 uV/bit
+                end
+                handles.Spikes.Offline_Sorting=LoadSpikeData(handles.offlineSort_SpikeFile,rawData,...
+                    numel(handles.rec_info.exportedChan),handles.rec_info.samplingRate,handles.rec_info.bitResolution); %handles.rawDataInfo.size(1)
+                clear rawData;               
             end
             cd(handles.exportDir);
         end
@@ -488,7 +580,10 @@ else
     %% Set number of electrodes and units,
     % if opening GUI, select electrode with most units and spikes
     if strcmp(get(handles.SelectElectrode_LB,'string'),'none')
-        set(handles.SelectElectrode_LB,'string',num2str(handles.Spikes.Offline_Threshold.electrode'));
+        if diff(size(handles.rec_info.exportedChan))>0
+            handles.rec_info.exportedChan=handles.rec_info.exportedChan';
+        end
+        set(handles.SelectElectrode_LB,'string',num2str(handles.rec_info.exportedChan));
         if isfield(handles.Spikes,'Online_Sorting') || isfield(handles.Spikes,'Offline_Sorting')
             numUnits=cellfun(@(x) sum(length(x)*unique(x)), handles.Spikes.HandSort.Units);
             electrodeNum=find(numUnits==max(numUnits),1);
@@ -1216,6 +1311,9 @@ if strcmp(get(gcf,'SelectionType'),'normal')
     Plot_ISI(handles);
     Plot_ACG(handles);
     Plot_XCG(handles);
+    DisplayRawData(handles);
+    DisplayRasters(handles);
+    
     % elseif strcmp(get(gcf,'SelectionType'),'open') % double click
     % else
     %  Update handles structure
@@ -1239,20 +1337,26 @@ end
 
 %% --- Executes on button press in PreviewTh_PB.
 function PreviewTh_PB_Callback(hObject, ~, handles)
-noppDatFile=[cell2mat(regexp(handles.spikeFile,'.+(?=\_\w+\_\w+\.)','match')) '_nopp'];
+if ~isfield(handles,'datFile')
+    handles.datFile=[cell2mat(regexp(handles.spikeFile,'.+(?=\_\w+\_\w+\.)','match')) '_nopp'];
+end
 handles.PreviewTh_PB.ForegroundColor=[0.2 0.5 0.7];
-RunSpykingCircus(cd,noppDatFile,'previewspkc');
+RunSpykingCircus(cd,handles.datFile,'previewspkc');
 handles.PreviewTh_PB.ForegroundColor=[0.3490 0.2000 0.3294];
 
 % --- Executes on button press in LauncherGUI_PB.
 function LauncherGUI_PB_Callback(hObject, eventdata, handles)
-noppDatFile=[cell2mat(regexp(handles.spikeFile,'.+(?=\_\w+\_\w+\.)','match')) '_nopp'];
-RunSpykingCircus(cd,noppDatFile,'launcherGUI');
+if ~isfield(handles,'datFile')
+    handles.datFile=[cell2mat(regexp(handles.spikeFile,'.+(?=\_\w+\_\w+\.)','match')) '_nopp'];
+end
+RunSpykingCircus(cd,handles.datFile,'launcherGUI');
 
 %% --- Executes on button press in GetSortedSpikes_PB.
 function GetSortedSpikes_PB_Callback(hObject, ~, handles)
-noppDatFile=[cell2mat(regexp(handles.spikeFile,'.+(?=\_\w+\_\w+\.)','match')) '_nopp'];
-[status,cmdout]=RunSpykingCircus(cd,noppDatFile,'runspkc,exportspikes');
+if ~isfield(handles,'datFile')
+    handles.datFile=[cell2mat(regexp(handles.spikeFile,'.+(?=\_\w+\_\w+\.)','match')) '_nopp'];
+end
+[status,cmdout]=RunSpykingCircus(cd,handles.datFile,'runspkc,exportspikes');
 if handles.GetSortedSpikes_PB.ForegroundColor(1)==0.3490
     handles.GetSortedSpikes_PB.ForegroundColor=[0.2 0.5 0.7];
 else
@@ -1261,9 +1365,11 @@ end
 
 %% --- Executes on button press in RefineSort_PB.
 function RefineSort_PB_Callback(hObject, ~, handles)
-noppDatFile=[cell2mat(regexp(handles.spikeFile,'.+(?=\_\w+\_\w+\.)','match')) '_nopp'];
+if ~isfield(handles,'datFile')
+    handles.datFile=[cell2mat(regexp(handles.spikeFile,'.+(?=\_\w+\_\w+\.)','match')) '_nopp'];
+end
 handles.RefineSort_PB.ForegroundColor=[0.2 0.5 0.7];
-[status,cmdout]=RunSpykingCircus(cd,noppDatFile,'startVisGUI');
+[status,cmdout]=RunSpykingCircus(cd,handles.datFile,'startVisGUI');
 handles.RefineSort_PB.ForegroundColor=[0.3490 0.2000 0.3294];
 
 %% --- Outputs from this function are returned to the command line.
@@ -1306,7 +1412,7 @@ function Spikes_Th_RB_Callback(hObject, ~, handles)
 set(handles.Spikes_Th_RB,'value',1);
 set(handles.Spikes_SortOn_RB,'value',0);
 set(handles.Spikes_SortOff_RB,'value',0);
-if ~strcmp(handles.spikeFile(end-2:end),'mat')
+if isempty(handles.spikeFile) || ~strcmp(handles.spikeFile(end-2:end),'mat')
     [handles.spikeFile,handles.exportDir] = uigetfile({'*.mat;*.hdf5','All Data Formats';...
         '*.*','All Files' },'Export folder',handles.exportDir);
 end
