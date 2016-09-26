@@ -80,172 +80,6 @@ guidata(hObject, handles);
 
 % UIWAIT makes SpikeVisualizationGUI wait for user response (see UIRESUME)
 % uiwait(handles.figure1);
-
-function handles=LoadRawData(handles)
-% first load raw traces
-try
-    if ~(isfield(handles,'datFile') && ~isempty(strfind(handles.datFile,'.mat')))
-        handles.datFile=regexp(handles.spikeFile,'.+(?=_\w+.\w+$)','match');
-        handles.datFile=[handles.datFile{:} '_raw.mat'];
-        handles.datDir=cd;
-    end
-    handles.rawDataInfo=whos('-file',fullfile(handles.datDir,handles.datFile));
-    handles.rawDataInfo=rmfield(handles.rawDataInfo,...
-        {'bytes','global','sparse','complex','nesting','persistent'});
-    if strfind(fullfile(handles.datDir,handles.datFile),'nopp')
-        handles.rawDataInfo.preproc=0;
-    else
-        % if "raw" data has been pre-processed already, do
-        % not process later
-        handles.rawDataInfo.preproc=1;
-    end
-    handles.rawData = matfile(fullfile(handles.datDir,handles.datFile));
-catch % try to load from .dat file
-    if ~(isfield(handles,'datFile') && ~isempty(strfind(fullfile(handles.datDir,handles.datFile),'.dat')))
-        if isfield(handles,'offlineSort_SpikeFile')
-            handles.datFile=regexp(handles.offlineSort_SpikeFile,'.+?(?=\.)','match');
-            handles.datFile=[handles.datFile{1} '.dat'];
-            handles.datDir=cd;
-        else
-            % ask user for raw data file
-        end
-    end
-        handles.rawData = memmapfile(fullfile(handles.datDir,handles.datFile),'Format','int16');
-        handles.rawDataInfo= struct('name','rawData',...
-            'size',size(handles.rawData.Data),...
-            'numChan',numel(handles.rec_info.exportedChan),...
-            'source','dat');
-        %check in params file if data was filtered
-        fid  = fopen([fullfile(handles.datDir,handles.datFile(1:end-4)) '.params'],'r');
-        if fid~=-1
-            params=fread(fid,'*char')';
-            if regexp(params,'(?<=filter_done      = )\w+(?= )','match','once')
-                handles.rawDataInfo.preproc=1;
-            else
-                handles.rawDataInfo.preproc=0;
-            end
-            fclose(fid);
-        else
-            handles.rawDataInfo.preproc=0;
-        end
-end
-handles.rawDataInfo.excerptSize=handles.rec_info.samplingRate/2; %1 second as default (-:+ around loc)
-if isa(handles.rawData,'memmapfile')
-    handles.rawDataInfo.excerptLocation=round(max(handles.rawDataInfo.size)/2/numel(handles.rec_info.exportedChan));  %mid-recording as default
-    set(handles.TW_slider,'max',max(handles.rawDataInfo.size)/numel(handles.rec_info.exportedChan));
-else
-    handles.rawDataInfo.excerptLocation=round(max(handles.rawDataInfo.size)/2);
-    set(handles.TW_slider,'max',max(handles.rawDataInfo.size));
-end
-% set(handles.TW_slider,'sliderstep',[0.01 max([0.01,...
-%     handles.rawDataInfo.excerptSize/max(handles.rawDataInfo.size)])]);
-% plot "raw" (filtered) trace
-DisplayRawData(handles);
-% plot spike rasters
-DisplayRasters(handles);
-
-function DisplayRawData(handles) 
-electrodeNum=get(handles.SelectElectrode_LB,'value');
-if isa(handles.rawData,'memmapfile') 
-    excerptWindow=((handles.rawDataInfo.excerptLocation-...
-        handles.rawDataInfo.excerptSize)*numel(handles.rec_info.exportedChan):...
-        (handles.rawDataInfo.excerptLocation+...
-        handles.rawDataInfo.excerptSize)*numel(handles.rec_info.exportedChan)-1)-8;
-    dataExcerpt=handles.rawData.Data(excerptWindow);
-    dataExcerpt=reshape(dataExcerpt,[numel(handles.rec_info.exportedChan)...
-        handles.rawDataInfo.excerptSize*2]);
-else
-    excerptWindow=handles.rawDataInfo.excerptLocation-...
-        handles.rawDataInfo.excerptSize:handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize-1;
-    dataExcerpt=handles.rawData.(handles.rawDataInfo.name)(:,excerptWindow);
-end
-if handles.rawDataInfo.preproc==0 % raw data is presumed bandpassed filtered at this point
-    preprocOption={'CAR','all'};
-    dataExcerpt=PreProcData(dataExcerpt,handles.rec_info.samplingRate,preprocOption);
-end
-axes(handles.TimeRaster_Axes);
-cla(handles.TimeRaster_Axes);
-set(handles.TimeRaster_Axes,'Visible','on');
-plot(handles.TimeRaster_Axes,int32(dataExcerpt(electrodeNum,:)));
-% threshold
-% plot(ones(1,size(dataExcerpt(electrodeNum,:),2))*7*mad(single(dataExcerpt(electrodeNum,:)))/1.7315,'k--')
-% plot(ones(1,size(dataExcerpt(electrodeNum,:),2))*-7*mad(single(dataExcerpt(electrodeNum,:)))/1.7315,'k--')
-set(handles.TimeRaster_Axes,'xtick',linspace(0,handles.rec_info.samplingRate*2,4),...
-    'xticklabel',round(linspace(round(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize)/handles.rec_info.samplingRate,...
-    round(handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize)/handles.rec_info.samplingRate,4)),'TickDir','out');
-set(handles.TimeRaster_Axes,'ytick',[],'yticklabel',[]); %'ylim'
-axis('tight');box off;
-set(handles.TimeRaster_Axes,'Color','white','FontSize',12,'FontName','calibri');
-% if isa(handles.rawData,'memmapfile')
-%     set(handles.TW_slider,'value',handles.rawDataInfo.excerptLocation/numel(handles.rec_info.exportedChan));
-% else
-    set(handles.TW_slider,'value',handles.rawDataInfo.excerptLocation);
-% end
-
-function DisplayRasters(handles)
-% display color-coded markers for each identified spike
-electrodeNum=get(handles.SelectElectrode_LB,'value');
-axes(handles.TimeRaster_Axes); hold on
-% get which unit to plot
-if get(handles.ShowAllUnits_RB,'value')
-    unitID=str2num(get(handles.SelectUnit_LB,'string'));
-    selectedUnitsListIdx=find(unitID>0);
-    selectedUnits=unitID(selectedUnitsListIdx);
-else
-    unitID=str2num(get(handles.SelectUnit_LB,'string'));
-    selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
-    selectedUnits=unitID(selectedUnitsListIdx);
-end
-if isfield(handles.Spikes,'Online_Sorting') % plot above trace
-    if ~isempty(handles.Spikes.Online_Sorting.SpikeTimes)
-        for unitP=1:size(selectedUnits,1)
-            spkTimes=handles.Spikes.Online_Sorting.SpikeTimes{electrodeNum}(...
-                (handles.Spikes.Online_Sorting.SpikeTimes{electrodeNum}>=...
-                handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize) &...
-                (handles.Spikes.Online_Sorting.SpikeTimes{electrodeNum}<...
-                handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize) &...
-                handles.Spikes.Online_Sorting.Units{electrodeNum}==unitID(selectedUnitsListIdx(unitP)));
-            if ~isempty(spkTimes)
-                rasterHeight=ones(1,size(spkTimes,2))*max(get(gca,'ylim'))/4*3;
-                wfWidthComp=round(size(handles.Spikes.Online_Sorting.Waveforms{electrodeNum},1)); %will substract wf width to raster times
-                plot(spkTimes-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize)-wfWidthComp,...
-                    rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
-                    'linestyle','none','Marker','v');
-            end
-        end
-    end
-end
-if isfield(handles.Spikes,'Offline_Sorting') % plot below trace
-        for unitP=1:size(selectedUnits,1)
-            spkTimes=handles.Spikes.Offline_Sorting.SpikeTimes{electrodeNum}(...
-                (handles.Spikes.Offline_Sorting.SpikeTimes{electrodeNum}>=...
-                handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize) &...
-                (handles.Spikes.Offline_Sorting.SpikeTimes{electrodeNum}<...
-                handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize) &...
-                handles.Spikes.Offline_Sorting.Units{electrodeNum}==unitID(selectedUnitsListIdx(unitP)));
-            if ~isempty(spkTimes)
-                rasterHeight=ones(1,size(spkTimes,2))*(min(get(gca,'ylim'))/4*3);
-                plot(spkTimes-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
-                    rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
-                    'linestyle','none','Marker','^');
-            end
-        end
-end
-hold off
-
-%% --- Executes on slider movement.
-function TW_slider_Callback(hObject, ~, handles)
-handles.rawDataInfo.excerptLocation=round(get(handles.TW_slider,'value'));
-if handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize<1
-    handles.rawDataInfo.excerptLocation=handles.rawDataInfo.excerptSize+1;
-elseif handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize>max(handles.rawDataInfo.size)
-    handles.rawDataInfo.excerptLocation=max(handles.rawDataInfo.size)-handles.rawDataInfo.excerptSize;
-end
-% plot "raw" (filtered) trace
-DisplayRawData(handles);
-% plot spike rasters
-DisplayRasters(handles);
-
 %% Load data function
 function handles=LoadSpikes(handles)
 if isfield(handles,'subset')
@@ -646,189 +480,68 @@ else
     handles.fileLoaded=1;
 end
 
-%% Plot ISI
-function Plot_ISI(handles)
-
-% get which unit to plot
-if get(handles.ShowAllUnits_RB,'value')
-    unitID=str2num(get(handles.SelectUnit_LB,'string'));
-    selectedUnitsListIdx=find(unitID>0);
-    selectedUnits=unitID(selectedUnitsListIdx);
-    % keep the first one
-else
-    unitID=str2num(get(handles.SelectUnit_LB,'string'));
-    selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
-    selectedUnits=unitID(selectedUnitsListIdx);
-end
-if isempty(selectedUnits)
-    cla(handles.ISI_Axes_short);
-    cla(handles.ISI_Axes_long);
-    return
-end
-% get data values
-electrodeNum=get(handles.SelectElectrode_LB,'value');
-spikeTimes=handles.Spikes.HandSort.SpikeTimes{electrodeNum,1};
-unitsIdx=handles.Spikes.HandSort.Units{electrodeNum};
-samplingRate=handles.Spikes.HandSort.samplingRate(electrodeNum,1);
-
-%keep the most numerous if more than one
-if sum(size(selectedUnits))>1
-    keepU=1;
-    for uidx=1:size(selectedUnits,1)
-        if sum(unitsIdx==selectedUnits(uidx))>sum(unitsIdx==selectedUnits(keepU))
-            keepU=uidx;
+%% Load raw traces function
+function handles=LoadRawData(handles)
+try
+    if ~(isfield(handles,'datFile') && ~isempty(strfind(handles.datFile,'.mat')))
+        handles.datFile=regexp(handles.spikeFile,'.+(?=_\w+.\w+$)','match');
+        handles.datFile=[handles.datFile{:} '_raw.mat'];
+        handles.datDir=cd;
+    end
+    handles.rawDataInfo=whos('-file',fullfile(handles.datDir,handles.datFile));
+    handles.rawDataInfo=rmfield(handles.rawDataInfo,...
+        {'bytes','global','sparse','complex','nesting','persistent'});
+    if strfind(fullfile(handles.datDir,handles.datFile),'nopp')
+        handles.rawDataInfo.preproc=0;
+    else
+        % if "raw" data has been pre-processed already, do
+        % not process later
+        handles.rawDataInfo.preproc=1;
+    end
+    handles.rawData = matfile(fullfile(handles.datDir,handles.datFile));
+catch % try to load from .dat file
+    if ~(isfield(handles,'datFile') && ~isempty(strfind(fullfile(handles.datDir,handles.datFile),'.dat')))
+        if isfield(handles,'offlineSort_SpikeFile')
+            handles.datFile=regexp(handles.offlineSort_SpikeFile,'.+?(?=\.)','match');
+            handles.datFile=[handles.datFile{1} '.dat'];
+            handles.datDir=cd;
+        else
+            % ask user for raw data file
         end
     end
-    selectedUnits=selectedUnits(keepU);
-end
-%spike times for that unit
-unitST=spikeTimes(unitsIdx==selectedUnits);
-% compute interspike interval
-if ~isempty(diff(unitST))
-    ISI=diff(unitST)/(samplingRate/1000);
-    axes(handles.ISI_Axes_short); hold on;
-    cla(handles.ISI_Axes_short);
-    set(handles.ISI_Axes_short,'Visible','on');
-    ISIhist=histogram(double(ISI),0:max(ISI)+1);  %,'Normalization','probability'
-    ISIhist.FaceColor = handles.cmap(unitID(unitID==selectedUnits),:);
-    ISIhist.EdgeColor = 'k';
-    xlabel('Interspike Interval (ms)')
-    axis('tight');box off;
-    set(gca,'xlim',[0 40],'XTick',linspace(0,40,5),'XTickLabel',linspace(0,40,5),...
-        'TickDir','out','Color','white','FontSize',10,'FontName','Calibri');
-    hold off
-    axes(handles.ISI_Axes_long); hold on;
-    cla(handles.ISI_Axes_long);
-    set(handles.ISI_Axes_long,'Visible','on');
-    ISIhist=histogram(double(ISI),0:5:max(ISI)+1);  %,'Normalization','probability'
-    ISIhist.FaceColor = handles.cmap(unitID(unitID==selectedUnits),:);
-    ISIhist.EdgeColor = 'k';
-    xlabel('Interspike Interval (ms)')
-    axis('tight');box off;
-    set(gca,'xlim',[0 200],'XTick',linspace(0,200,5),'XTickLabel',linspace(0,200,5),...
-        'TickDir','out','Color','white','FontSize',10,'FontName','Calibri');
-    hold off
-end
-
-%% Plot autocorrelogram
-function Plot_ACG(handles)
-% get which unit to plot
-if get(handles.ShowAllUnits_RB,'value')
-    unitID=str2num(get(handles.SelectUnit_LB,'string'));
-    selectedUnitsListIdx=find(unitID>0);
-    selectedUnits=unitID(selectedUnitsListIdx);
-    % keep the first one
-else
-    unitID=str2num(get(handles.SelectUnit_LB,'string'));
-    selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
-    selectedUnits=unitID(selectedUnitsListIdx);
-end
-if isempty(selectedUnits)
-    cla(handles.ACG_Axes);
-    return
-end
-
-electrodeNum=get(handles.SelectElectrode_LB,'value');
-spikeTimes=handles.Spikes.HandSort.SpikeTimes{electrodeNum,1};
-unitsIdx=handles.Spikes.HandSort.Units{electrodeNum};
-samplingRate=handles.Spikes.HandSort.samplingRate(electrodeNum,1);
-
-%keep the most numerous if more than one
-if sum(size(selectedUnits))>1
-    keepU=1;
-    for uidx=1:size(selectedUnits,1)
-        if sum(unitsIdx==selectedUnits(uidx))>sum(unitsIdx==selectedUnits(keepU))
-            keepU=uidx;
+        handles.rawData = memmapfile(fullfile(handles.datDir,handles.datFile),'Format','int16');
+        handles.rawDataInfo= struct('name','rawData',...
+            'size',size(handles.rawData.Data),...
+            'numChan',numel(handles.rec_info.exportedChan),...
+            'source','dat');
+        %check in params file if data was filtered
+        fid  = fopen([fullfile(handles.datDir,handles.datFile(1:end-4)) '.params'],'r');
+        if fid~=-1
+            params=fread(fid,'*char')';
+            if regexp(params,'(?<=filter_done      = )\w+(?= )','match','once')
+                handles.rawDataInfo.preproc=1;
+            else
+                handles.rawDataInfo.preproc=0;
+            end
+            fclose(fid);
+        else
+            handles.rawDataInfo.preproc=0;
         end
-    end
-    selectedUnits=selectedUnits(keepU);
 end
-%get unit spike times
-unitST=spikeTimes(unitsIdx==selectedUnits);
-% change to ms timescale
-unitST=unitST/(samplingRate/1000);
-%get ISI
-% ISI=diff(unitST)/(samplingRate/1000);
-%bin
-spikeTimeIdx=zeros(1,unitST(end));
-spikeTimeIdx(unitST)=1;
-binSize=5;
-numBin=ceil(size(spikeTimeIdx,2)/binSize);
-binUnits = histcounts(double(unitST), linspace(0,size(spikeTimeIdx,2),numBin));
-binUnits(binUnits>1)=1; %no more than 1 spike per ms
-% compute autocorrelogram
-[ACG,lags]=xcorr(double(binUnits),200,'unbiased'); %'coeff'
-ACG(lags==0)=0;
-axes(handles.ACG_Axes); hold on;
-cla(handles.ACG_Axes);
-set(handles.ACG_Axes,'Visible','on');
-ACGh=bar(lags,ACG);
-ACGh.FaceColor = handles.cmap(unitID(unitID==selectedUnits),:);
-ACGh.EdgeColor = 'none';
-axis('tight');box off;
-xlabel('Autocorrelogram (5 ms bins)')
-set(gca,'xlim',[-50 50],'Color','white','FontSize',10,'FontName','Calibri','TickDir','out');
-hold off
-
-%% Plot cross-correlogram
-function Plot_XCG(handles)
-% get which unit to plot
-if get(handles.ShowAllUnits_RB,'value')
-    cla(handles.XCorr_Axes);
-    return
+handles.rawDataInfo.excerptSize=handles.rec_info.samplingRate/2; %1 second as default (-:+ around loc)
+if isa(handles.rawData,'memmapfile')
+    handles.rawDataInfo.excerptLocation=round(max(handles.rawDataInfo.size)/2/numel(handles.rec_info.exportedChan));  %mid-recording as default
+    set(handles.TW_slider,'max',max(handles.rawDataInfo.size)/numel(handles.rec_info.exportedChan));
 else
-    unitID=str2num(get(handles.SelectUnit_LB,'string'));
-    selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
-    selectedUnits=unitID(selectedUnitsListIdx);
+    handles.rawDataInfo.excerptLocation=round(max(handles.rawDataInfo.size)/2);
+    set(handles.TW_slider,'max',max(handles.rawDataInfo.size));
 end
-if isempty(selectedUnits)
-    cla(handles.XCorr_Axes);
-    return
-end
-
-electrodeNum=get(handles.SelectElectrode_LB,'value');
-spikeTimes=handles.Spikes.HandSort.SpikeTimes{electrodeNum,1};
-unitsIdx=handles.Spikes.HandSort.Units{electrodeNum};
-samplingRate=handles.Spikes.HandSort.samplingRate(electrodeNum,1);
-
-%keep the most numerous if more than one
-if length(selectedUnits)~=2
-    cla(handles.XCorr_Axes);
-    return
-end
-%get units spike times
-unitST{1}=spikeTimes(unitsIdx==selectedUnits(1));
-unitST{2}=spikeTimes(unitsIdx==selectedUnits(2));
-% change to ms timescale
-unitST{1}=unitST{1}/(samplingRate/1000);
-unitST{2}=unitST{2}/(samplingRate/1000);
-
-%bin
-spikeTimeIdx{1}=zeros(1,unitST{1}(end));
-spikeTimeIdx{1}(unitST{1})=1;
-spikeTimeIdx{2}=zeros(1,unitST{2}(end));
-spikeTimeIdx{2}(unitST{2})=1;
-binSize=5;
-numBin=max(ceil(size(spikeTimeIdx{1},2)/binSize),ceil(size(spikeTimeIdx{2},2)/binSize));
-binUnits{1} = histcounts(double(unitST{1}), linspace(0,size(spikeTimeIdx{1},2),numBin));
-binUnits{1}(binUnits{1}>1)=1; %no more than 1 spike per ms
-binUnits{2} = histcounts(double(unitST{2}), linspace(0,size(spikeTimeIdx{2},2),numBin));
-binUnits{2}(binUnits{2}>1)=1; %no more than 1 spike per ms
-
-% compute autocorrelogram
-[XCG,lags]=xcorr(double(binUnits{1}),double(binUnits{2}),200,'unbiased'); %'coeff'
-XCG(lags==0)=0;
-axes(handles.XCorr_Axes); hold on;
-cla(handles.XCorr_Axes);
-set(handles.XCorr_Axes,'Visible','on');
-XCGh=bar(lags,XCG);
-XCGh.FaceColor = (handles.cmap(unitID(unitID==selectedUnits(1)),:)+...
-    handles.cmap(unitID(unitID==selectedUnits(2)),:))/2;
-XCGh.EdgeColor = 'none';
-axis('tight');box off;
-xlabel('CrossCorrelogram (5 ms bins)')
-set(gca,'xlim',[-50 50],'Color','white','FontSize',10,'FontName','Calibri','TickDir','out');
-hold off
+% set(handles.TW_slider,'sliderstep',[0.01 max([0.01,...
+%     handles.rawDataInfo.excerptSize/max(handles.rawDataInfo.size)])]);
+% plot "raw" (filtered) trace
+DisplayRawData(handles);
+% plot spike rasters
+DisplayRasters(handles);
 
 %% Plot Unsorted Spikes
 function handles=Plot_Unsorted_WF(handles)
@@ -1034,6 +747,303 @@ xlabel('Time (ms)');
 ylabel('Voltage (\muV)');
 set(gca,'Color','white','FontSize',10,'FontName','Calibri');
 hold off
+
+%% Plot "raw" data
+function DisplayRawData(handles) 
+electrodeNum=get(handles.SelectElectrode_LB,'value');
+if isa(handles.rawData,'memmapfile') 
+    %set window index to correct point in data vector
+    winIdxStart=(handles.rawDataInfo.excerptLocation-...
+        handles.rawDataInfo.excerptSize)*numel(handles.rec_info.exportedChan);
+    winIdxStart=winIdxStart-...
+        mod(winIdxStart,numel(handles.rec_info.exportedChan))-... % set index loc to first electrode (should be 0 already, he)
+         numel(handles.rec_info.exportedChan)+1;     % set index loc to selected electrode
+    %         (numel(handles.rec_info.exportedChan) - electrodeNum);     % set index loc to selected electrode
+    winIdxEnd=winIdxStart+...
+        (2*handles.rawDataInfo.excerptSize*numel(handles.rec_info.exportedChan));
+    excerptWindow=winIdxStart:winIdxEnd-1;
+    dataExcerpt=handles.rawData.Data(excerptWindow);
+    dataExcerpt=reshape(dataExcerpt,[numel(handles.rec_info.exportedChan)...
+        handles.rawDataInfo.excerptSize*2]);
+%         foo=handles.rawData.Data;
+%         foo=reshape(foo,[numel(handles.rec_info.exportedChan)...
+%         size(foo,1)/numel(handles.rec_info.exportedChan)]);
+else
+    excerptWindow=handles.rawDataInfo.excerptLocation-...
+        handles.rawDataInfo.excerptSize:handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize-1;
+    dataExcerpt=handles.rawData.(handles.rawDataInfo.name)(:,excerptWindow);
+end
+if handles.rawDataInfo.preproc==0 % raw data is presumed bandpassed filtered at this point
+    preprocOption={'CAR','all'};
+    dataExcerpt=PreProcData(dataExcerpt,handles.rec_info.samplingRate,preprocOption);
+end
+axes(handles.TimeRaster_Axes);
+cla(handles.TimeRaster_Axes);
+set(handles.TimeRaster_Axes,'Visible','on');
+plot(handles.TimeRaster_Axes,int32(dataExcerpt(electrodeNum,:)));
+% threshold
+% plot(ones(1,size(dataExcerpt(electrodeNum,:),2))*7*mad(single(dataExcerpt(electrodeNum,:)))/1.7315,'k--')
+% plot(ones(1,size(dataExcerpt(electrodeNum,:),2))*-7*mad(single(dataExcerpt(electrodeNum,:)))/1.7315,'k--')
+set(handles.TimeRaster_Axes,'xtick',linspace(0,handles.rec_info.samplingRate*2,4),...
+    'xticklabel',round(linspace(round(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize)/handles.rec_info.samplingRate,...
+    round(handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize)/handles.rec_info.samplingRate,4)),'TickDir','out');
+set(handles.TimeRaster_Axes,'ytick',[],'yticklabel',[]); %'ylim'
+axis('tight');box off;
+set(handles.TimeRaster_Axes,'Color','white','FontSize',12,'FontName','calibri');
+% if isa(handles.rawData,'memmapfile')
+%     set(handles.TW_slider,'value',handles.rawDataInfo.excerptLocation/numel(handles.rec_info.exportedChan));
+% else
+    set(handles.TW_slider,'value',handles.rawDataInfo.excerptLocation);
+% end
+
+function DisplayRasters(handles)
+% display color-coded markers for each identified spike
+electrodeNum=get(handles.SelectElectrode_LB,'value');
+axes(handles.TimeRaster_Axes); hold on
+% get which unit to plot
+if get(handles.ShowAllUnits_RB,'value')
+    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    selectedUnitsListIdx=find(unitID>0);
+    selectedUnits=unitID(selectedUnitsListIdx);
+else
+    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
+    selectedUnits=unitID(selectedUnitsListIdx);
+end
+if isfield(handles.Spikes,'Online_Sorting') % plot above trace
+    if ~isempty(handles.Spikes.Online_Sorting.SpikeTimes)
+        for unitP=1:size(selectedUnits,1)
+            spkTimes=handles.Spikes.Online_Sorting.SpikeTimes{electrodeNum}(...
+                (handles.Spikes.Online_Sorting.SpikeTimes{electrodeNum}>=...
+                handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize) &...
+                (handles.Spikes.Online_Sorting.SpikeTimes{electrodeNum}<...
+                handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize) &...
+                handles.Spikes.Online_Sorting.Units{electrodeNum}==unitID(selectedUnitsListIdx(unitP)));
+            if ~isempty(spkTimes)
+                rasterHeight=ones(1,size(spkTimes,2))*max(get(gca,'ylim'))/4*3;
+                wfWidthComp=round(size(handles.Spikes.Online_Sorting.Waveforms{electrodeNum},1)); %will substract wf width to raster times
+                plot(spkTimes-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize)-wfWidthComp,...
+                    rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
+                    'linestyle','none','Marker','v');
+            end
+        end
+    end
+end
+if isfield(handles.Spikes,'Offline_Sorting') % plot below trace
+        for unitP=1:size(selectedUnits,1)
+            spkTimes=handles.Spikes.Offline_Sorting.SpikeTimes{electrodeNum}(...
+                (handles.Spikes.Offline_Sorting.SpikeTimes{electrodeNum}>=...
+                handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize) &...
+                (handles.Spikes.Offline_Sorting.SpikeTimes{electrodeNum}<...
+                handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize) &...
+                handles.Spikes.Offline_Sorting.Units{electrodeNum}==unitID(selectedUnitsListIdx(unitP)));
+            if ~isempty(spkTimes)
+                rasterHeight=ones(1,size(spkTimes,2))*(min(get(gca,'ylim'))/4*3);
+                plot(spkTimes-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
+                    rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
+                    'linestyle','none','Marker','^');
+            end
+        end
+end
+hold off
+
+%% --- Executes on slider movement.
+function TW_slider_Callback(hObject, ~, handles)
+handles.rawDataInfo.excerptLocation=round(get(handles.TW_slider,'value'));
+if handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize<1
+    handles.rawDataInfo.excerptLocation=handles.rawDataInfo.excerptSize+1;
+elseif handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize>max(handles.rawDataInfo.size)
+    handles.rawDataInfo.excerptLocation=max(handles.rawDataInfo.size)-handles.rawDataInfo.excerptSize;
+end
+% plot "raw" (filtered) trace
+DisplayRawData(handles);
+% plot spike rasters
+DisplayRasters(handles);
+
+%% Plot ISI
+function Plot_ISI(handles)
+
+% get which unit to plot
+if get(handles.ShowAllUnits_RB,'value')
+    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    selectedUnitsListIdx=find(unitID>0);
+    selectedUnits=unitID(selectedUnitsListIdx);
+    % keep the first one
+else
+    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
+    selectedUnits=unitID(selectedUnitsListIdx);
+end
+if isempty(selectedUnits)
+    cla(handles.ISI_Axes_short);
+    cla(handles.ISI_Axes_long);
+    return
+end
+% get data values
+electrodeNum=get(handles.SelectElectrode_LB,'value');
+spikeTimes=handles.Spikes.HandSort.SpikeTimes{electrodeNum,1};
+unitsIdx=handles.Spikes.HandSort.Units{electrodeNum};
+samplingRate=handles.Spikes.HandSort.samplingRate(electrodeNum,1);
+
+%keep the most numerous if more than one
+if sum(size(selectedUnits))>1
+    keepU=1;
+    for uidx=1:size(selectedUnits,1)
+        if sum(unitsIdx==selectedUnits(uidx))>sum(unitsIdx==selectedUnits(keepU))
+            keepU=uidx;
+        end
+    end
+    selectedUnits=selectedUnits(keepU);
+end
+%spike times for that unit
+unitST=spikeTimes(unitsIdx==selectedUnits);
+% compute interspike interval
+if ~isempty(diff(unitST))
+    ISI=diff(unitST)/(samplingRate/1000);
+    axes(handles.ISI_Axes_short); hold on;
+    cla(handles.ISI_Axes_short);
+    set(handles.ISI_Axes_short,'Visible','on');
+    ISIhist=histogram(double(ISI),0:max(ISI)+1);  %,'Normalization','probability'
+    ISIhist.FaceColor = handles.cmap(unitID(unitID==selectedUnits),:);
+    ISIhist.EdgeColor = 'k';
+    xlabel('Interspike Interval (ms)')
+    axis('tight');box off;
+    set(gca,'xlim',[0 40],'XTick',linspace(0,40,5),'XTickLabel',linspace(0,40,5),...
+        'TickDir','out','Color','white','FontSize',10,'FontName','Calibri');
+    hold off
+    axes(handles.ISI_Axes_long); hold on;
+    cla(handles.ISI_Axes_long);
+    set(handles.ISI_Axes_long,'Visible','on');
+    ISIhist=histogram(double(ISI),0:5:max(ISI)+1);  %,'Normalization','probability'
+    ISIhist.FaceColor = handles.cmap(unitID(unitID==selectedUnits),:);
+    ISIhist.EdgeColor = 'k';
+    xlabel('Interspike Interval (ms)')
+    axis('tight');box off;
+    set(gca,'xlim',[0 200],'XTick',linspace(0,200,5),'XTickLabel',linspace(0,200,5),...
+        'TickDir','out','Color','white','FontSize',10,'FontName','Calibri');
+    hold off
+end
+
+%% Plot autocorrelogram
+function Plot_ACG(handles)
+% get which unit to plot
+if get(handles.ShowAllUnits_RB,'value')
+    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    selectedUnitsListIdx=find(unitID>0);
+    selectedUnits=unitID(selectedUnitsListIdx);
+    % keep the first one
+else
+    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
+    selectedUnits=unitID(selectedUnitsListIdx);
+end
+if isempty(selectedUnits)
+    cla(handles.ACG_Axes);
+    return
+end
+
+electrodeNum=get(handles.SelectElectrode_LB,'value');
+spikeTimes=handles.Spikes.HandSort.SpikeTimes{electrodeNum,1};
+unitsIdx=handles.Spikes.HandSort.Units{electrodeNum};
+samplingRate=handles.Spikes.HandSort.samplingRate(electrodeNum,1);
+
+%keep the most numerous if more than one
+if sum(size(selectedUnits))>1
+    keepU=1;
+    for uidx=1:size(selectedUnits,1)
+        if sum(unitsIdx==selectedUnits(uidx))>sum(unitsIdx==selectedUnits(keepU))
+            keepU=uidx;
+        end
+    end
+    selectedUnits=selectedUnits(keepU);
+end
+%get unit spike times
+unitST=spikeTimes(unitsIdx==selectedUnits);
+% change to ms timescale
+unitST=unitST/(samplingRate/1000);
+%get ISI
+% ISI=diff(unitST)/(samplingRate/1000);
+%bin
+spikeTimeIdx=zeros(1,unitST(end));
+spikeTimeIdx(unitST)=1;
+binSize=5;
+numBin=ceil(size(spikeTimeIdx,2)/binSize);
+binUnits = histcounts(double(unitST), linspace(0,size(spikeTimeIdx,2),numBin));
+binUnits(binUnits>1)=1; %no more than 1 spike per ms
+% compute autocorrelogram
+[ACG,lags]=xcorr(double(binUnits),200,'unbiased'); %'coeff'
+ACG(lags==0)=0;
+axes(handles.ACG_Axes); hold on;
+cla(handles.ACG_Axes);
+set(handles.ACG_Axes,'Visible','on');
+ACGh=bar(lags,ACG);
+ACGh.FaceColor = handles.cmap(unitID(unitID==selectedUnits),:);
+ACGh.EdgeColor = 'none';
+axis('tight');box off;
+xlabel('Autocorrelogram (5 ms bins)')
+set(gca,'xlim',[-50 50],'Color','white','FontSize',10,'FontName','Calibri','TickDir','out');
+hold off
+
+%% Plot cross-correlogram
+function Plot_XCG(handles)
+% get which unit to plot
+if get(handles.ShowAllUnits_RB,'value')
+    cla(handles.XCorr_Axes);
+    return
+else
+    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
+    selectedUnits=unitID(selectedUnitsListIdx);
+end
+if isempty(selectedUnits)
+    cla(handles.XCorr_Axes);
+    return
+end
+
+electrodeNum=get(handles.SelectElectrode_LB,'value');
+spikeTimes=handles.Spikes.HandSort.SpikeTimes{electrodeNum,1};
+unitsIdx=handles.Spikes.HandSort.Units{electrodeNum};
+samplingRate=handles.Spikes.HandSort.samplingRate(electrodeNum,1);
+
+%keep the most numerous if more than one
+if length(selectedUnits)~=2
+    cla(handles.XCorr_Axes);
+    return
+end
+%get units spike times
+unitST{1}=spikeTimes(unitsIdx==selectedUnits(1));
+unitST{2}=spikeTimes(unitsIdx==selectedUnits(2));
+% change to ms timescale
+unitST{1}=unitST{1}/(samplingRate/1000);
+unitST{2}=unitST{2}/(samplingRate/1000);
+
+%bin
+spikeTimeIdx{1}=zeros(1,unitST{1}(end));
+spikeTimeIdx{1}(unitST{1})=1;
+spikeTimeIdx{2}=zeros(1,unitST{2}(end));
+spikeTimeIdx{2}(unitST{2})=1;
+binSize=5;
+numBin=max(ceil(size(spikeTimeIdx{1},2)/binSize),ceil(size(spikeTimeIdx{2},2)/binSize));
+binUnits{1} = histcounts(double(unitST{1}), linspace(0,size(spikeTimeIdx{1},2),numBin));
+binUnits{1}(binUnits{1}>1)=1; %no more than 1 spike per ms
+binUnits{2} = histcounts(double(unitST{2}), linspace(0,size(spikeTimeIdx{2},2),numBin));
+binUnits{2}(binUnits{2}>1)=1; %no more than 1 spike per ms
+
+% compute autocorrelogram
+[XCG,lags]=xcorr(double(binUnits{1}),double(binUnits{2}),200,'unbiased'); %'coeff'
+XCG(lags==0)=0;
+axes(handles.XCorr_Axes); hold on;
+cla(handles.XCorr_Axes);
+set(handles.XCorr_Axes,'Visible','on');
+XCGh=bar(lags,XCG);
+XCGh.FaceColor = (handles.cmap(unitID(unitID==selectedUnits(1)),:)+...
+    handles.cmap(unitID(unitID==selectedUnits(2)),:))/2;
+XCGh.EdgeColor = 'none';
+axis('tight');box off;
+xlabel('CrossCorrelogram (5 ms bins)')
+set(gca,'xlim',[-50 50],'Color','white','FontSize',10,'FontName','Calibri','TickDir','out');
+hold off
+
 
 % function  Plot_Raster_TW(handles)
 % %% plot rasters

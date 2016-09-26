@@ -42,6 +42,23 @@ elseif strfind(fName,'.hdf5') % Spyking Circus
             % scale to resolution
             Spikes.Waveforms{elNum,1}=Spikes.Waveforms{elNum,1}.*bitResolution;
             Spikes.samplingRate(elNum,1)=samplingRate;
+            
+            % plots
+%             foo=rawData.Data(elNum:electrodes:max(size(rawData.Data)));
+%             figure; hold on
+%             plot(foo(round(size(foo,1)/2)-samplingRate:round(size(foo,1)/2)+samplingRate));
+%             axis('tight');box off;
+%             text(100,100,num2str(round(size(foo,1)/2)))
+%             text(100,50,'PrV 77 115 El 11');
+%             allunits= Spikes.Units{elNum,1};
+%             allspktimes=Spikes.SpikeTimes{elNum,1};
+%             spkTimes=allspktimes(allspktimes>=round(size(foo,1)/2)-samplingRate &...
+%                 allspktimes<round(size(foo,1)/2)+samplingRate & allunits==1);
+%             rasterHeight=ones(1,size(spkTimes,2))*(min(get(gca,'ylim'))/4*3);
+%             plot(spkTimes-(round(size(foo,1)/2)-samplingRate),...
+%                 rasterHeight,'Color','r',...
+%                 'linestyle','none','Marker','^');
+            
         catch
         end
     end
