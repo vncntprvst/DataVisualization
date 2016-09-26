@@ -1,8 +1,10 @@
-function [clusterClasses,lineSelecIdx]=InteractiveClassification(waveforms,clusterClasses,viewClasses)
+function [clusterClasses,lineSelecIdx,reclassOption]=InteractiveClassification(waveforms,clusterClasses,viewClasses)
 
 % class -1 is hidden
 % class -10 cannot change
 % viewClasses=[viewClasses,-10];
+setClass=0;
+reclassOption=0;
 switch nargin
     case 0
         lineH=findobj(gca,'Type', 'line');
@@ -62,11 +64,13 @@ if sum(lineSelecIdx)>0
     uistack(findobj(gca,'Type', 'patch'),'top');
     %% actions
     %set class
-    prompt='Set waveform class value';
+    prompt={'Set waveform class value','Batch reclassify? (0/1)'};
     name='Waveform classification';
     numlines=1;
-    defaultanswer={'0'};
-    setClass=str2double(inputdlg(prompt,name,numlines,defaultanswer));
+    defaultanswer={'0','0'};
+    answers=inputdlg(prompt,name,numlines,defaultanswer);
+    setClass=str2double(answers{1});
+    reclassOption=str2double(answers{2});
     if ~isempty(setClass)
         clusterClasses(lineSelecIdx)=setClass;
         % disappear

@@ -1,6 +1,6 @@
 function varargout = SpikeVisualizationGUI(varargin)
 % MATLAB code for SpikeVisualizationGUI.fig
-% Last Modified by GUIDE v2.5 30-Aug-2016 12:11:51
+% Last Modified by GUIDE v2.5 26-Sep-2016 18:12:24
 % version 0.5 (sept 2016), tested in R2014b
 % Vincent Prevosto
 % email: vp35 at duke.edu
@@ -176,7 +176,7 @@ else
         set(handles.FileName,'string',[handles.exportDir userinfo.slash handles.spikeFile])
         
         %% Load spike data
-        if ~isempty(handles.spikeFile) && ~get(handles.Spikes_HandSorted_RB,'value')
+        if ~isempty(handles.spikeFile) && ~get(handles.Spikes_PrevSorted_RB,'value')
             spikeData=load(handles.spikeFile);
             if isfield(handles,'Spikes')
                 % This will delete all Spikes data inlcuding any changes to HandSort
@@ -669,11 +669,11 @@ if exist('lineH','var')
     set(legH,'Box','Off','FontSize',7,'LineWidth',0.2,'Position',...
         [0.54 legH.Position(2)+legH.Position(3)-0.01 0 0]);
 end
-axis('tight');box off;
 set(gca,'Ylim',[min(min(waveForms)) max(max(waveForms))],'XTick',linspace(0,size(waveForms(:,handles.subset{selectedUnitsListIdx(unitP)}),1),5),...
     'XTickLabel',round(linspace(-round(size(waveForms(:,handles.subset{selectedUnitsListIdx(unitP)}),1)/2),...
     round(size(waveForms(:,handles.subset{selectedUnitsListIdx(unitP)}),1)/2),5)/(double(samplingRate)/1000),2),...
     'TickDir','out');
+axis('tight');box off;
 xlabel('Time (ms)');
 ylabel('Voltage (\muV)');
 set(gca,'Color','white','FontSize',10,'FontName','Calibri');
@@ -796,6 +796,7 @@ set(handles.TimeRaster_Axes,'Color','white','FontSize',12,'FontName','calibri');
     set(handles.TW_slider,'value',handles.rawDataInfo.excerptLocation);
 % end
 
+%% Plot spike unit markers 
 function DisplayRasters(handles)
 % display color-coded markers for each identified spike
 electrodeNum=get(handles.SelectElectrode_LB,'value');
@@ -844,6 +845,22 @@ if isfield(handles.Spikes,'Offline_Sorting') % plot below trace
                     'linestyle','none','Marker','^');
             end
         end
+end
+if get(handles.Spikes_CurrentVersion_RB,'Value') % also plot below trace, but circles
+    for unitP=1:size(selectedUnits,1)
+        spkTimes=handles.Spikes.HandSort.SpikeTimes{electrodeNum}(...
+            (handles.Spikes.HandSort.SpikeTimes{electrodeNum}>=...
+            handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize) &...
+            (handles.Spikes.HandSort.SpikeTimes{electrodeNum}<...
+            handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize) &...
+            handles.Spikes.HandSort.Units{electrodeNum}==unitID(selectedUnitsListIdx(unitP)));
+        if ~isempty(spkTimes)
+            rasterHeight=ones(1,size(spkTimes,2))*(min(get(gca,'ylim'))/4*3);
+            plot(spkTimes-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
+                rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
+                'linestyle','none','Marker','o');
+        end
+    end
 end
 hold off
 
@@ -1044,7 +1061,6 @@ xlabel('CrossCorrelogram (5 ms bins)')
 set(gca,'xlim',[-50 50],'Color','white','FontSize',10,'FontName','Calibri','TickDir','out');
 hold off
 
-
 % function  Plot_Raster_TW(handles)
 % %% plot rasters
 % electrodeNum=get(handles.SelectElectrode_LB,'value');
@@ -1052,7 +1068,7 @@ hold off
 
 % plot 10 sec or numWFtoPlot waveforms max
 
-% --- Executes on mouse press over axes background.
+%% --- Executes on mouse press over unsorted units axes
 function UnsortedUnits_Axes_ButtonDownFcn(hObject, ~, handles)
 % left click to start selection line
 % right click to end it
@@ -1147,7 +1163,7 @@ end
 %  Update handles structure
 guidata(hObject, handles);
 
-% --- Executes on mouse press over axes background.
+%% --- Executes on mouse press over sorted units axes
 function SortedUnits_Axes_ButtonDownFcn(hObject, ~, handles)
 electrodeNum=get(handles.SelectElectrode_LB,'value');
 
@@ -1189,6 +1205,9 @@ end
 % figure; plot(waveForms(:,linesTags(lineSelecIdx)))
 if lineSelecIdx==0
     return
+else
+    set(handles.Spikes_OriginalVersion_RB,'Value',0); 
+    set(handles.Spikes_CurrentVersion_RB,'Value',1);
 end
 handles.Spikes.HandSort.Units{electrodeNum}(linesTags(lineSelecIdx))=...
     clusterClasses(lineSelecIdx);
@@ -1220,7 +1239,7 @@ Plot_XCG(handles);
 %  Update handles structure
 guidata(hObject, handles);
 
-%% --- Executes on mouse press over axes background.
+%% --- Executes on mouse press over mean sorted units axes.
 function MeanSortedUnits_Axes_ButtonDownFcn(hObject, ~, handles)
 unitID=str2num(get(handles.SelectUnit_LB,'string'));
 electrodeNum=get(handles.SelectElectrode_LB,'value');
@@ -1241,21 +1260,87 @@ waveForms=waveForms';%one waveform per row
 % plot(waveForms(1,:)','r')
 % plot(waveForms(3,:)','b')
 
-[newClasses,lineSelecIdx]=InteractiveClassification(waveForms,clusterClasses,viewClasses); % viewClasses=0
+[newClasses,lineSelecIdx,groupReclass]=InteractiveClassification(waveForms,clusterClasses,viewClasses); % viewClasses=0
 % foo=handles.Spikes.HandSort.Waveforms{electrodeNum}; foo=foo';
 % figure;plot(foo(unitsIdx(logical(clusterClasses)),:)');hold on
 % plot(lineH(flip(logical(clusterClasses))).YData)
 %
 % waveForms=handles.Spikes.HandSort.Waveforms{electrodeNum};
 % figure; plot(waveForms(:,linesTags(lineSelecIdx)))
+
 if lineSelecIdx==0
     return
+else
+    set(handles.Spikes_OriginalVersion_RB,'Value',0); 
+    set(handles.Spikes_CurrentVersion_RB,'Value',1);
 end
+
 changeUnits=clusterClasses(clusterClasses~=unique(newClasses(lineSelecIdx)) & lineSelecIdx');
 for chgu=1:length(changeUnits)
     handles.Spikes.HandSort.Units{electrodeNum}(unitsIdx==changeUnits(chgu))=...
         unique(newClasses(lineSelecIdx));
 end
+
+if groupReclass==1 && sum(lineSelecIdx)==1
+    
+    selectedWF=double(waveForms(lineSelecIdx,:));
+    WFpeak=find(abs(selectedWF)==max(abs(selectedWF)),1);
+    wfRange=WFpeak-9:WFpeak+8;
+    selectedWF=selectedWF(wfRange);
+    allWf=handles.Spikes.HandSort.Waveforms{electrodeNum}; allWf=double(allWf(wfRange,:)');
+    
+    % figure; hold on
+    % plot(selectedWF);
+    allWf_wRef=[selectedWF;allWf];
+    minDif=allWf_wRef-repmat(selectedWF,size(allWf_wRef,1),1);
+    % figure; hist(median(abs(minDif')),20)
+    % minResidual=find(median(abs(minDif'))==min(median(abs(minDif'))),1);
+    maxPeaks=zscore(allWf_wRef')'.*repmat(selectedWF,size(allWf_wRef,1),1);
+    % maxMultiplied=find(max(abs(maxPeaks'))==max(max(abs(maxPeaks'))),1);
+    % plot(allWf_wRef(minResidual,:))
+    % plot(allWf_wRef(maxMultiplied,:))
+    
+    roughCat=([median(abs(minDif'))' max(abs(maxPeaks'))']);
+    [~,PrComps] = pca(roughCat);
+    % figure
+    % scatter(PrComps(:,1), PrComps(:,2), 'k.');
+    clusterCat = gmdistribution(PrComps(1,:),...
+        [abs(min(PrComps(:,1)))+abs(max(PrComps(:,1))),...
+        -0; -0, abs(min(PrComps(:,2)))+abs(max(PrComps(:,2)))]);
+    mahalDis = mahal(clusterCat,PrComps(2:end,:));
+    % scatter(PrComps(:,1),PrComps(:,2),50,mahalDis(:,1),'.')
+    % hb = colorbar;
+    % ylabel(hb,'Mahalanobis Distance to Component 1')
+    
+    similIdx=find(mahalDis<max(mahalDis)/10);
+    % figure
+    % scatter(PrComps(similIdx,1), PrComps(similIdx,2), 'k.');
+    
+    subsetWF=allWf(similIdx,:);
+    [cc, ccv]=deal(nan(size(subsetWF,1),1));
+    for wf=1:size(subsetWF,1)
+        cc(wf)=max(abs(xcorr((selectedWF),(subsetWF(wf,:)),2,'coeff'))); %'unbiased' 'coeff'
+    end
+    
+    for wf=1:size(subsetWF,1)
+        ccv(wf)=max(abs(xcov((selectedWF),(subsetWF(wf,:)),2,'biased'))); %'unbiased' 'coeff'
+    end
+    
+%     clustev = evalclusters([cc ccv], 'kmeans', 'silhouette', 'KList',
+%     2:3); this takes too long, do not use clustev.OptimalK
+    [clusIdx ,Centroids]= kmeans([cc ccv],2,'Distance','cityblock',...
+        'Replicates',5);
+    
+    % figure; hold on
+    % plot(mean(subsetWF(clusIdx==2,:)))
+    
+    similWF=similIdx(clusIdx==find(Centroids(:,2)==max(Centroids(:,2))));
+    % figure; plot(mean(allWf(similWF,:)))
+    
+    handles.Spikes.HandSort.Units{electrodeNum}(similWF)=...
+        unique(newClasses(lineSelecIdx));
+end
+
 unitsID=unique(handles.Spikes.HandSort.Units{electrodeNum});
 %Check if unit selection still works
 unitSelection=get(handles.SelectUnit_LB,'Value');
@@ -1305,7 +1390,6 @@ end
 %     unitsSelected=get(handles.SelectUnit_LB,'value');
 %     unitsSelected=unitMenu(unitsSelected);
 
-
 %% --- Executes on selection change in SelectUnit_LB.
 function SelectUnit_LB_Callback(hObject, ~, handles)
 set(handles.ShowAllUnits_RB,'value',0)
@@ -1354,7 +1438,7 @@ handles.PreviewTh_PB.ForegroundColor=[0.2 0.5 0.7];
 RunSpykingCircus(cd,handles.datFile,'previewspkc');
 handles.PreviewTh_PB.ForegroundColor=[0.3490 0.2000 0.3294];
 
-% --- Executes on button press in LauncherGUI_PB.
+%% --- Executes on button press in LauncherGUI_PB.
 function LauncherGUI_PB_Callback(hObject, eventdata, handles)
 if ~isfield(handles,'datFile')
     handles.datFile=[cell2mat(regexp(handles.spikeFile,'.+(?=\_\w+\_\w+\.)','match')) '_nopp'];
@@ -1431,9 +1515,9 @@ handles=LoadSpikes(handles);
 % Update handles structure
 guidata(hObject, handles);
 
-% --- Executes on button press in Spikes_HandSorted_RB.
-function Spikes_HandSorted_RB_Callback(hObject, eventdata, handles)
-set(handles.Spikes_HandSorted_RB,'value',1);
+% --- Executes on button press in Spikes_PrevSorted_RB.
+function Spikes_PrevSorted_RB_Callback(hObject, eventdata, handles)
+set(handles.Spikes_PrevSorted_RB,'value',1);
 set(handles.Spikes_Th_RB,'value',0);
 set(handles.Spikes_SortOn_RB,'value',0);
 set(handles.Spikes_SortOff_RB,'value',0);
@@ -1554,7 +1638,6 @@ end
 % Update handles structure
 guidata(hObject, handles);
 
-
 %% --- Executes on button press in Reload_PB.
 function Reload_PB_Callback(hObject, ~, handles)
 
@@ -1578,3 +1661,21 @@ function ShowHowManyUWF_ET_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
+
+
+% --- Executes on button press in Spikes_CurrentVersion_RB.
+function Spikes_CurrentVersion_RB_Callback(hObject, eventdata, handles)
+% hObject    handle to Spikes_CurrentVersion_RB (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of Spikes_CurrentVersion_RB
+
+
+% --- Executes on button press in Spikes_OriginalVersion_RB.
+function Spikes_OriginalVersion_RB_Callback(hObject, eventdata, handles)
+% hObject    handle to Spikes_OriginalVersion_RB (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of Spikes_OriginalVersion_RB
