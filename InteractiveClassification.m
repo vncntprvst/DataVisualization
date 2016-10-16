@@ -69,15 +69,17 @@ if sum(lineSelecIdx)>0
     numlines=1;
     defaultanswer={'0','0'};
     answers=inputdlg(prompt,name,numlines,defaultanswer);
-    setClass=str2double(answers{1});
-    reclassOption=str2double(answers{2});
-    if ~isempty(setClass)
+    if ~isempty(answers)
+        setClass=str2double(answers{1});
+        reclassOption=str2double(answers{2});
+        %         if ~isempty(setClass)
         clusterClasses(lineSelecIdx)=setClass;
         % disappear
         % set(lineH(flip(lineSelecIdx)),'Visible','off')
         set(lineH(visibleLines(flip(~ismember(clusterClasses,viewClasses)))),'Visible','off')
     else
         set(lineH(visibleLines(flip(lineSelecIdx))),'Color',[0 0 0 0.2]);
+        %         end
     end
 end
 % delete

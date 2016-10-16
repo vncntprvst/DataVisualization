@@ -1,12 +1,12 @@
 
 [Behavior,Performance]=processBehaviorData;
-keepSessions=find(mean(vertcat(Performance.CorrectSides),2)>30);
+keepSessions=find(mean(vertcat(Performance.CorrectSides),2)>5);
 Performance=Performance(keepSessions);
 Behavior=Behavior(keepSessions);
 % [~,orderDate]=sort([Behavior(keepSessions).fileRecordingDate]);
 [~,orderDate]=sort(([Behavior.fileRecordingDate]-...
     datetime(year(min([Behavior.fileRecordingDate])),1,1))+...
-    [Behavior.fileStartTime_ms]);
+    seconds([Behavior.fileStartTime_ms]/1000));
 Performance=Performance(orderDate);
 Behavior=Behavior(orderDate);
 % average side bias
@@ -52,7 +52,7 @@ try %if violin plot is available
     set(gca, 'xtick', [0.6 1.4], 'xticklabel', {'Left','Right'}, 'xlim', [0.2 1.8]);
     
     % add significance stars for each bar (Not needed here)
-    %     xticks = get(gca, 'xtick');
+        xticks = get(gca, 'xtick');
     %     for side = 1:2,
     %         [~, pval] = ttest(avgpcCorrectSides(:, side));
     % %         yval = max(avgpcCorrectSides(:, side)) * 1.2; % plot this on top of the bar

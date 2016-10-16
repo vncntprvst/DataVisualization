@@ -7,7 +7,7 @@ cd(dirName);
 
 %Select channels
 % KeepChans=Spikes.Offline_Threshold.channel;
-KeepChans=3;
+KeepChans=11;
 
 %% load file data
 if strfind(fileName,'.mat')
@@ -20,9 +20,9 @@ if strfind(fileName,'.mat')
     load([fileName{:} '_info.mat']);
     
     % from Spike2
-    Spikes.Offline_SpkSort.Units{KeepChans,1}=nw_401.codes(:,1);
-    Spikes.Offline_SpkSort.SpikeTimes{3,1}=uint32(nw_401.times*rec_info.samplingRate);
-    Spikes.Offline_SpkSort.Waveforms{3,1}=nw_401.values;
+    Spikes.Offline_Sorting.Units{KeepChans,1}=nw_401.codes(:,1);
+    Spikes.Offline_Sorting.SpikeTimes{3,1}=uint32(nw_401.times*rec_info.samplingRate);
+    Spikes.Offline_Sorting.Waveforms{3,1}=nw_401.values;
     
 %     ResortedSpikes=load('C:\Data\export\PrV75_61_BR_8Ch\PrV75_61_opt_stim_2003_spikesResorted.mat');
     
@@ -33,36 +33,36 @@ if strfind(fileName,'.mat')
 %     end
 elseif strfind(fileName,'.hdf5')
     fileName=regexp(fileName,'\w+(?=\.\w+\.)','match','once');
-    Spikes.Offline_SpkSort.Units{3,1}=h5read([fileName '.clusters.hdf5'],'/clusters_2');
-    Spikes.Offline_SpkSort.SpikeTimes{3,1}=h5read([fileName '.clusters.hdf5'],'/times_2');
-    Spikes.Offline_SpkSort.Waveforms{3,1}=h5read([fileName '.clusters.hdf5'],'/data_2');
-    Spikes.Offline_SpkSort.Waveforms=h5read([fileName '.templates.hdf5'],'/temp_data');
-    Spikes.Offline_SpkSort.templates{10,1}.spiketimes=h5read([fileName '.result.hdf5'],'/spiketimes/temp_10');
-    Spikes.Offline_SpkSort.templates{10,1}.amplitudes=h5read([fileName '.result.hdf5'],'/amplitudes/temp_10');
+    Spikes.Offline_Sorting.Units{11,1}=h5read([fileName '.clusters.hdf5'],'/clusters_2');
+    Spikes.Offline_Sorting.SpikeTimes{3,1}=h5read([fileName '.clusters.hdf5'],'/times_2');
+    Spikes.Offline_Sorting.Waveforms{3,1}=h5read([fileName '.clusters.hdf5'],'/data_2');
+    Spikes.Offline_Sorting.Waveforms=h5read([fileName '.templates.hdf5'],'/temp_data');
+    Spikes.Offline_Sorting.templates{10,1}.spiketimes=h5read([fileName '.result.hdf5'],'/spiketimes/temp_10');
+    Spikes.Offline_Sorting.templates{10,1}.amplitudes=h5read([fileName '.result.hdf5'],'/amplitudes/temp_10');
 end
 
 %% get clusters spiketimes
-for clusNum=min(unique(Spikes.Offline_SpkSort.Units{3,1})):max(unique(Spikes.Offline_SpkSort.Units{3,1}))   
-    Ch3.(['Clus' num2str(clusNum)]).SpikeTimes=Spikes.Offline_SpkSort.SpikeTimes{KeepChans,1}(Spikes.Offline_SpkSort.Units{KeepChans,1}==clusNum);
-    Ch3.(['Clus' num2str(clusNum)]).Waveforms=Spikes.Offline_SpkSort.Waveforms{KeepChans,1}(Spikes.Offline_SpkSort.Units{KeepChans,1}==clusNum,:)/4;
+for clusNum=min(unique(Spikes.Offline_Sorting.Units{11,1})):max(unique(Spikes.Offline_Sorting.Units{11,1}))   
+    Ch11.(['Clus' num2str(clusNum)]).SpikeTimes=Spikes.Offline_Sorting.SpikeTimes{KeepChans,1}(Spikes.Offline_Sorting.Units{KeepChans,1}==clusNum);
+    Ch11.(['Clus' num2str(clusNum)]).Waveforms=Spikes.Offline_Sorting.Waveforms{KeepChans,1}(Spikes.Offline_Sorting.Units{KeepChans,1}==clusNum,:);
 end
-% for clusNum=min(unique(ResortedSpikes.Spikes.inGUI.Units{3,1})):max(unique(ResortedSpikes.Spikes.inGUI.Units{3,1}))   
-%     Ch3.(['Clus' num2str(clusNum+1)]).SpikeTimes=ResortedSpikes.Spikes.inGUI.SpikeTimes{KeepChans,1}(ResortedSpikes.Spikes.inGUI.Units{KeepChans,1}==clusNum);
-%     Ch3.(['Clus' num2str(clusNum+1)]).Waveforms=ResortedSpikes.Spikes.inGUI.Waveforms{KeepChans,1}(:,ResortedSpikes.Spikes.inGUI.Units{KeepChans,1}==clusNum)';
+% for clusNum=min(unique(ResortedSpikes.Spikes.inGUI.Units{11,1})):max(unique(ResortedSpikes.Spikes.inGUI.Units{11,1}))   
+%     Ch11.(['Clus' num2str(clusNum+1)]).SpikeTimes=ResortedSpikes.Spikes.inGUI.SpikeTimes{KeepChans,1}(ResortedSpikes.Spikes.inGUI.Units{KeepChans,1}==clusNum);
+%     Ch11.(['Clus' num2str(clusNum+1)]).Waveforms=ResortedSpikes.Spikes.inGUI.Waveforms{KeepChans,1}(:,ResortedSpikes.Spikes.inGUI.Units{KeepChans,1}==clusNum)';
 %end
-% Ch3.Clus1.Waveforms=ExtractChunks(rawData(3,:),Ch3.Clus1.SpikeTimes,82,'tzero');
+% Ch11.Clus1.Waveforms=ExtractChunks(rawData(3,:),Ch11.Clus1.SpikeTimes,82,'tzero');
 
 %% plot waveforms
 figure;hold on
 colormap lines; cmap=colormap;
-% for clusNum=min(unique(Spikes.Offline_SpkSort.Units{3,1})):max(unique(Spikes.Offline_SpkSort.Units{3,1}))   
-for clusNum=1:3
-    plot(mean(Ch3.(['Clus' num2str(clusNum)]).Waveforms),'linewidth',2)
+% for clusNum=min(unique(Spikes.Offline_Sorting.Units{11,1})):max(unique(Spikes.Offline_Sorting.Units{11,1}))   
+for clusNum=1:2
+    plot(mean(Ch11.(['Clus' num2str(clusNum)]).Waveforms),'linewidth',2)
 end
 % legend({'0','1','2','3'})
-legend('Neuron 1','Neuron 2','Neuron 3','location','southeast')
-set(gca,'xtick',linspace(0,size(Ch3.Clus1.Waveforms,2),5),...
-    'xticklabel',round(linspace(-round(size(Ch3.Clus1.Waveforms,2)/2),round(size(Ch3.Clus1.Waveforms,2)/2),5)/30,2),'TickDir','out');
+legend('Neuron 1','Neuron 2','location','southeast')
+set(gca,'xtick',linspace(0,size(Ch11.Clus1.Waveforms,2),5),...
+    'xticklabel',round(linspace(-round(size(Ch11.Clus1.Waveforms,2)/2),round(size(Ch11.Clus1.Waveforms,2)/2),5)/30,2),'TickDir','out');
 axis('tight');box off;
 xlabel('Time (ms)')
 ylabel('Voltage (mV)')
@@ -70,22 +70,22 @@ set(gca,'Color','white','FontSize',12,'FontName','calibri');
 
 %% by subplots
 figure;
-for clusNum=min(unique(Spikes.Offline_SpkSort.Units{3,1})):max(unique(Spikes.Offline_SpkSort.Units{3,1}))   
+for clusNum=min(unique(Spikes.Offline_Sorting.Units{11,1})):max(unique(Spikes.Offline_Sorting.Units{11,1}))   
     subplot(2,3,double(clusNum+1))
-    plot(mean(Ch3.(['Clus' num2str(clusNum)]).Waveforms),'color',cmap(double(clusNum+1),:))
+    plot(mean(Ch11.(['Clus' num2str(clusNum)]).Waveforms),'color',cmap(double(clusNum+1),:))
 end
 
-% plot(mean(Ch3.Clus1.Waveforms)+std(double(Ch3.Clus1.Waveforms)))
-% plot(mean(Ch3.Clus1.Waveforms)-std(double(Ch3.Clus1.Waveforms)))
+% plot(mean(Ch11.Clus1.Waveforms)+std(double(Ch11.Clus1.Waveforms)))
+% plot(mean(Ch11.Clus1.Waveforms)-std(double(Ch11.Clus1.Waveforms)))
 
 %
 Trials.start=Trials.start-Trials.startClockTime;
 Trials.end=Trials.end-Trials.startClockTime;
 
 %% plot ISI and ACG
-clusNum=2;
+clusNum=1;
 figure;
-unitST=Ch3.(['Clus' num2str(clusNum)]).SpikeTimes/30;
+unitST=Ch11.(['Clus' num2str(clusNum)]).SpikeTimes/30;
 % compute interspike interval
 ISI=diff(unitST);
 subplot(2,1,1)
@@ -127,12 +127,12 @@ onSpikes=logical(sum(pulseIdx,2));
 
 % plot waveforms
 figure;hold on
-plot(mean(Ch3.(['Clus' num2str(clusNum)]).Waveforms(~onSpikes,:)),'linewidth',2,'color',cmap(clusNum,:))
-plot(mean(Ch3.(['Clus' num2str(clusNum)]).Waveforms(onSpikes,:)),'linewidth',2,'color',[0.3 0.75 0.93])
+plot(mean(Ch11.(['Clus' num2str(clusNum)]).Waveforms(~onSpikes,:)),'linewidth',2,'color',cmap(clusNum,:))
+plot(mean(Ch11.(['Clus' num2str(clusNum)]).Waveforms(onSpikes,:)),'linewidth',2,'color',[0.3 0.75 0.93])
 legend('Pulse On','Pulse Off','location','northeast')
-set(gca,'xtick',linspace(0,size(Ch3.(['Clus' num2str(clusNum)]).Waveforms,2),5),...
-    'xticklabel',round(linspace(-round(size(Ch3.(['Clus' num2str(clusNum)]).Waveforms,2)/2),...
-    round(size(Ch3.(['Clus' num2str(clusNum)]).Waveforms,2)/2),5)/30,2),'TickDir','out');
+set(gca,'xtick',linspace(0,size(Ch11.(['Clus' num2str(clusNum)]).Waveforms,2),5),...
+    'xticklabel',round(linspace(-round(size(Ch11.(['Clus' num2str(clusNum)]).Waveforms,2)/2),...
+    round(size(Ch11.(['Clus' num2str(clusNum)]).Waveforms,2)/2),5)/30,2),'TickDir','out');
 box off; %axis('tight');
 xlabel('Time (ms)')
 ylabel('Voltage (mV)')
@@ -196,16 +196,16 @@ hold off
 %% plot spikes and trials
 figure; hold on
 % plot(int16(Spikes.Offline_Threshold.data{3, 1})*max(rawData(3,:)),'ko')
-% plot(Spikes.Offline_SpkSort.data{3, 1},ones(1,size(Spikes.Offline_SpkSort.data{3, 1},1))*0.5,'sr')
-plot(Ch3.Clus1.SpikeTimes,...
-    int16(ones(1,size(Ch3.Clus1.SpikeTimes,1)))*max(rawData(3,:)),...
+% plot(Spikes.Offline_Sorting.data{3, 1},ones(1,size(Spikes.Offline_Sorting.data{3, 1},1))*0.5,'sr')
+plot(Ch11.Clus1.SpikeTimes,...
+    int16(ones(1,size(Ch11.Clus1.SpikeTimes,1)))*max(rawData(3,:)),...
     'linestyle','none','marker','o','MarkerSize',5,'MarkerEdgeColor',cmap(1,:),'MarkerFaceColor','none')
-plot(Ch3.Clus2.SpikeTimes,...
-    int16(ones(1,size(Ch3.Clus2.SpikeTimes,1)))*max(rawData(3,:))+50,...
+plot(Ch11.Clus2.SpikeTimes,...
+    int16(ones(1,size(Ch11.Clus2.SpikeTimes,1)))*max(rawData(3,:))+50,...
     'linestyle','none','marker','o','MarkerSize',5,'MarkerEdgeColor',cmap(2,:),'MarkerFaceColor','none')
 plot(rawData(3,1:129000));
-plot(Ch3.Clus3.SpikeTimes,...
-    int16(ones(1,size(Ch3.Clus3.SpikeTimes,1)))*max(rawData(3,:))+100,...
+plot(Ch11.Clus3.SpikeTimes,...
+    int16(ones(1,size(Ch11.Clus3.SpikeTimes,1)))*max(rawData(3,:))+100,...
     'linestyle','none','marker','o','MarkerSize',5,'MarkerEdgeColor',cmap(3,:),'MarkerFaceColor','none')
 
 yLims=get(gca,'ylim');
