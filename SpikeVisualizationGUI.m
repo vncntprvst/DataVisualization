@@ -840,7 +840,7 @@ if isfield(handles.Spikes,'Offline_Sorting') % plot below trace
                 handles.Spikes.Offline_Sorting.Units{electrodeNum}==unitID(selectedUnitsListIdx(unitP)));
             if ~isempty(spkTimes)
                 rasterHeight=ones(1,size(spkTimes,2))*(min(get(gca,'ylim'))/4*3);
-                plot(spkTimes-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
+                plot(single(spkTimes)-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
                     rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
                     'linestyle','none','Marker','^');
             end
@@ -936,7 +936,7 @@ if ~isempty(diff(unitST))
     ISIhist.EdgeColor = 'k';
     xlabel('Interspike Interval (ms)')
     axis('tight');box off;
-    set(gca,'xlim',[0 200],'XTick',linspace(0,200,5),'XTickLabel',linspace(0,200,5),...
+    set(gca,'xlim',[0 700],'XTick',linspace(0,700,5),'XTickLabel',linspace(0,700,5),...
         'TickDir','out','Color','white','FontSize',10,'FontName','Calibri');
     hold off
 end

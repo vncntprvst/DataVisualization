@@ -1,91 +1,107 @@
-%% Get spike times and waveforms 
+%% Get spike times and waveforms
 
 %% Get file path
-[fileName,dirName] = uigetfile({'*.mat; *.hdf5','Processed data';'*.dat','Flat data';...
+[fName,dirName] = uigetfile({'*.mat; *.hdf5','Processed data';'*.dat','Flat data';...
     '*.*','All Files' },'Exported data','C:\Data\export');
 cd(dirName);
 
-%Select channels
-% KeepChans=Spikes.Offline_Threshold.channel;
-KeepChans=11;
-
 %% load file data
-if strfind(fileName,'.mat')
-    load(fileName);
+
+if strfind(fName,'.mat')
+    load(fName);
     %load other data
-    fileName=regexp(fileName,'.+(?=_\w+.\w+$)','match');
+    fileName=regexp(fName,'.+(?=_\w+.\w+$)','match');
     load([fileName{:} '_raw.mat']);
     load([fileName{:} '_trials.mat']);
-    load([fileName{:} '_spikes.mat']);
+    if ~strfind(fName,'_spikesResorted')
+        load([fileName{:} '_spikes.mat']);
+    end
     load([fileName{:} '_info.mat']);
     
-    % from Spike2
-    Spikes.Offline_Sorting.Units{KeepChans,1}=nw_401.codes(:,1);
-    Spikes.Offline_Sorting.SpikeTimes{3,1}=uint32(nw_401.times*rec_info.samplingRate);
-    Spikes.Offline_Sorting.Waveforms{3,1}=nw_401.values;
-    
-%     ResortedSpikes=load('C:\Data\export\PrV75_61_BR_8Ch\PrV75_61_opt_stim_2003_spikesResorted.mat');
-    
-%     try
-%         Behavior=processBehaviorData;
-%     catch
-%         Behavior=[];
-%     end
 elseif strfind(fileName,'.hdf5')
-    fileName=regexp(fileName,'\w+(?=\.\w+\.)','match','once');
-    Spikes.Offline_Sorting.Units{11,1}=h5read([fileName '.clusters.hdf5'],'/clusters_2');
-    Spikes.Offline_Sorting.SpikeTimes{3,1}=h5read([fileName '.clusters.hdf5'],'/times_2');
-    Spikes.Offline_Sorting.Waveforms{3,1}=h5read([fileName '.clusters.hdf5'],'/data_2');
-    Spikes.Offline_Sorting.Waveforms=h5read([fileName '.templates.hdf5'],'/temp_data');
-    Spikes.Offline_Sorting.templates{10,1}.spiketimes=h5read([fileName '.result.hdf5'],'/spiketimes/temp_10');
-    Spikes.Offline_Sorting.templates{10,1}.amplitudes=h5read([fileName '.result.hdf5'],'/amplitudes/temp_10');
+    fileName=regexp(fName,'\w+(?=\.\w+\.)','match','once');
 end
 
-%% get clusters spiketimes
-for clusNum=min(unique(Spikes.Offline_Sorting.Units{11,1})):max(unique(Spikes.Offline_Sorting.Units{11,1}))   
-    Ch11.(['Clus' num2str(clusNum)]).SpikeTimes=Spikes.Offline_Sorting.SpikeTimes{KeepChans,1}(Spikes.Offline_Sorting.Units{KeepChans,1}==clusNum);
-    Ch11.(['Clus' num2str(clusNum)]).Waveforms=Spikes.Offline_Sorting.Waveforms{KeepChans,1}(Spikes.Offline_Sorting.Units{KeepChans,1}==clusNum,:);
+%Select channels
+% KeepChans=Spikes.Offline_Threshold.channel;
+KeepChans=16;
+
+for ChNum=1:length(KeepChans)
+    %% load spike data
+    clusters=unique(Spikes.HandSort.Units{KeepChans(ChNum),1});
+    if strfind(fName,'_spikesResorted')
+        % get clusters spiketimes
+        for clusNum=1:length(clusters)
+            spikeData.(['Clus' num2str(clusters(clusNum))]).Cluster=clusters(clusNum);
+            spikeData.(['Clus' num2str(clusters(clusNum))]).SpikeTimes=Spikes.HandSort.SpikeTimes{KeepChans(ChNum),1}(Spikes.HandSort.Units{KeepChans(ChNum),1}==clusters(clusNum));
+            spikeData.(['Clus' num2str(clusters(clusNum))]).Waveforms=Spikes.HandSort.Waveforms{KeepChans(ChNum),1}(:,Spikes.HandSort.Units{KeepChans(ChNum),1}==clusters(clusNum));
+        end
+    elseif strfind(fileName,'.mat')
+        % from Spike2
+        Spikes.Offline_Sorting.Units{KeepChans(ChNum),1}=nw_401.codes(:,1);
+        Spikes.Offline_Sorting.SpikeTimes{3,1}=uint32(nw_401.times*rec_info.samplingRate);
+        Spikes.Offline_Sorting.Waveforms{3,1}=nw_401.values;
+        % get clusters spiketimes
+        for clusNum=1:length(clusters)
+            spikeData.(['Clus' num2str(clusters(clusNum))])=clusNum;
+            spikeData.(['Clus' num2str(clusters(clusNum))]).SpikeTimes=Spikes.Offline_Sorting.SpikeTimes{KeepChans(ChNum),1}(Spikes.Offline_Sorting.Units{KeepChans(ChNum),1}==clusters(clusNum));
+            spikeData.(['Clus' num2str(clusters(clusNum))]).Waveforms=Spikes.Offline_Sorting.Waveforms{KeepChans(ChNum),1}(Spikes.Offline_Sorting.Units{KeepChans(ChNum),1}==clusters(clusNum),:);
+        end
+    elseif strfind(fileName,'.hdf5')
+        fileName=regexp(fName,'\w+(?=\.\w+\.)','match','once');
+        Spikes.Offline_Sorting.Units{KeepChans(ChNum),1}=h5read([fileName '.clusters.hdf5'],'/clusters_2');
+        Spikes.Offline_Sorting.SpikeTimes{3,1}=h5read([fileName '.clusters.hdf5'],'/times_2');
+        Spikes.Offline_Sorting.Waveforms{3,1}=h5read([fileName '.clusters.hdf5'],'/data_2');
+        Spikes.Offline_Sorting.Waveforms=h5read([fileName '.templates.hdf5'],'/temp_data');
+        Spikes.Offline_Sorting.templates{10,1}.spiketimes=h5read([fileName '.result.hdf5'],'/spiketimes/temp_10');
+        Spikes.Offline_Sorting.templates{10,1}.amplitudes=h5read([fileName '.result.hdf5'],'/amplitudes/temp_10');
+        % get clusters spiketimes
+        for clusNum=1:length(clusters)
+            spikeData.(['Clus' num2str(clusters(clusNum))])=clusNum;
+            spikeData.(['Clus' num2str(clusters(clusNum))]).SpikeTimes=Spikes.Offline_Sorting.SpikeTimes{KeepChans(ChNum),1}(Spikes.Offline_Sorting.Units{KeepChans(ChNum),1}==clusters(clusNum));
+            spikeData.(['Clus' num2str(clusters(clusNum))]).Waveforms=Spikes.Offline_Sorting.Waveforms{KeepChans(ChNum),1}(Spikes.Offline_Sorting.Units{KeepChans(ChNum),1}==clusters(clusNum),:);
+        end
+        % for clusNum=min(unique(ResortedSpikes.Spikes.inGUI.Units{KeepChans(ChNum),1})):max(unique(ResortedSpikes.Spikes.inGUI.Units{KeepChans(ChNum),1}))
+        %     Data.(['Clus' num2str(clusters(clusNum)+1)]).SpikeTimes=ResortedSpikes.Spikes.inGUI.SpikeTimes{KeepChans(ChNum),1}(ResortedSpikes.Spikes.inGUI.Units{KeepChans(ChNum),1}==clusters(clusNum));
+        %     Data.(['Clus' num2str(clusters(clusNum)+1)]).Waveforms=ResortedSpikes.Spikes.inGUI.Waveforms{KeepChans(ChNum),1}(:,ResortedSpikes.Spikes.inGUI.Units{KeepChans(ChNum),1}==clusters(clusNum))';
+        %end
+        % Data.Clus1.Waveforms=ExtractChunks(rawData(3,:),Data.Clus1.SpikeTimes,82,'tzero');
+    end
+    
+    %% plot waveforms
+    figure;hold on
+    colormap lines; cmap=colormap;
+    % for clusNum=min(unique(Spikes.Offline_Sorting.Units{KeepChans,1})):max(unique(Spikes.Offline_Sorting.Units{KeepChans,1}))
+    for clusNum=1:length(clusters)
+        plot(mean(spikeData.(['Clus' num2str(clusters(clusNum))]).Waveforms,2),'linewidth',2)
+    end
+    % legend({'0','1','2','3'})
+    % legend('Neuron 1','Neuron 2','location','southeast')
+    legend(num2str(clusters),'location','southeast')
+    
+    set(gca,'xtick',linspace(0,size(spikeData.Clus1.Waveforms,2),5),...
+        'xticklabel',round(linspace(-round(size(spikeData.Clus1.Waveforms,2)/2),round(size(spikeData.Clus1.Waveforms,2)/2),5)/30,2),'TickDir','out');
+    axis('tight');box off;
+    xlabel('Time (ms)')
+    ylabel('Voltage (mV)')
+    set(gca,'Color','white','FontSize',12,'FontName','calibri');
+    
+    %% by subplots
+    figure;
+    for clusNum=1:length(clusters)
+        subplot(ceil(length(clusters)/3),3,clusNum)
+        plot(mean(spikeData.(['Clus' num2str(clusters(clusNum))]).Waveforms,2),'color',cmap(double(clusters(clusNum)+1),:))
+        legend(num2str(clusNum),'location','southeast')
+    end
+    
+    % plot(mean(Data.Clus1.Waveforms)+std(double(Data.Clus1.Waveforms)))
+    % plot(mean(Data.Clus1.Waveforms)-std(double(Data.Clus1.Waveforms)))
 end
-% for clusNum=min(unique(ResortedSpikes.Spikes.inGUI.Units{11,1})):max(unique(ResortedSpikes.Spikes.inGUI.Units{11,1}))   
-%     Ch11.(['Clus' num2str(clusNum+1)]).SpikeTimes=ResortedSpikes.Spikes.inGUI.SpikeTimes{KeepChans,1}(ResortedSpikes.Spikes.inGUI.Units{KeepChans,1}==clusNum);
-%     Ch11.(['Clus' num2str(clusNum+1)]).Waveforms=ResortedSpikes.Spikes.inGUI.Waveforms{KeepChans,1}(:,ResortedSpikes.Spikes.inGUI.Units{KeepChans,1}==clusNum)';
-%end
-% Ch11.Clus1.Waveforms=ExtractChunks(rawData(3,:),Ch11.Clus1.SpikeTimes,82,'tzero');
-
-%% plot waveforms
-figure;hold on
-colormap lines; cmap=colormap;
-% for clusNum=min(unique(Spikes.Offline_Sorting.Units{11,1})):max(unique(Spikes.Offline_Sorting.Units{11,1}))   
-for clusNum=1:2
-    plot(mean(Ch11.(['Clus' num2str(clusNum)]).Waveforms),'linewidth',2)
-end
-% legend({'0','1','2','3'})
-legend('Neuron 1','Neuron 2','location','southeast')
-set(gca,'xtick',linspace(0,size(Ch11.Clus1.Waveforms,2),5),...
-    'xticklabel',round(linspace(-round(size(Ch11.Clus1.Waveforms,2)/2),round(size(Ch11.Clus1.Waveforms,2)/2),5)/30,2),'TickDir','out');
-axis('tight');box off;
-xlabel('Time (ms)')
-ylabel('Voltage (mV)')
-set(gca,'Color','white','FontSize',12,'FontName','calibri');
-
-%% by subplots
-figure;
-for clusNum=min(unique(Spikes.Offline_Sorting.Units{11,1})):max(unique(Spikes.Offline_Sorting.Units{11,1}))   
-    subplot(2,3,double(clusNum+1))
-    plot(mean(Ch11.(['Clus' num2str(clusNum)]).Waveforms),'color',cmap(double(clusNum+1),:))
-end
-
-% plot(mean(Ch11.Clus1.Waveforms)+std(double(Ch11.Clus1.Waveforms)))
-% plot(mean(Ch11.Clus1.Waveforms)-std(double(Ch11.Clus1.Waveforms)))
-
-%
-Trials.start=Trials.start-Trials.startClockTime;
-Trials.end=Trials.end-Trials.startClockTime;
 
 %% plot ISI and ACG
-clusNum=1;
+clusNum=7;
 figure;
-unitST=Ch11.(['Clus' num2str(clusNum)]).SpikeTimes/30;
+unitST=spikeData.(['Clus' num2str(clusNum)]).SpikeTimes/30;
 % compute interspike interval
 ISI=diff(unitST);
 subplot(2,1,1)
@@ -104,8 +120,8 @@ binSize=1;
 numBin=ceil(size(spikeTimeIdx,2)/binSize);
 binUnits = histcounts(double(unitST), linspace(0,size(spikeTimeIdx,2),numBin));
 binUnits(binUnits>1)=1; %no more than 1 spike per ms
-% compute autocorrelogram 
-[ACG,lags]=xcorr(double(binUnits),200,'coeff'); %'coeff'
+% compute autocorrelogram
+[ACG,lags]=xcorr(double(binUnits),300,'coeff'); %'coeff'
 ACG(lags==0)=0;
 subplot(2,1,2); hold on
 ACGh=bar(lags,ACG);
@@ -117,22 +133,25 @@ xlabel('Autocorrelogram (5 ms bins)')
 set(gca,'xlim',[-300 300],'Color','white','FontSize',10,'FontName','calibri','TickDir','out');
 hold off
 
+Trials.start=Trials.start-Trials.startClockTime;
+Trials.end=Trials.end-Trials.startClockTime;
+
 %% plot on-pulse off-pulse waveforms, ISI and ACG
 pulseIdx=false(size(unitST,1),size(Trials.start,1));
 %get wich spike time occur during TTL
 for TTLNum=1:size(Trials.start,1)
-pulseIdx(:,TTLNum)=unitST>Trials.start(TTLNum,2) & unitST<Trials.end(TTLNum,2);
+    pulseIdx(:,TTLNum)=unitST>Trials.start(TTLNum,2) & unitST<Trials.end(TTLNum,2);
 end
 onSpikes=logical(sum(pulseIdx,2));
 
 % plot waveforms
 figure;hold on
-plot(mean(Ch11.(['Clus' num2str(clusNum)]).Waveforms(~onSpikes,:)),'linewidth',2,'color',cmap(clusNum,:))
-plot(mean(Ch11.(['Clus' num2str(clusNum)]).Waveforms(onSpikes,:)),'linewidth',2,'color',[0.3 0.75 0.93])
+plot(mean(spikeData.(['Clus' num2str(clusNum)]).Waveforms(~onSpikes,:)),'linewidth',2,'color',cmap(clusNum,:))
+plot(mean(spikeData.(['Clus' num2str(clusNum)]).Waveforms(onSpikes,:)),'linewidth',2,'color',[0.3 0.75 0.93])
 legend('Pulse On','Pulse Off','location','northeast')
-set(gca,'xtick',linspace(0,size(Ch11.(['Clus' num2str(clusNum)]).Waveforms,2),5),...
-    'xticklabel',round(linspace(-round(size(Ch11.(['Clus' num2str(clusNum)]).Waveforms,2)/2),...
-    round(size(Ch11.(['Clus' num2str(clusNum)]).Waveforms,2)/2),5)/30,2),'TickDir','out');
+set(gca,'xtick',linspace(0,size(spikeData.(['Clus' num2str(clusNum)]).Waveforms,2),5),...
+    'xticklabel',round(linspace(-round(size(spikeData.(['Clus' num2str(clusNum)]).Waveforms,2)/2),...
+    round(size(spikeData.(['Clus' num2str(clusNum)]).Waveforms,2)/2),5)/30,2),'TickDir','out');
 box off; %axis('tight');
 xlabel('Time (ms)')
 ylabel('Voltage (mV)')
@@ -174,7 +193,7 @@ numBin=ceil(size(spikeTimeIdx_offPulse,2)/binSize);
 binUnits_offPulse = histcounts(double(unitST_offPulse), linspace(0,size(spikeTimeIdx_offPulse,2),numBin));
 binUnits_offPulse(binUnits_offPulse>1)=1; %no more than 1 spike per ms
 
-% compute autocorrelogram 
+% compute autocorrelogram
 [ACG_onPulse,lags_onPulse]=xcorr(double(binUnits_onPulse),200,'coeff'); %'coeff'
 ACG_onPulse(lags_onPulse==0)=0;
 [ACG_offPulse,lags_offPulse]=xcorr(double(binUnits_offPulse),200,'coeff'); %'coeff'
@@ -197,29 +216,29 @@ hold off
 figure; hold on
 % plot(int16(Spikes.Offline_Threshold.data{3, 1})*max(rawData(3,:)),'ko')
 % plot(Spikes.Offline_Sorting.data{3, 1},ones(1,size(Spikes.Offline_Sorting.data{3, 1},1))*0.5,'sr')
-plot(Ch11.Clus1.SpikeTimes,...
-    int16(ones(1,size(Ch11.Clus1.SpikeTimes,1)))*max(rawData(3,:)),...
+plot(spikeData.Clus1.SpikeTimes,...
+    int16(ones(1,size(spikeData.Clus1.SpikeTimes,1)))*max(rawData(3,:)),...
     'linestyle','none','marker','o','MarkerSize',5,'MarkerEdgeColor',cmap(1,:),'MarkerFaceColor','none')
-plot(Ch11.Clus2.SpikeTimes,...
-    int16(ones(1,size(Ch11.Clus2.SpikeTimes,1)))*max(rawData(3,:))+50,...
+plot(spikeData.Clus2.SpikeTimes,...
+    int16(ones(1,size(spikeData.Clus2.SpikeTimes,1)))*max(rawData(3,:))+50,...
     'linestyle','none','marker','o','MarkerSize',5,'MarkerEdgeColor',cmap(2,:),'MarkerFaceColor','none')
 plot(rawData(3,1:129000));
-plot(Ch11.Clus3.SpikeTimes,...
-    int16(ones(1,size(Ch11.Clus3.SpikeTimes,1)))*max(rawData(3,:))+100,...
+plot(spikeData.Clus3.SpikeTimes,...
+    int16(ones(1,size(spikeData.Clus3.SpikeTimes,1)))*max(rawData(3,:))+100,...
     'linestyle','none','marker','o','MarkerSize',5,'MarkerEdgeColor',cmap(3,:),'MarkerFaceColor','none')
 
 yLims=get(gca,'ylim');
 for TTLNum=1:size(Trials.start,1)
-patch([Trials.start(TTLNum,2)*30:Trials.end(TTLNum,2)*30,...
-    fliplr(Trials.start(TTLNum,2)*30:Trials.end(TTLNum,2)*30)],...
-    [ones(1,Trials.end(TTLNum,2)*30-Trials.start(TTLNum,2)*30+1)*yLims(1),...
-    ones(1,Trials.end(TTLNum,2)*30-Trials.start(TTLNum,2)*30+1)*yLims(2)],...
-    [0.3 0.75 0.93],'EdgeColor','none','FaceAlpha',0.5);
-patch([Trials.start(TTLNum,2)*30:Trials.end(TTLNum,2)*30,...
-    fliplr(Trials.start(TTLNum,2)*30:Trials.end(TTLNum,2)*30)],...
-    [ones(1,Trials.end(TTLNum,2)*30-Trials.start(TTLNum,2)*30+1)*yLims(1),...
-    ones(1,Trials.end(TTLNum,2)*30-Trials.start(TTLNum,2)*30+1)*(yLims(1)+100)],...
-    [0 0 0],'EdgeColor','none','FaceAlpha',0.5);
+    patch([Trials.start(TTLNum,2)*30:Trials.end(TTLNum,2)*30,...
+        fliplr(Trials.start(TTLNum,2)*30:Trials.end(TTLNum,2)*30)],...
+        [ones(1,Trials.end(TTLNum,2)*30-Trials.start(TTLNum,2)*30+1)*yLims(1),...
+        ones(1,Trials.end(TTLNum,2)*30-Trials.start(TTLNum,2)*30+1)*yLims(2)],...
+        [0.3 0.75 0.93],'EdgeColor','none','FaceAlpha',0.5);
+    patch([Trials.start(TTLNum,2)*30:Trials.end(TTLNum,2)*30,...
+        fliplr(Trials.start(TTLNum,2)*30:Trials.end(TTLNum,2)*30)],...
+        [ones(1,Trials.end(TTLNum,2)*30-Trials.start(TTLNum,2)*30+1)*yLims(1),...
+        ones(1,Trials.end(TTLNum,2)*30-Trials.start(TTLNum,2)*30+1)*(yLims(1)+100)],...
+        [0 0 0],'EdgeColor','none','FaceAlpha',0.5);
 end
 tickNum=round((size(rawData,2)/rec_info.samplingRate))*100; % ~ every 10sec
 set(gca,'xtick',linspace(0,size(rawData,2),tickNum),...
@@ -240,10 +259,10 @@ set(gca,'xlim',[127000 129000]);
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% 
+%
 % %Keep only verified trials
 % [ephysCommonTrials, behaviorCommonTrials]=match_trials(Trials,Behavior);
-% 
+%
 % %% gather data from selected channels
 % Rasters.channels=cell(length(KeepChans),2);
 % Rasters.epochnames={'BeginTrial','EndTrial'};
@@ -252,7 +271,7 @@ set(gca,'xlim',[127000 129000]);
 % for chan=1:length(KeepChans)
 %     preAlignWindow(2)=round(uint64(Spikes.Offline_Threshold.samplingRate(chan,2))/(1/preAlignWindow(1)));
 %     postAlignWindow(2)=round(uint64(Spikes.Offline_Threshold.samplingRate(chan,2))/(1/postAlignWindow(1)));
-% 
+%
 %     %     downSamplingRatio=uint64(Spikes.Offline_Threshold.samplingRate(chan,1)/Spikes.Offline_Threshold.samplingRate(chan,2));
 %     [Rasters.channels{chan,1},Rasters.channels{chan,2}]=deal(zeros(size(Trials.start,1),preAlignWindow(2)+postAlignWindow(2)+1));
 %     Spkt=Spikes.Offline_Threshold.data{KeepChans(chan),2}(1,:);
@@ -260,10 +279,10 @@ set(gca,'xlim',[127000 129000]);
 %         continue
 %     end
 %     for trialnb=1:size(Trials.start,1)
-%         
+%
 %         %Collect spikes from 1st epoch (begining of trial)
-%         RastSWin=Trials.start(trialnb,2)-preAlignWindow(2); 
-%         RastEWin=Trials.start(trialnb,2)+postAlignWindow(2); 
+%         RastSWin=Trials.start(trialnb,2)-preAlignWindow(2);
+%         RastEWin=Trials.start(trialnb,2)+postAlignWindow(2);
 %         SpikeTimes=Spkt(RastSWin:RastEWin);
 %         Rasters.channels{chan,1}(trialnb,:)=SpikeTimes;
 %         %Collect spikes from 2nd epoch (end of trial)
@@ -271,7 +290,7 @@ set(gca,'xlim',[127000 129000]);
 %         RastEWin=Trials.end(trialnb,2)+postAlignWindow(2); % 1/2 sec afer
 %         SpikeTimes=Spkt(RastSWin:RastEWin);
 %         Rasters.channels{chan,2}(trialnb,:)=SpikeTimes;
-% 
+%
 %         %         %Collect spikes from 1st epoch (begining of trial)
 %         %         RastSWin=Trials.start(trialnb,2)-uint64(SamplingRate); % 1 sec before
 %         %         RastEWin=Trials.start(trialnb,2)+uint64(SamplingRate); % 1 sec afer
@@ -308,14 +327,14 @@ set(gca,'xlim',[127000 129000]);
 % patch([repmat(midl,1,2) repmat(midl+Trials.end(1,2)-Trials.start(1,2),1,2)], ...
 %     [[0 currylim(2)] fliplr([0 currylim(2)])], ...
 %     [0 0 0 0],[0.3 0.75 0.93],'EdgeColor','none','FaceAlpha',0.1);
-% 
+%
 % % patch([repmat(midl-3,1,2) repmat(midl+3,1,2)], ...
 % %     [[0 currylim(2)] fliplr([0 currylim(2)])], ...
 % %     [0 0 0 0],[0.8 0 0],'EdgeColor','none','FaceAlpha',0.8);
 % title('Neural response to 100% stimulation intensity, aligned to stimulation onset');
 % hcb = colorbar('southoutside');
 % hcb.Label.String = 'z-scored firing rate';
-% 
+%
 % MeanChan=cellfun(@(x) conv_raster(x),Rasters.channels(:,2),'UniformOutput',false);
 % MeanChan=cell2mat(MeanChan);
 % subplot(1,2,2)
@@ -334,7 +353,7 @@ set(gca,'xlim',[127000 129000]);
 % title('Neural response to 80% stimulation intensity, aligned to stimulation onset');
 % hcb = colorbar('southoutside');
 % hcb.Label.String = 'z-scored firing rate';
-% 
+%
 % %% plot sdf
 % BestChan=find(mean(MeanChan,2)==max(mean(MeanChan,2)));
 % start=1;
@@ -349,7 +368,7 @@ set(gca,'xlim',[127000 129000]);
 % colormap default;
 % cmap = colormap(gcf);
 % hold on;
-% 
+%
 % %plot sem
 % startAlignPloth=gca; box off; %subplot(1,2,1);hold on; box off;
 % patch([1:length(sdf{1}),fliplr(1:length(sdf{1}))],[sdf{1}-rastsem{1},fliplr(sdf{1}+rastsem{1})],...
@@ -358,7 +377,7 @@ set(gca,'xlim',[127000 129000]);
 % % patch([1:length(sdf{2}),fliplr(1:length(sdf{2}))],[sdf{2}-rastsem{2},fliplr(sdf{2}+rastsem{2})],cmap(22,:),'EdgeColor','none','FaceAlpha',0.1);
 % %plot sdfs
 % FRploth=plot(startAlignPloth,sdf{1},'Color',[0.16 0.38 0.27],'LineWidth',1.8);
-% 
+%
 % % set(startAlignPloth,'XTick',xTickSteps-(start+3*conv_sigma):xTickSteps:(stop-start-6*conv_sigma));
 % set(startAlignPloth,'XTick',xTickSteps-(start+3*conv_sigma):xTickSteps:(stop-start-6*conv_sigma));
 % set(startAlignPloth,'XTickLabel',-(alignmtt-xTickSteps):xTickSteps:stop-(alignmtt+xTickSteps));
@@ -366,16 +385,16 @@ set(gca,'xlim',[127000 129000]);
 % set(startAlignPloth,'Color','white','TickDir','out','FontName','Cambria','FontSize',10);
 % hxlabel=xlabel(startAlignPloth,'Time (ms)','FontName','Cambria','FontSize',12);
 % hylabel=ylabel(startAlignPloth,'Firing rate (spikes/s)','FontName','Cambria','FontSize',12);
-% 
+%
 % % plot(endAlignPloth,sdf{2},'Color',cmap(22,:),'LineWidth',1.8);
-% % 
+% %
 % % set(endAlignPloth,'XTick',xTickSteps-(start+3*conv_sigma):xTickSteps:(stop-start-6*conv_sigma));
 % % set(endAlignPloth,'XTickLabel',-(alignmtt-xTickSteps):xTickSteps:stop-(alignmtt+xTickSteps));
-% % axis(endAlignPloth,'tight'); 
+% % axis(endAlignPloth,'tight');
 % % set(endAlignPloth,'Color','white','TickDir','out','FontName','Cambria','FontSize',10);
 % % hxlabel=xlabel(endAlignPloth,'Time (ms)','FontName','Cambria','FontSize',12);
 % % hylabel=ylabel(endAlignPloth,'Firing rate (spikes/s)','FontName','Cambria','FontSize',12);
-% 
+%
 % % draw alignment bar
 % currylim=get(startAlignPloth,'YLim');
 % axes(startAlignPloth)
@@ -391,7 +410,7 @@ set(gca,'xlim',[127000 129000]);
 % % patch([repmat((alignmtt-(start+3*conv_sigma))-2,1,2) repmat((alignmtt-(start+3*conv_sigma))+2,1,2)], ...
 % %     [[0 currylim(2)] fliplr([0 currylim(2)])], ...
 % %     [0 0 0 0],[1 0 0],'EdgeColor','none','FaceAlpha',0.5);
-% 
+%
 % %legend
 % legend([FRploth,OptoStimh],{'Average firing rate','Optical stimulation'});
 % legend('boxoff')
