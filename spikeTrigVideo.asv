@@ -34,13 +34,19 @@ while hasFrame(videoObj)
     frNum = frNum+1;
 end
 
-trigFrames=vidFrames(:,:,spikeTimes);
+trigFrames=vidFrames(:,:,spikeTimes)
+
 bgFrame=median(vidFrames,3);
-% figure; imshow(bgFrame)
+figure; imshow(bgFrame)
 % bgsub_trigFrames = imsubtract(trigFrames,bgFrame);
 
 avFrame=median(trigFrames,3);
+Z = imabsdiff(X,Y)
 % avFrame=imsubtract(avFrame,bgFrame);
-diffFrame = imabsdiff(avFrame,bgFrame);
-edges = edge(diffFrame,'Sobel'); %or Prewitt , or Roberts
-figure; imshowpair(diffFrame,edges,'montage')
+figure; imshow(avFrame)
+
+
+
+
+BW1 = edge(bgFrame,'Canny');
+figure; imshow(BW1)
