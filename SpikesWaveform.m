@@ -1,72 +1,9 @@
+
+KeepChans=10;
 %% Get spike times and waveforms
-
-%% Get file path
-[fName,dirName] = uigetfile({'*.mat; *.hdf5','Processed data';'*.dat','Flat data';...
-    '*.*','All Files' },'Exported data','C:\Data\export');
-cd(dirName);
-
-%% load file data
-
-if strfind(fName,'.mat')
-    load(fName);
-    %load other data
-    fileName=regexp(fName,'.+(?=_\w+.\w+$)','match');
-    load([fileName{:} '_raw.mat']);
-    load([fileName{:} '_trials.mat']);
-    if ~strfind(fName,'_spikesResorted')
-        load([fileName{:} '_spikes.mat']);
-    end
-    load([fileName{:} '_info.mat']);
-    
-elseif strfind(fileName,'.hdf5')
-    fileName=regexp(fName,'\w+(?=\.\w+\.)','match','once');
-end
-
-%Select channels
-% KeepChans=Spikes.Offline_Threshold.channel;
-KeepChans=16;
+spikeData=SpikeData(KeepChans);
 
 for ChNum=1:length(KeepChans)
-    %% load spike data
-    clusters=unique(Spikes.HandSort.Units{KeepChans(ChNum),1});
-    if strfind(fName,'_spikesResorted')
-        % get clusters spiketimes
-        for clusNum=1:length(clusters)
-            spikeData.(['Clus' num2str(clusters(clusNum))]).Cluster=clusters(clusNum);
-            spikeData.(['Clus' num2str(clusters(clusNum))]).SpikeTimes=Spikes.HandSort.SpikeTimes{KeepChans(ChNum),1}(Spikes.HandSort.Units{KeepChans(ChNum),1}==clusters(clusNum));
-            spikeData.(['Clus' num2str(clusters(clusNum))]).Waveforms=Spikes.HandSort.Waveforms{KeepChans(ChNum),1}(:,Spikes.HandSort.Units{KeepChans(ChNum),1}==clusters(clusNum));
-        end
-    elseif strfind(fileName,'.mat')
-        % from Spike2
-        Spikes.Offline_Sorting.Units{KeepChans(ChNum),1}=nw_401.codes(:,1);
-        Spikes.Offline_Sorting.SpikeTimes{3,1}=uint32(nw_401.times*rec_info.samplingRate);
-        Spikes.Offline_Sorting.Waveforms{3,1}=nw_401.values;
-        % get clusters spiketimes
-        for clusNum=1:length(clusters)
-            spikeData.(['Clus' num2str(clusters(clusNum))])=clusNum;
-            spikeData.(['Clus' num2str(clusters(clusNum))]).SpikeTimes=Spikes.Offline_Sorting.SpikeTimes{KeepChans(ChNum),1}(Spikes.Offline_Sorting.Units{KeepChans(ChNum),1}==clusters(clusNum));
-            spikeData.(['Clus' num2str(clusters(clusNum))]).Waveforms=Spikes.Offline_Sorting.Waveforms{KeepChans(ChNum),1}(Spikes.Offline_Sorting.Units{KeepChans(ChNum),1}==clusters(clusNum),:);
-        end
-    elseif strfind(fileName,'.hdf5')
-        fileName=regexp(fName,'\w+(?=\.\w+\.)','match','once');
-        Spikes.Offline_Sorting.Units{KeepChans(ChNum),1}=h5read([fileName '.clusters.hdf5'],'/clusters_2');
-        Spikes.Offline_Sorting.SpikeTimes{3,1}=h5read([fileName '.clusters.hdf5'],'/times_2');
-        Spikes.Offline_Sorting.Waveforms{3,1}=h5read([fileName '.clusters.hdf5'],'/data_2');
-        Spikes.Offline_Sorting.Waveforms=h5read([fileName '.templates.hdf5'],'/temp_data');
-        Spikes.Offline_Sorting.templates{10,1}.spiketimes=h5read([fileName '.result.hdf5'],'/spiketimes/temp_10');
-        Spikes.Offline_Sorting.templates{10,1}.amplitudes=h5read([fileName '.result.hdf5'],'/amplitudes/temp_10');
-        % get clusters spiketimes
-        for clusNum=1:length(clusters)
-            spikeData.(['Clus' num2str(clusters(clusNum))])=clusNum;
-            spikeData.(['Clus' num2str(clusters(clusNum))]).SpikeTimes=Spikes.Offline_Sorting.SpikeTimes{KeepChans(ChNum),1}(Spikes.Offline_Sorting.Units{KeepChans(ChNum),1}==clusters(clusNum));
-            spikeData.(['Clus' num2str(clusters(clusNum))]).Waveforms=Spikes.Offline_Sorting.Waveforms{KeepChans(ChNum),1}(Spikes.Offline_Sorting.Units{KeepChans(ChNum),1}==clusters(clusNum),:);
-        end
-        % for clusNum=min(unique(ResortedSpikes.Spikes.inGUI.Units{KeepChans(ChNum),1})):max(unique(ResortedSpikes.Spikes.inGUI.Units{KeepChans(ChNum),1}))
-        %     Data.(['Clus' num2str(clusters(clusNum)+1)]).SpikeTimes=ResortedSpikes.Spikes.inGUI.SpikeTimes{KeepChans(ChNum),1}(ResortedSpikes.Spikes.inGUI.Units{KeepChans(ChNum),1}==clusters(clusNum));
-        %     Data.(['Clus' num2str(clusters(clusNum)+1)]).Waveforms=ResortedSpikes.Spikes.inGUI.Waveforms{KeepChans(ChNum),1}(:,ResortedSpikes.Spikes.inGUI.Units{KeepChans(ChNum),1}==clusters(clusNum))';
-        %end
-        % Data.Clus1.Waveforms=ExtractChunks(rawData(3,:),Data.Clus1.SpikeTimes,82,'tzero');
-    end
     
     %% plot waveforms
     figure;hold on
@@ -83,15 +20,20 @@ for ChNum=1:length(KeepChans)
         'xticklabel',round(linspace(-round(size(spikeData.Clus1.Waveforms,2)/2),round(size(spikeData.Clus1.Waveforms,2)/2),5)/30,2),'TickDir','out');
     axis('tight');box off;
     xlabel('Time (ms)')
-    ylabel('Voltage (mV)')
+    ylabel('Voltage (\muV)')
     set(gca,'Color','white','FontSize',12,'FontName','calibri');
     
     %% by subplots
     figure;
     for clusNum=1:length(clusters)
-        subplot(ceil(length(clusters)/3),3,clusNum)
-        plot(mean(spikeData.(['Clus' num2str(clusters(clusNum))]).Waveforms,2),'color',cmap(double(clusters(clusNum)+1),:))
+%         subplot(ceil(length(clusters)/3),3,clusNum)
+        subplot(1,4,clusNum)
+        plot(mean(spikeData.(['Clus' num2str(clusters(clusNum))]).Waveforms,2),'color',cmap(double(clusters(clusNum)+1),:),'linewidth',3)
         legend(num2str(clusNum),'location','southeast')
+        	axis('tight');box off;
+            xlabel('Time (ms)')
+            ylabel('Voltage (\muV)')
+            set(gca,'Color','white','FontSize',12,'FontName','calibri');
     end
     
     % plot(mean(Data.Clus1.Waveforms)+std(double(Data.Clus1.Waveforms)))
@@ -99,7 +41,7 @@ for ChNum=1:length(KeepChans)
 end
 
 %% plot ISI and ACG
-clusNum=7;
+clusNum=2;
 figure;
 unitST=spikeData.(['Clus' num2str(clusNum)]).SpikeTimes/30;
 % compute interspike interval
@@ -133,10 +75,10 @@ xlabel('Autocorrelogram (5 ms bins)')
 set(gca,'xlim',[-300 300],'Color','white','FontSize',10,'FontName','calibri','TickDir','out');
 hold off
 
-Trials.start=Trials.start-Trials.startClockTime;
-Trials.end=Trials.end-Trials.startClockTime;
 
 %% plot on-pulse off-pulse waveforms, ISI and ACG
+Trials.start=Trials.start-Trials.startClockTime;
+Trials.end=Trials.end-Trials.startClockTime;
 pulseIdx=false(size(unitST,1),size(Trials.start,1));
 %get wich spike time occur during TTL
 for TTLNum=1:size(Trials.start,1)

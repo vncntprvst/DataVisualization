@@ -762,6 +762,10 @@ if isa(handles.rawData,'memmapfile')
     winIdxEnd=winIdxStart+...
         (2*handles.rawDataInfo.excerptSize*numel(handles.rec_info.exportedChan));
     excerptWindow=winIdxStart:winIdxEnd-1;
+    if size(excerptWindow,2)>(2*handles.rawDataInfo.excerptSize*numel(handles.rec_info.exportedChan)) %for some reason
+        excerptWindow=excerptWindow(1:end-(size(excerptWindow,2)-...
+            (2*handles.rawDataInfo.excerptSize*numel(handles.rec_info.exportedChan))));
+    end
     dataExcerpt=handles.rawData.Data(excerptWindow);
     dataExcerpt=reshape(dataExcerpt,[numel(handles.rec_info.exportedChan)...
         handles.rawDataInfo.excerptSize*2]);
@@ -1646,9 +1650,24 @@ function Save_PB_Callback(hObject, ~, handles)
 %     userinfo=UserDirInfo;
 %     save([handles.exportDir userinfo.slash cell2mat(regexp(handles.fname,'.+(?=\.)','match'))...
 %         '_spikesResorted'],'-struct','handles','Spikes','-v7.3');
+try
 save([handles.exportDir  cell2mat(regexp(handles.spikeFile,'.+(?=_spikes)','match'))...
     '_spikesResorted'],'-struct','handles','spikeFile','exportDir',...
     'Spikes','rec_info','subset','-v7.3');
+catch
+    if isfield(handles,'offlineSort_SpikeFile') && ~isempty(handles.offlineSort_SpikeFile)
+%     handles.offlineSort_SpikeDir=handles.exportDir;
+%             handles.offlineSort_SpikeFile=handles.spikeFile;
+%             %go one folder up
+%             exportDirUp=handles.exportDir(1:regexp(handles.exportDir,'\\\w+\\$'));
+            exportDirListing=dir(handles.datDir);
+            infoFile=exportDirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_info.'),...
+                {exportDirListing.name},'UniformOutput',false))).name;      
+    save([handles.datDir  cell2mat(regexp(infoFile,'.+(?=_info)','match'))...
+    '_spikesResorted'],'-struct','handles','spikeFile','exportDir',...
+    'Spikes','rec_info','subset','-v7.3');
+    end
+end
 
 % --- Executes on button press in ShowWF_CB.
 function ShowWF_CB_Callback(hObject, eventdata, handles)
