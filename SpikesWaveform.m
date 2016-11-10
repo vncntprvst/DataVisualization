@@ -1,8 +1,8 @@
 
-KeepChans=10;
+KeepChans=2;
 %% Get spike times and waveforms
-spikeData=SpikeData(KeepChans);
-
+spikeData=GetSpikeData(KeepChans);
+clusters=[1 2 3];
 for ChNum=1:length(KeepChans)
     
     %% plot waveforms
@@ -41,18 +41,18 @@ for ChNum=1:length(KeepChans)
 end
 
 %% plot ISI and ACG
-clusNum=2;
+clusNum=3;
 figure;
 unitST=spikeData.(['Clus' num2str(clusNum)]).SpikeTimes/30;
 % compute interspike interval
 ISI=diff(unitST);
 subplot(2,1,1)
-ISIhist=histogram(double(ISI),0:10:max(ISI)+1);  %,'Normalization','probability'
+ISIhist=histogram(double(ISI),0:1:max(ISI)+1);  %,'Normalization','probability'
 ISIhist.FaceColor = cmap(clusNum,:);
 ISIhist.EdgeColor = 'k';
 xlabel('Inter-spike Interval distribution (ms)')
 axis('tight');box off;
-set(gca,'xlim',[0 500],'Color','white','FontSize',10,'FontName','calibri','TickDir','out');
+set(gca,'xlim',[0 50],'Color','white','FontSize',10,'FontName','calibri','TickDir','out');
 hold off
 title(['Neuron ' num2str(clusNum) ' ISI and ACG'])
 % plot ACG
@@ -63,7 +63,7 @@ numBin=ceil(size(spikeTimeIdx,2)/binSize);
 binUnits = histcounts(double(unitST), linspace(0,size(spikeTimeIdx,2),numBin));
 binUnits(binUnits>1)=1; %no more than 1 spike per ms
 % compute autocorrelogram
-[ACG,lags]=xcorr(double(binUnits),300,'coeff'); %'coeff'
+[ACG,lags]=xcorr(double(binUnits),50,'coeff'); %'coeff'
 ACG(lags==0)=0;
 subplot(2,1,2); hold on
 ACGh=bar(lags,ACG);
@@ -72,7 +72,7 @@ ACGh.FaceColor = cmap(clusNum,:);
 ACGh.EdgeColor = 'none';
 axis('tight');box off;
 xlabel('Autocorrelogram (5 ms bins)')
-set(gca,'xlim',[-300 300],'Color','white','FontSize',10,'FontName','calibri','TickDir','out');
+set(gca,'xlim',[-50 50],'Color','white','FontSize',10,'FontName','calibri','TickDir','out');
 hold off
 
 

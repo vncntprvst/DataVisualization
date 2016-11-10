@@ -38,7 +38,7 @@ end
 %% gather data from each neuron
 % Rasters=cell(length(KeepChans));
 % Rasters.epochnames={'BeginTrial','EndTrial'};
-preAlignWindow=100; 
+preAlignWindow=200; 
 postAlignWindow=200; 
 Rasters=struct('startTrial',[],'endTrial',[],'contactTimes',[]);
 units=unique(spikeData.Units);
@@ -97,6 +97,10 @@ for unitNum=1:length(units)
             end
         end
         
+        %Collect spikes from whole trial
+        trial_epochWin=[syncTrials.start(trialnb),syncTrials.end(trialnb)];
+        Rasters(unitNum).wholeTrial(trialnb,spikeTimes(spikeTimes>trial_epochWin(1) & spikeTimes<trial_epochWin(2))-trial_epochWin(1))=1;
+        
         %Collect spikes from 2nd epoch (end of trial)
         epochWin=[syncTrials.end(trialnb)-preAlignWindow,syncTrials.end(trialnb)+postAlignWindow];
         Rasters(unitNum).endTrial(trialnb,spikeTimes(spikeTimes>epochWin(1) & spikeTimes<epochWin(2))-epochWin(1))=1;
@@ -149,8 +153,10 @@ patch([repmat(midl-2,1,2) repmat(midl+2,1,2)], ...
 title('peri-end trial responses');
 hcb = colorbar('southoutside');
 hcb.Label.String = 'z-scored firing rate';
+
+%% colormap
+cmap=lines;
 %% plot spikes aligned to sweep contact
-cmap=colormap(jet);
 for unitNum=1:length(units)
     touchRasters=Rasters(unitNum).sweepContactTimes;
     if ~isempty(touchRasters)
@@ -231,14 +237,14 @@ for unitNum=1:length(units)
         figure('Position',[1050 120 750 790]);
         colormap jet;
         subplot(3,1,1);
-        [meanUnitTouch,~,meanUnitTouchSEM]=cellfun(@(x) conv_raster(x),touchRasters(trialType==1),'UniformOutput',false);
+        [meanUnitTouch,~,meanUnitTouchSEM]=cellfun(@(x) conv_raster(x,2),touchRasters(trialType==1),'UniformOutput',false);
         meanUnitTouchSEM=meanUnitTouchSEM(cellfun(@(x) size(x,2)>1, meanUnitTouch));
         meanUnitTouch=meanUnitTouch(cellfun(@(x) size(x,2)>1, meanUnitTouch));
         meanUnitTouch=cell2mat(meanUnitTouch);
         imagesc(meanUnitTouch);
 %         imagesc(zscore(meanUnitTouch,[]));
         xlabel('Time (ms)');
-        ylabel('Units','FontWeight','bold','FontSize',12);
+        ylabel('Trials','FontWeight','bold','FontSize',12);
         % draw alignment bar
         currylim=get(gca,'YLim');
         currxlim=get(gca,'XLim');
@@ -249,26 +255,26 @@ for unitNum=1:length(units)
         midl=uint64(midl);
         patch([repmat(midl-2,1,2) repmat(midl+2,1,2)], ...
             [[0 currylim(2)] fliplr([0 currylim(2)])], ...
-            [0 0 0 0],[1 0 0],'EdgeColor','none','FaceAlpha',0.5);
+            [1 0 0],'EdgeColor','none','FaceAlpha',0.5);
         title('sweep-contact responses, texture');
-%         hcb = colorbar('southoutside');
-%         hcb.Label.String = 'z-scored firing rate';
+        hcb = colorbar('southoutside');
+        hcb.Label.String = 'z-scored firing rate';
         subplot(3,1,3); hold on 
         plot(nanmean(meanUnitTouch));
-        %plot confidence intervals
+        %plot SEM
         meanUnitTouchSEM=cell2mat(meanUnitTouchSEM);
         patch([1:size(meanUnitTouch,2),fliplr(1:size(meanUnitTouch,2))],...
         [nanmean(meanUnitTouch)-nanmean(meanUnitTouchSEM),...
         fliplr(nanmean(meanUnitTouch)+nanmean(meanUnitTouchSEM))],cmap(1,:),'EdgeColor','none','FaceAlpha',0.1);
         subplot(3,1,2);
-        [meanUnitTouch,~,meanUnitTouchSEM]=cellfun(@(x) conv_raster(x),touchRasters(trialType==2),'UniformOutput',false);
+        [meanUnitTouch,~,meanUnitTouchSEM]=cellfun(@(x) conv_raster(x,2),touchRasters(trialType==2),'UniformOutput',false);
         meanUnitTouchSEM=meanUnitTouchSEM(cellfun(@(x) size(x,2)>1, meanUnitTouch));
         meanUnitTouch=meanUnitTouch(cellfun(@(x) size(x,2)>1, meanUnitTouch));
         meanUnitTouch=cell2mat(meanUnitTouch);
         imagesc(meanUnitTouch);
 %         imagesc(zscore(meanUnitTouch,[]));
         xlabel('Time (ms)');
-        ylabel('Units','FontWeight','bold','FontSize',12);
+        ylabel('Trials','FontWeight','bold','FontSize',12);
         % draw alignment bar
         currylim=get(gca,'YLim');
         currxlim=get(gca,'XLim');
@@ -279,10 +285,10 @@ for unitNum=1:length(units)
         midl=uint64(midl);
         patch([repmat(midl-2,1,2) repmat(midl+2,1,2)], ...
             [[0 currylim(2)] fliplr([0 currylim(2)])], ...
-            [0 0 0 0],[1 0 0],'EdgeColor','none','FaceAlpha',0.5);
+            [1 0 0],'EdgeColor','none','FaceAlpha',0.5);
         title('sweep-contact responses, no texture');
-%         hcb = colorbar('southoutside');
-%         hcb.Label.String = 'z-scored firing rate';
+        hcb = colorbar('southoutside');
+        hcb.Label.String = 'z-scored firing rate';
         subplot(3,1,3);
         plot(mean(meanUnitTouch));
         %plot confidence intervals
@@ -290,6 +296,17 @@ for unitNum=1:length(units)
         patch([1:size(meanUnitTouch,2),fliplr(1:size(meanUnitTouch,2))],...
         [nanmean(meanUnitTouch)-nanmean(meanUnitTouchSEM),...
         fliplr(nanmean(meanUnitTouch)+nanmean(meanUnitTouchSEM))],cmap(2,:),'EdgeColor','none','FaceAlpha',0.1);
-        legend('texture','no texture');
+        legend('texture','','no texture','boxoff');
     end
 end
+
+% spike triggered video
+%unit 5, trial type 1, #45 
+unitNum=5;
+touchRasters=Rasters(unitNum).panelContactTimes;
+trialType=behaviorEvents.trials.trialType(~cellfun('isempty',touchRasters));
+trialType1=find(trialType==1);
+trialNum=trialType1(45);
+videoFile=['PrV77_56_HSCamClips' num2str(trialNum) '.avi'];
+trialSpikeTimes=Rasters(5).wholeTrial(trialNum,:);
+spikeTrigVideo(find(trialSpikeTimes),videoFile,[cd '\']);
