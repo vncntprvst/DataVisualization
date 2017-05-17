@@ -53,7 +53,7 @@ else
         regexp('list | all | unwanted | folders | here ',x),...
         {dataDirListing.name},'UniformOutput',false)));
     [~,fDateIdx]=sort([dataDirListing.datenum],'descend');
-    recentDataFolder=[exportDir userinfo.slash dataDirListing(fDateIdx(1)).name userinfo.slash];
+    recentDataFolder=[exportDir filesep dataDirListing(fDateIdx(1)).name filesep];
     
     % open user input window
     [handles.spikeFile,handles.exportDir] = uigetfile({'*.mat;*.hdf5','Export Formats';...
@@ -173,7 +173,7 @@ else
         %     handles.exportDir='C:\Data\export\PrV75_61_optostim2_BR_6Ch_SyncCh_CAR';
         %     cd(handles.exportDir);
         %     handles.spikeFile='PrV75_61_optostim2_BR_6Ch_SyncCh_CAR_Ch3.mat';
-        set(handles.FileName,'string',[handles.exportDir userinfo.slash handles.spikeFile])
+        set(handles.FileName,'string',[handles.exportDir filesep handles.spikeFile])
         
         %% Load spike data
         if ~isempty(handles.spikeFile) && ~get(handles.Spikes_PrevSorted_RB,'value')
@@ -1626,7 +1626,7 @@ dataDirListing=dataDirListing(cellfun('isempty',cellfun(@(x)...
     regexp('list | all | unwanted | folders | here ',x),...
     {dataDirListing.name},'UniformOutput',false)));
 [~,fDateIdx]=sort([dataDirListing.datenum],'descend');
-recentDataFolder=[exportDir userinfo.slash dataDirListing(fDateIdx(1)).name userinfo.slash];
+recentDataFolder=[exportDir filesep dataDirListing(fDateIdx(1)).name filesep];
 
 % open user input window
 [handles.spikeFile,handles.exportDir] = uigetfile({'*.mat;*.hdf5','Export Formats';...
@@ -1648,7 +1648,7 @@ function Reload_PB_Callback(hObject, ~, handles)
 %% --- Executes on button press in Save_PB.
 function Save_PB_Callback(hObject, ~, handles)
 %     userinfo=UserDirInfo;
-%     save([handles.exportDir userinfo.slash cell2mat(regexp(handles.fname,'.+(?=\.)','match'))...
+%     save([handles.exportDir filesep cell2mat(regexp(handles.fname,'.+(?=\.)','match'))...
 %         '_spikesResorted'],'-struct','handles','Spikes','-v7.3');
 try
 save([handles.exportDir  cell2mat(regexp(handles.spikeFile,'.+(?=_spikes)','match'))...
