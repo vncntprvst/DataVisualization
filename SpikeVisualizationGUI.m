@@ -1,6 +1,6 @@
 function varargout = SpikeVisualizationGUI(varargin)
 % MATLAB code for SpikeVisualizationGUI.fig
-% Last Modified by GUIDE v2.5 26-Sep-2016 18:12:24
+% Last Modified by GUIDE v2.5 23-Aug-2017 12:33:19
 % version 0.5 (sept 2016), tested in R2014b
 % Vincent Prevosto
 % email: vp35 at duke.edu
@@ -55,9 +55,9 @@ else
     [~,fDateIdx]=sort([dataDirListing.datenum],'descend');
     recentDataFolder=[exportDir filesep dataDirListing(fDateIdx(1)).name filesep];
     
-    % open user input window
+    % ask user to select file to load
     [handles.spikeFile,handles.exportDir] = uigetfile({'*.mat;*.hdf5','Export Formats';...
-        '*.dat','Raw data';'*.*','All Files' },'Most recent data',recentDataFolder);
+        '*.dat','Raw data';'*.*','All Files' },'Select data to load (Most recent data folder shown)',recentDataFolder);
     if handles.spikeFile==0
         handles.spikeFile='';
         handles.exportDir=recentDataFolder;
@@ -80,6 +80,19 @@ guidata(hObject, handles);
 
 % UIWAIT makes SpikeVisualizationGUI wait for user response (see UIRESUME)
 % uiwait(handles.figure1);
+
+%% --- Executes (conditional) at startup and on button press in GetSortedSpikes_PB.
+function GetSortedSpikes_PB_Callback(hObject, ~, handles)
+if ~isfield(handles,'datFile')
+    handles.datFile=[cell2mat(regexp(handles.spikeFile,'.+(?=\_\w+\_\w+\.)','match')) '_nopp'];
+end
+[status,cmdout]=RunSpykingCircus(cd,handles.datFile,'runspkc,exportspikes');
+if handles.GetSortedSpikes_PB.ForegroundColor(1)==0.3490
+    handles.GetSortedSpikes_PB.ForegroundColor=[0.2 0.5 0.7];
+else
+    handles.GetSortedSpikes_PB.ForegroundColor=[0.3490 0.2000 0.3294];
+end
+
 %% Load data function
 function handles=LoadSpikes(handles)
 if isfield(handles,'subset')
@@ -209,10 +222,10 @@ else
                     info{2}=1:info{2};
                     recInfo.rec_info=cell2struct(info, {'samplingRate','exportedChan','bitResolution'}, 1);
                 else
-                recInfo=load(fullfile(fileInfoDir,fileInfoName));
+                    recInfo=load(fullfile(fileInfoDir,fileInfoName));
                 end
             end
-            % just in case the field is named differently 
+            % just in case the field is named differently
             field = fieldnames(recInfo);
             if ~strcmp(field{:},'rec_info')
                 [recInfo.('rec_info')] = recInfo.(field{:});
@@ -251,7 +264,7 @@ else
                 elseif strfind(handles.datFile,'.dat')
                     rawData = memmapfile(fullfile(handles.datDir,handles.datFile),'Format','int16');
                 end
-                %then import
+                %% then import spike Data
                 cd(handles.offlineSort_SpikeDir);
                 if ~isfield(handles.rec_info,'bitResolution') || isempty(handles.rec_info.bitResolution)
                     handles.rec_info.bitResolution=0.25; %default 0.25 bit per uV
@@ -285,7 +298,7 @@ else
                 end
                 handles.Spikes.Offline_Sorting=LoadSpikeData(handles.offlineSort_SpikeFile,rawData,...
                     numel(handles.rec_info.exportedChan),handles.rec_info.samplingRate,handles.rec_info.bitResolution); %handles.rawDataInfo.size(1)
-                clear rawData;               
+                clear rawData;
             end
             cd(handles.exportDir);
         end
@@ -509,24 +522,24 @@ catch % try to load from .dat file
             % ask user for raw data file
         end
     end
-        handles.rawData = memmapfile(fullfile(handles.datDir,handles.datFile),'Format','int16');
-        handles.rawDataInfo= struct('name','rawData',...
-            'size',size(handles.rawData.Data),...
-            'numChan',numel(handles.rec_info.exportedChan),...
-            'source','dat');
-        %check in params file if data was filtered
-        fid  = fopen([fullfile(handles.datDir,handles.datFile(1:end-4)) '.params'],'r');
-        if fid~=-1
-            params=fread(fid,'*char')';
-            if regexp(params,'(?<=filter_done      = )\w+(?= )','match','once')
-                handles.rawDataInfo.preproc=1;
-            else
-                handles.rawDataInfo.preproc=0;
-            end
-            fclose(fid);
+    handles.rawData = memmapfile(fullfile(handles.datDir,handles.datFile),'Format','int16');
+    handles.rawDataInfo= struct('name','rawData',...
+        'size',size(handles.rawData.Data),...
+        'numChan',numel(handles.rec_info.exportedChan),...
+        'source','dat');
+    %check in params file if data was filtered
+    fid  = fopen([fullfile(handles.datDir,handles.datFile(1:end-4)) '.params'],'r');
+    if fid~=-1
+        params=fread(fid,'*char')';
+        if regexp(params,'(?<=filter_done      = )\w+(?= )','match','once')
+            handles.rawDataInfo.preproc=1;
         else
             handles.rawDataInfo.preproc=0;
         end
+        fclose(fid);
+    else
+        handles.rawDataInfo.preproc=0;
+    end
 end
 handles.rawDataInfo.excerptSize=handles.rec_info.samplingRate/2; %1 second as default (-:+ around loc)
 if isa(handles.rawData,'memmapfile')
@@ -543,7 +556,7 @@ DisplayRawData(handles);
 % plot spike rasters
 DisplayRasters(handles);
 
-%% Plot Unsorted Spikes
+%% Plot unsorted spikes
 function handles=Plot_Unsorted_WF(handles)
 electrodeNum=get(handles.SelectElectrode_LB,'value');
 waveForms=handles.Spikes.HandSort.Waveforms{electrodeNum};
@@ -749,15 +762,15 @@ set(gca,'Color','white','FontSize',10,'FontName','Calibri');
 hold off
 
 %% Plot "raw" data
-function DisplayRawData(handles) 
+function dataExcerpt=DisplayRawData(handles)
 electrodeNum=get(handles.SelectElectrode_LB,'value');
-if isa(handles.rawData,'memmapfile') 
+if isa(handles.rawData,'memmapfile')
     %set window index to correct point in data vector
     winIdxStart=(handles.rawDataInfo.excerptLocation-...
         handles.rawDataInfo.excerptSize)*numel(handles.rec_info.exportedChan);
     winIdxStart=winIdxStart-...
         mod(winIdxStart,numel(handles.rec_info.exportedChan))-... % set index loc to first electrode (should be 0 already, he)
-         numel(handles.rec_info.exportedChan)+1;     % set index loc to selected electrode
+        numel(handles.rec_info.exportedChan)+1;     % set index loc to selected electrode
     %         (numel(handles.rec_info.exportedChan) - electrodeNum);     % set index loc to selected electrode
     winIdxEnd=winIdxStart+...
         (2*handles.rawDataInfo.excerptSize*numel(handles.rec_info.exportedChan));
@@ -769,9 +782,9 @@ if isa(handles.rawData,'memmapfile')
     dataExcerpt=handles.rawData.Data(excerptWindow);
     dataExcerpt=reshape(dataExcerpt,[numel(handles.rec_info.exportedChan)...
         handles.rawDataInfo.excerptSize*2]);
-%         foo=handles.rawData.Data;
-%         foo=reshape(foo,[numel(handles.rec_info.exportedChan)...
-%         size(foo,1)/numel(handles.rec_info.exportedChan)]);
+    %         foo=handles.rawData.Data;
+    %         foo=reshape(foo,[numel(handles.rec_info.exportedChan)...
+    %         size(foo,1)/numel(handles.rec_info.exportedChan)]);
 else
     excerptWindow=handles.rawDataInfo.excerptLocation-...
         handles.rawDataInfo.excerptSize:handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize-1;
@@ -781,10 +794,11 @@ if handles.rawDataInfo.preproc==0 % raw data is presumed bandpassed filtered at 
     preprocOption={'CAR','all'};
     dataExcerpt=PreProcData(dataExcerpt,handles.rec_info.samplingRate,preprocOption);
 end
+dataExcerpt=int32(dataExcerpt(electrodeNum,:));
 axes(handles.TimeRaster_Axes);
 cla(handles.TimeRaster_Axes);
 set(handles.TimeRaster_Axes,'Visible','on');
-plot(handles.TimeRaster_Axes,int32(dataExcerpt(electrodeNum,:)));
+plot(handles.TimeRaster_Axes,dataExcerpt);
 % threshold
 % plot(ones(1,size(dataExcerpt(electrodeNum,:),2))*7*mad(single(dataExcerpt(electrodeNum,:)))/1.7315,'k--')
 % plot(ones(1,size(dataExcerpt(electrodeNum,:),2))*-7*mad(single(dataExcerpt(electrodeNum,:)))/1.7315,'k--')
@@ -797,11 +811,11 @@ set(handles.TimeRaster_Axes,'Color','white','FontSize',12,'FontName','calibri');
 % if isa(handles.rawData,'memmapfile')
 %     set(handles.TW_slider,'value',handles.rawDataInfo.excerptLocation/numel(handles.rec_info.exportedChan));
 % else
-    set(handles.TW_slider,'value',handles.rawDataInfo.excerptLocation);
+set(handles.TW_slider,'value',handles.rawDataInfo.excerptLocation);
 % end
 
-%% Plot spike unit markers 
-function DisplayRasters(handles)
+%% Plot spike unit markers
+function spkTimes=DisplayRasters(handles)
 % display color-coded markers for each identified spike
 electrodeNum=get(handles.SelectElectrode_LB,'value');
 axes(handles.TimeRaster_Axes); hold on
@@ -815,19 +829,20 @@ else
     selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
     selectedUnits=unitID(selectedUnitsListIdx);
 end
+spkTimes=cell(size(selectedUnits,1),1);
 if isfield(handles.Spikes,'Online_Sorting') % plot above trace
     if ~isempty(handles.Spikes.Online_Sorting.SpikeTimes)
         for unitP=1:size(selectedUnits,1)
-            spkTimes=handles.Spikes.Online_Sorting.SpikeTimes{electrodeNum}(...
+            spkTimes{unitP}=handles.Spikes.Online_Sorting.SpikeTimes{electrodeNum}(...
                 (handles.Spikes.Online_Sorting.SpikeTimes{electrodeNum}>=...
                 handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize) &...
                 (handles.Spikes.Online_Sorting.SpikeTimes{electrodeNum}<...
                 handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize) &...
                 handles.Spikes.Online_Sorting.Units{electrodeNum}==unitID(selectedUnitsListIdx(unitP)));
-            if ~isempty(spkTimes)
-                rasterHeight=ones(1,size(spkTimes,2))*max(get(gca,'ylim'))/4*3;
+            if ~isempty(spkTimes{unitP})
+                rasterHeight=ones(1,size(spkTimes{unitP},2))*max(get(gca,'ylim'))/4*3;
                 wfWidthComp=round(size(handles.Spikes.Online_Sorting.Waveforms{electrodeNum},1)); %will substract wf width to raster times
-                plot(spkTimes-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize)-wfWidthComp,...
+                plot(spkTimes{unitP}-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize)-wfWidthComp,...
                     rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
                     'linestyle','none','Marker','v');
             end
@@ -835,32 +850,32 @@ if isfield(handles.Spikes,'Online_Sorting') % plot above trace
     end
 end
 if isfield(handles.Spikes,'Offline_Sorting') % plot below trace
-        for unitP=1:size(selectedUnits,1)
-            spkTimes=handles.Spikes.Offline_Sorting.SpikeTimes{electrodeNum}(...
-                (handles.Spikes.Offline_Sorting.SpikeTimes{electrodeNum}>=...
-                handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize) &...
-                (handles.Spikes.Offline_Sorting.SpikeTimes{electrodeNum}<...
-                handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize) &...
-                handles.Spikes.Offline_Sorting.Units{electrodeNum}==unitID(selectedUnitsListIdx(unitP)));
-            if ~isempty(spkTimes)
-                rasterHeight=ones(1,size(spkTimes,2))*(min(get(gca,'ylim'))/4*3);
-                plot(single(spkTimes)-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
-                    rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
-                    'linestyle','none','Marker','^');
-            end
+    for unitP=1:size(selectedUnits,1)
+        spkTimes{unitP}=handles.Spikes.Offline_Sorting.SpikeTimes{electrodeNum}(...
+            (handles.Spikes.Offline_Sorting.SpikeTimes{electrodeNum}>=...
+            handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize) &...
+            (handles.Spikes.Offline_Sorting.SpikeTimes{electrodeNum}<...
+            handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize) &...
+            handles.Spikes.Offline_Sorting.Units{electrodeNum}==unitID(selectedUnitsListIdx(unitP)));
+        if ~isempty(spkTimes{unitP})
+            rasterHeight=ones(1,size(spkTimes{unitP},2))*(min(get(gca,'ylim'))/4*3);
+            plot(single(spkTimes{unitP})-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
+                rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
+                'linestyle','none','Marker','^');
         end
+    end
 end
 if get(handles.Spikes_CurrentVersion_RB,'Value') % also plot below trace, but circles
     for unitP=1:size(selectedUnits,1)
-        spkTimes=handles.Spikes.HandSort.SpikeTimes{electrodeNum}(...
+        spkTimes{unitP}=handles.Spikes.HandSort.SpikeTimes{electrodeNum}(...
             (handles.Spikes.HandSort.SpikeTimes{electrodeNum}>=...
             handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize) &...
             (handles.Spikes.HandSort.SpikeTimes{electrodeNum}<...
             handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize) &...
             handles.Spikes.HandSort.Units{electrodeNum}==unitID(selectedUnitsListIdx(unitP)));
-        if ~isempty(spkTimes)
-            rasterHeight=ones(1,size(spkTimes,2))*(min(get(gca,'ylim'))/4*3);
-            plot(spkTimes-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
+        if ~isempty(spkTimes{unitP})
+            rasterHeight=ones(1,size(spkTimes{unitP},2))*(min(get(gca,'ylim'))/4*3);
+            plot(spkTimes{unitP}-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
                 rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
                 'linestyle','none','Marker','o');
         end
@@ -1210,7 +1225,7 @@ end
 if lineSelecIdx==0
     return
 else
-    set(handles.Spikes_OriginalVersion_RB,'Value',0); 
+    set(handles.Spikes_OriginalVersion_RB,'Value',0);
     set(handles.Spikes_CurrentVersion_RB,'Value',1);
 end
 handles.Spikes.HandSort.Units{electrodeNum}(linesTags(lineSelecIdx))=...
@@ -1275,7 +1290,7 @@ waveForms=waveForms';%one waveform per row
 if lineSelecIdx==0
     return
 else
-    set(handles.Spikes_OriginalVersion_RB,'Value',0); 
+    set(handles.Spikes_OriginalVersion_RB,'Value',0);
     set(handles.Spikes_CurrentVersion_RB,'Value',1);
 end
 
@@ -1330,8 +1345,8 @@ if groupReclass==1 && sum(lineSelecIdx)==1
         ccv(wf)=max(abs(xcov((selectedWF),(subsetWF(wf,:)),2,'biased'))); %'unbiased' 'coeff'
     end
     
-%     clustev = evalclusters([cc ccv], 'kmeans', 'silhouette', 'KList',
-%     2:3); this takes too long, do not use clustev.OptimalK
+    %     clustev = evalclusters([cc ccv], 'kmeans', 'silhouette', 'KList',
+    %     2:3); this takes too long, do not use clustev.OptimalK
     [clusIdx ,Centroids]= kmeans([cc ccv],2,'Distance','cityblock',...
         'Replicates',5);
     
@@ -1448,18 +1463,6 @@ if ~isfield(handles,'datFile')
     handles.datFile=[cell2mat(regexp(handles.spikeFile,'.+(?=\_\w+\_\w+\.)','match')) '_nopp'];
 end
 RunSpykingCircus(cd,handles.datFile,'launcherGUI');
-
-%% --- Executes on button press in GetSortedSpikes_PB.
-function GetSortedSpikes_PB_Callback(hObject, ~, handles)
-if ~isfield(handles,'datFile')
-    handles.datFile=[cell2mat(regexp(handles.spikeFile,'.+(?=\_\w+\_\w+\.)','match')) '_nopp'];
-end
-[status,cmdout]=RunSpykingCircus(cd,handles.datFile,'runspkc,exportspikes');
-if handles.GetSortedSpikes_PB.ForegroundColor(1)==0.3490
-    handles.GetSortedSpikes_PB.ForegroundColor=[0.2 0.5 0.7];
-else
-    handles.GetSortedSpikes_PB.ForegroundColor=[0.3490 0.2000 0.3294];
-end
 
 %% --- Executes on button press in RefineSort_PB.
 function RefineSort_PB_Callback(hObject, ~, handles)
@@ -1651,21 +1654,25 @@ function Save_PB_Callback(hObject, ~, handles)
 %     save([handles.exportDir filesep cell2mat(regexp(handles.fname,'.+(?=\.)','match'))...
 %         '_spikesResorted'],'-struct','handles','Spikes','-v7.3');
 try
-save([handles.exportDir  cell2mat(regexp(handles.spikeFile,'.+(?=_spikes)','match'))...
-    '_spikesResorted'],'-struct','handles','spikeFile','exportDir',...
-    'Spikes','rec_info','subset','-v7.3');
+    save([handles.exportDir  cell2mat(regexp(handles.spikeFile,'.+(?=_spikes)','match'))...
+        '_spikesResorted'],'-struct','handles','spikeFile','exportDir','datFile','datDir',...
+        'Spikes','rec_info','subset','-v7.3');
 catch
     if isfield(handles,'offlineSort_SpikeFile') && ~isempty(handles.offlineSort_SpikeFile)
-%     handles.offlineSort_SpikeDir=handles.exportDir;
-%             handles.offlineSort_SpikeFile=handles.spikeFile;
-%             %go one folder up
-%             exportDirUp=handles.exportDir(1:regexp(handles.exportDir,'\\\w+\\$'));
-            exportDirListing=dir(handles.datDir);
-            infoFile=exportDirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_info.'),...
-                {exportDirListing.name},'UniformOutput',false))).name;      
-    save([handles.datDir  cell2mat(regexp(infoFile,'.+(?=_info)','match'))...
-    '_spikesResorted'],'-struct','handles','spikeFile','exportDir',...
-    'Spikes','rec_info','subset','-v7.3');
+        %     handles.offlineSort_SpikeDir=handles.exportDir;
+        %             handles.offlineSort_SpikeFile=handles.spikeFile;
+        %             %go one folder up
+        %             exportDirUp=handles.exportDir(1:regexp(handles.exportDir,'\\\w+\\$'));
+        exportDirListing=dir(handles.datDir);
+        infoFile=exportDirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_info.'),...
+            {exportDirListing.name},'UniformOutput',false))).name;
+        save([handles.datDir  cell2mat(regexp(infoFile,'.+(?=_info)','match'))...
+            '_spikesResorted'],'-struct','handles','spikeFile','exportDir',...
+            'Spikes','rec_info','subset','-v7.3');
+    else
+        save([handles.exportDir  handles.datFile(1:end-4)  ...
+            '_spikesResorted.mat'],'-struct','handles','spikeFile','exportDir',...
+            'Spikes','rec_info','subset','-v7.3');
     end
 end
 
@@ -1698,3 +1705,71 @@ function Spikes_OriginalVersion_RB_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 % Hint: get(hObject,'Value') returns toggle state of Spikes_OriginalVersion_RB
+
+
+% --- Executes on button press in ExportData_PB.
+function ExportData_PB_Callback(hObject, eventdata, handles)
+electrodeNum=get(handles.SelectElectrode_LB,'value');
+waveForms=handles.Spikes.HandSort.Waveforms{electrodeNum};
+spikeTimes=handles.Spikes.HandSort.SpikeTimes{electrodeNum,:};
+unitsIdx=handles.Spikes.HandSort.Units{electrodeNum};
+samplingRate=handles.Spikes.HandSort.samplingRate(electrodeNum,1);
+
+if get(handles.ShowAllUnits_RB,'value')
+    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    selectedUnits=unitID(unitID>0);
+else
+    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    if unitID==0
+        return;
+    end
+    selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
+    if isempty(selectedUnitsListIdx) || selectedUnitsListIdx(end)>length(unitID)
+        selectedUnitsListIdx=length(unitID);
+    end
+    selectedUnits=unitID(selectedUnitsListIdx);
+end
+% get 'raw data' excerpt
+dataExcerpt.data=DisplayRawData(handles);
+dataExcerpt.xTicks=linspace(0,handles.rec_info.samplingRate*2,4);
+dataExcerpt.xTicklabels=linspace(round(handles.rawDataInfo.excerptLocation-...
+    handles.rawDataInfo.excerptSize)/handles.rec_info.samplingRate,...
+    round(handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize)...
+    /handles.rec_info.samplingRate,4);
+dataExcerpt.location=handles.rawDataInfo.excerptLocation;
+dataExcerpt.excerptSize=handles.rawDataInfo.excerptSize;
+dataExcerpt.spkTimes=DisplayRasters(handles);
+
+cd(handles.exportDir);
+if isfield(handles,'Trials')
+    TTLs=handles.Trials;
+    save([handles.datFile(1:end-4) '_Ch' num2str(electrodeNum) '.mat'],...
+        'waveForms','spikeTimes','unitsIdx','samplingRate','selectedUnits',...
+        'TTLs','dataExcerpt');
+else
+    save([handles.datFile(1:end-4) '_Ch' num2str(electrodeNum) '.mat'],...
+        'waveForms','spikeTimes','unitsIdx','samplingRate','selectedUnits',...
+        'dataExcerpt');
+end
+
+% --- Executes on button press in LoadTTL_PB.
+function LoadTTL_PB_Callback(hObject, eventdata, handles)
+[handles.TTLFile,handles.TTLFileDir] = uigetfile({'*.*','All Files' },...
+    'Select file containing TTL data',handles.exportDir);% '*.mat;*.hdf5','Export Formats';'*.dat;*.nev','Raw data';
+handles.Trials = LoadTTL([handles.TTLFileDir handles.TTLFile]);
+% Update handles structure
+guidata(hObject, handles);
+
+
+% --- Executes on button press in ShowTTL_PB.
+function ShowTTL_PB_Callback(hObject, eventdata, handles)
+% hObject    handle to ShowTTL_PB (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+
+% --- Executes on button press in ExportFigs_PB.
+function ExportFigs_PB_Callback(hObject, eventdata, handles)
+% hObject    handle to ExportFigs_PB (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)

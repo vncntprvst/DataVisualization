@@ -14,7 +14,7 @@ avgpcCorrectSides=vertcat(Performance.CorrectSides)./repmat(sum(vertcat(Performa
 
 % Evolution of performance
 evolPerf=[Performance.overallPerf];
-%calcute bootstrapped 95% confidence intervals
+%calculate bootstrapped 95% confidence intervals
 
 % Get d' and decision criterion (~bias)
 [dprime,crit] = SigDetecPerformance([Performance.hitRate],[Performance.falseAlarm]);

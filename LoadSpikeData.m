@@ -24,6 +24,12 @@ elseif strfind(fName,'.hdf5') % Spyking Circus
             for templt=1:size(thisElTemplates,1)
                 spktimes{templt}=h5read([fName '.result.hdf5'],['/spiketimes/temp_' num2str(thisElTemplates(templt))]);
                 units{templt}=ones(size(spktimes{templt},1),1)*templt;
+                
+                %% get garbage spikes here:
+%                 http://spyking-circus.readthedocs.io/en/latest/advanced/files.html?highlight=fitting
+%                 /gspikes/elec_i if the collect_all mode was activated, 
+%                     then for electrode i, the times at which spikes peaking there have not been fitted.
+                
             end
             % concatenate values
             Spikes.Units{elNum,1}=vertcat(units{:});
