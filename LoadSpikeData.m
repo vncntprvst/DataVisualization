@@ -7,11 +7,7 @@ if logical(regexp(fName,'Ch\d+.')) %from Spike2
     Spikes.samplingRate(electrodes,1)=samplingRate;
 elseif strfind(fName,'.hdf5') % Spyking Circus
     fName=regexp(fName,'\w+(?=\.\w+\.)','match','once');
-    try
-        templateToEl=h5read([fName '.templates.hdf5'],'/electrodes');
-    catch
-        templateToEl=h5read([fName '.clusters.hdf5'],'/electrodes');
-    end
+    templateToEl=h5read([fName '.clusters.hdf5'],'/electrodes'); % this are the *prefered* electrodes for all K templates
     for elNum=1:electrodes
         try
             %Clusters data (including non-clustered spikes)
@@ -20,16 +16,17 @@ elseif strfind(fName,'.hdf5') % Spyking Circus
             
             %Results, after fitting templates
             thisElTemplates=find(templateToEl==elNum-1)-1;
-            [spktimes,units]=deal(cell(size(thisElTemplates,1),1));
+            [spktimes,units]=deal(cell(size(thisElTemplates,1)+1,1));
             for templt=1:size(thisElTemplates,1)
                 spktimes{templt}=h5read([fName '.result.hdf5'],['/spiketimes/temp_' num2str(thisElTemplates(templt))]);
-                units{templt}=ones(size(spktimes{templt},1),1)*templt;
-                
-                %% get garbage spikes here:
-%                 http://spyking-circus.readthedocs.io/en/latest/advanced/files.html?highlight=fitting
-%                 /gspikes/elec_i if the collect_all mode was activated, 
-%                     then for electrode i, the times at which spikes peaking there have not been fitted.
-                
+                units{templt}=ones(size(spktimes{templt},1),1)*templt;               
+            end
+            % collect non-fitted ("garbage") spikes, with unit ID 0
+            try
+            spktimes{templt+1}=h5read([fName '.result.hdf5'],['/gspikes/elec_' num2str(elNum-1)]);
+            units{templt+1}=zeros(size(spktimes{templt+1},1),1);
+            catch 
+                % no "garbage" spikes
             end
             % concatenate values
             Spikes.Units{elNum,1}=vertcat(units{:});

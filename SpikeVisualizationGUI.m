@@ -1,6 +1,6 @@
 function varargout = SpikeVisualizationGUI(varargin)
 % MATLAB code for SpikeVisualizationGUI.fig
-% Last Modified by GUIDE v2.5 23-Aug-2017 12:33:19
+% Last Modified by GUIDE v2.5 19-Sep-2017 19:18:57
 % version 0.5 (sept 2016), tested in R2014b
 % Vincent Prevosto
 % email: vp35 at duke.edu
@@ -24,7 +24,6 @@ else
 end
 % End initialization code - DO NOT EDIT
 
-
 %% --- Executes just before SpikeVisualizationGUI is made visible.
 function SpikeVisualizationGUI_OpeningFcn(hObject, ~, handles, varargin)
 
@@ -39,6 +38,33 @@ if ~isempty(varargin)
         set(handles.FileName,'string',handles.fname(1:end-4));
     else
         set(handles.FileName,'string','');
+    end
+    if isempty(handles.spikeFile)
+        % check if spike sorting results are present in export folder
+        cd(handles.exportDir);
+        listExportDir=dir;
+        listExportDir=listExportDir(cellfun('isempty',cellfun(@(x) strfind('.',x(end)),{listExportDir.name},'UniformOutput',false)));
+        spikeFileIdx=cellfun(@(x) contains(x,'_spikes.mat'),{listExportDir.name});
+        if logical(sum(spikeFileIdx))
+            handles.spikeFile=listExportDir(spikeFileIdx).name;
+        else %maybe spike sorting results are sub folder
+            spikeSortingFolderIdx=[listExportDir.isdir];
+            spikeSortingFolder=[handles.exportDir filesep listExportDir(spikeSortingFolderIdx).name];
+            listSpikeSortingFolder=dir(spikeSortingFolder);
+            spikeFileIdx=cellfun(@(x) contains(x,'result'),{listSpikeSortingFolder.name});
+            if logical(sum(spikeFileIdx))
+                handles.exportDir=spikeSortingFolder;
+                handles.spikeFile=listSpikeSortingFolder(spikeFileIdx).name;
+            else
+                % ask user to select file to load
+                [handles.spikeFile,handles.exportDir] = uigetfile({'*.mat;*.hdf5','Export Formats';...
+                    '*.dat','Raw data';'*.*','All Files' },'Select data to load',cd);
+                if handles.spikeFile==0
+                    handles=rmfield(handles,'spikeFile');
+                    handles.exportDir=cd;
+                end
+            end
+        end
     end
 else
     userinfo=UserDirInfo;
@@ -67,20 +93,19 @@ end
 colormapSeed=colormap(lines);
 handles.cmap=[colormapSeed(1:7,:);(colormapSeed+flipud(colormap(copper)))/2];
 
-if isfield(handles,'spikeFile') && sum(strfind(handles.spikeFile,'.dat'))
+if isfield(handles,'spikeFile') && ~isempty(handles.spikeFile) && sum(strfind(handles.spikeFile,'.dat'))
     GetSortedSpikes_PB_Callback(hObject, handles);
 end
 handles.fileLoaded=0;
-guidata(hObject, handles);
+%create classification table
+handles.classification = table([],[],[],categorical(),{},'VariableNames',{'SortID','Channel','UnitNumber','Classification','Comment'});
+
+if isfield(handles,'spikeFile')
 handles=LoadSpikes(handles);
-guidata(hObject, handles);
 handles=LoadRawData(handles);
+end
 % Update handles structure
 guidata(hObject, handles);
-
-% UIWAIT makes SpikeVisualizationGUI wait for user response (see UIRESUME)
-% uiwait(handles.figure1);
-
 %% --- Executes (conditional) at startup and on button press in GetSortedSpikes_PB.
 function GetSortedSpikes_PB_Callback(hObject, ~, handles)
 if ~isfield(handles,'datFile')
@@ -186,7 +211,7 @@ else
         %     handles.exportDir='C:\Data\export\PrV75_61_optostim2_BR_6Ch_SyncCh_CAR';
         %     cd(handles.exportDir);
         %     handles.spikeFile='PrV75_61_optostim2_BR_6Ch_SyncCh_CAR_Ch3.mat';
-        set(handles.FileName,'string',[handles.exportDir filesep handles.spikeFile])
+        set(handles.FileName,'string',[handles.exportDir handles.spikeFile])
         
         %% Load spike data
         if ~isempty(handles.spikeFile) && ~get(handles.Spikes_PrevSorted_RB,'value')
@@ -203,8 +228,13 @@ else
         % check if we need to load recording info
         if ~isfield(handles,'rec_info')
             try
-                fileName=regexp(handles.spikeFile,'.+(?=_\w+.mat$)','match');
-                recInfo=load([fileName{:} '_info.mat']);
+                if ~isempty(handles.spikeFile)
+                    fileName=regexp(handles.spikeFile,'.+(?=_\w+.mat$)','match');
+                elseif ~isempty(handles.offlineSort_SpikeFile)
+                    fileName=regexp(handles.offlineSort_SpikeFile,'.+(?=\.\w+\.\w+$)','match');
+                    cd ..
+                end
+                   recInfo=load([fileName{:} '_info.mat']);
             catch
                 [fileInfoName,fileInfoDir,FilterIndex] = uigetfile({'*.mat;*.txt','File Info Formats';...
                     '*.*','All Files' },'Select file providing basic recording info, or cancel and enter info');
@@ -246,9 +276,14 @@ else
                     handles.rec_info.numRecChan,handles.rec_info.samplingRate);
             elseif logical(regexp(handles.offlineSort_SpikeFile,'.hdf5')) % Spyking-Circus
                 % first load raw traces in memory
-                fileName=regexp(handles.offlineSort_SpikeFile,'.+?(?=\.)','match');
+                fileName=regexp(handles.offlineSort_SpikeFile,'.+(?=\.\w+\.\w+$)','match');
                 %                 fileName=[fileName{1} '.dat'];
-                if ~exist([fileName{1} '.dat'],'file') ||  ~exist([fileName{1} '.mat'],'file') % then ask where it is
+                if ~exist([fileName{:} '.dat'],'file') && ~exist([fileName{:} '.mat'],'file') 
+                    % try one folder up 
+                    cd ..
+                end
+                if ~exist([fileName{:} '.dat'],'file') && ~exist([fileName{:} '.mat'],'file') 
+                    % then ask where it is
                     [handles.datFile,handles.datDir] = uigetfile({'*.dat;*.mat','Data Formats';...
                         '*.*','All Files' },'Select data file for spike waveform extraction');
                 else
@@ -527,15 +562,16 @@ catch % try to load from .dat file
         'size',size(handles.rawData.Data),...
         'numChan',numel(handles.rec_info.exportedChan),...
         'source','dat');
-    %check in params file if data was filtered
+    %check in params file if data was filtered, and find threshold value
     fid  = fopen([fullfile(handles.datDir,handles.datFile(1:end-4)) '.params'],'r');
     if fid~=-1
         params=fread(fid,'*char')';
-        if regexp(params,'(?<=filter_done      = )\w+(?= )','match','once')
+        if contains(regexp(params,'(?<=filter_done\s+=\s)\w+(?=\s)','match','once'), 'True')
             handles.rawDataInfo.preproc=1;
         else
             handles.rawDataInfo.preproc=0;
         end
+        handles.rec_info.threshold=regexp(params,'(?<=spike_thresh\s+=\s)\w+(?=\s)','match','once');
         fclose(fid);
     else
         handles.rawDataInfo.preproc=0;
@@ -798,13 +834,22 @@ dataExcerpt=int32(dataExcerpt(electrodeNum,:));
 axes(handles.TimeRaster_Axes);
 cla(handles.TimeRaster_Axes);
 set(handles.TimeRaster_Axes,'Visible','on');
-plot(handles.TimeRaster_Axes,dataExcerpt);
+plot(handles.TimeRaster_Axes,dataExcerpt,'k','linewidth',0.1); hold on;
 % threshold
-% plot(ones(1,size(dataExcerpt(electrodeNum,:),2))*7*mad(single(dataExcerpt(electrodeNum,:)))/1.7315,'k--')
-% plot(ones(1,size(dataExcerpt(electrodeNum,:),2))*-7*mad(single(dataExcerpt(electrodeNum,:)))/1.7315,'k--')
-set(handles.TimeRaster_Axes,'xtick',linspace(0,handles.rec_info.samplingRate*2,4),...
-    'xticklabel',round(linspace(round(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize)/handles.rec_info.samplingRate,...
-    round(handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize)/handles.rec_info.samplingRate,4)),'TickDir','out');
+if isfield(handles.rec_info,'threshold')
+    threshold=str2double(handles.rec_info.threshold);
+    plot(ones(1,size(dataExcerpt,2))*threshold*mad(single(dataExcerpt)),'--','Color',[0 0 0 0.3]);
+    plot(ones(1,size(dataExcerpt,2))*-threshold*mad(single(dataExcerpt)),'--','Color',[0 0 0 0.3]);
+else
+    %     threshold=8;
+end
+hold off;
+timeLabels=round(linspace(round(handles.rawDataInfo.excerptLocation-...
+    handles.rawDataInfo.excerptSize)/(handles.rec_info.samplingRate/1000),...
+    round(handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize)/...
+    (handles.rec_info.samplingRate/1000),4)./1000,3); % duration(X,'Format','h')
+set(handles.TimeRaster_Axes,'xtick',round(linspace(0,max(get(handles.TimeRaster_Axes,'xtick')),4)),...
+    'xticklabel',timeLabels); %,'TickDir','out');
 set(handles.TimeRaster_Axes,'ytick',[],'yticklabel',[]); %'ylim'
 axis('tight');box off;
 set(handles.TimeRaster_Axes,'Color','white','FontSize',12,'FontName','calibri');
@@ -812,6 +857,7 @@ set(handles.TimeRaster_Axes,'Color','white','FontSize',12,'FontName','calibri');
 %     set(handles.TW_slider,'value',handles.rawDataInfo.excerptLocation/numel(handles.rec_info.exportedChan));
 % else
 set(handles.TW_slider,'value',handles.rawDataInfo.excerptLocation);
+
 % end
 
 %% Plot spike unit markers
@@ -822,7 +868,7 @@ axes(handles.TimeRaster_Axes); hold on
 % get which unit to plot
 if get(handles.ShowAllUnits_RB,'value')
     unitID=str2num(get(handles.SelectUnit_LB,'string'));
-    selectedUnitsListIdx=find(unitID>0);
+    selectedUnitsListIdx=find(unitID>=0);
     selectedUnits=unitID(selectedUnitsListIdx);
 else
     unitID=str2num(get(handles.SelectUnit_LB,'string'));
@@ -859,9 +905,15 @@ if isfield(handles.Spikes,'Offline_Sorting') % plot below trace
             handles.Spikes.Offline_Sorting.Units{electrodeNum}==unitID(selectedUnitsListIdx(unitP)));
         if ~isempty(spkTimes{unitP})
             rasterHeight=ones(1,size(spkTimes{unitP},2))*(min(get(gca,'ylim'))/4*3);
+            if unitID(selectedUnitsListIdx(unitP))==0 %"garbage spikes"
+                            plot(single(spkTimes{unitP})-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
+                rasterHeight,'Color','k',...
+                'linestyle','none','Marker','*');
+            else
             plot(single(spkTimes{unitP})-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
                 rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
                 'linestyle','none','Marker','^');
+            end
         end
     end
 end
@@ -875,9 +927,15 @@ if get(handles.Spikes_CurrentVersion_RB,'Value') % also plot below trace, but ci
             handles.Spikes.HandSort.Units{electrodeNum}==unitID(selectedUnitsListIdx(unitP)));
         if ~isempty(spkTimes{unitP})
             rasterHeight=ones(1,size(spkTimes{unitP},2))*(min(get(gca,'ylim'))/4*3);
+            if unitID(selectedUnitsListIdx(unitP))==0 %"garbage spikes"
+                            plot(spkTimes{unitP}-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
+                rasterHeight,'Color','k',...
+                'linestyle','none','Marker','*');
+            else
             plot(spkTimes{unitP}-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
                 rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
                 'linestyle','none','Marker','o');
+            end
         end
     end
 end
@@ -888,13 +946,57 @@ function TW_slider_Callback(hObject, ~, handles)
 handles.rawDataInfo.excerptLocation=round(get(handles.TW_slider,'value'));
 if handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize<1
     handles.rawDataInfo.excerptLocation=handles.rawDataInfo.excerptSize+1;
-elseif handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize>max(handles.rawDataInfo.size)
-    handles.rawDataInfo.excerptLocation=max(handles.rawDataInfo.size)-handles.rawDataInfo.excerptSize;
+elseif handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize>get(handles.TW_slider,'max')
+    handles.rawDataInfo.excerptLocation=get(handles.TW_slider,'max')-handles.rawDataInfo.excerptSize;
 end
 % plot "raw" (filtered) trace
 DisplayRawData(handles);
 % plot spike rasters
 DisplayRasters(handles);
+
+%% --- Executes on button press in TWplus_PB.
+function TWplus_PB_Callback(hObject, ~, handles)
+handles.rawDataInfo.excerptSize=handles.rawDataInfo.excerptSize*2;
+mem=memory;
+if ((handles.rawDataInfo.excerptSize*2+1)*2)/(0.5*mem.MemAvailableAllArrays)>1 %handles.rawDataInfo.excerptSize>
+    handles.rawDataInfo.excerptSize=floor((0.5*mem.MemAvailableAllArrays)/2); % handles.rawDataInfo.size(1);
+end
+if handles.rawDataInfo.excerptSize*2+1>handles.rawDataInfo.size(1)
+    handles.rawDataInfo.excerptSize=floor(handles.rawDataInfo.size(1)/2);
+end
+% plot "raw" (filtered) trace
+DisplayRawData(handles);
+% plot spike rasters
+DisplayRasters(handles);
+%  Update handles structure
+guidata(hObject, handles);
+
+%% --- Executes on button press in TWminus_PB.
+function TWminus_PB_Callback(hObject, ~, handles)
+handles.rawDataInfo.excerptSize=round(handles.rawDataInfo.excerptSize/2);
+if handles.rawDataInfo.excerptSize<handles.rec_info.samplingRate/100
+    handles.rawDataInfo.excerptSize=handles.rec_info.samplingRate/100;
+end
+% plot "raw" (filtered) trace
+DisplayRawData(handles);
+% plot spike rasters
+DisplayRasters(handles);
+%  Update handles structure
+guidata(hObject, handles);
+
+%% --- Executes on button press in TWall_PB.
+function TWall_PB_Callback(hObject, ~, handles)
+handles.rawDataInfo.excerptSize=(handles.rec_info.dur/2)-1;
+mem=memory;
+if ((handles.rawDataInfo.excerptSize*2+1)*2)/(0.5*mem.MemAvailableAllArrays)>1 %handles.rawDataInfo.excerptSize>
+    handles.rawDataInfo.excerptSize=floor((0.5*mem.MemAvailableAllArrays)/2); % handles.rawDataInfo.size(1);
+end
+% plot "raw" (filtered) trace
+DisplayRawData(handles);
+% plot spike rasters
+DisplayRasters(handles);
+%  Update handles structure
+guidata(hObject, handles);
 
 %% Plot ISI
 function Plot_ISI(handles)
@@ -1603,15 +1705,6 @@ if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColo
     set(hObject,'BackgroundColor',[.839 .91 .851]);
 end
 
-%% --- Executes on button press in TWplus_PB.
-function TWplus_PB_Callback(hObject, ~, handles)
-
-%% --- Executes on button press in TWminus_PB.
-function TWminus_PB_Callback(hObject, ~, handles)
-
-%% --- Executes on button press in TWall_PB.
-function TWall_PB_Callback(hObject, ~, handles)
-
 %% --- Executes on button press in LoadFile_PB.
 function LoadFile_PB_Callback(hObject, ~, handles)
 if isfield(handles,'spikeFile')
@@ -1676,6 +1769,7 @@ catch
     end
 end
 
+
 % --- Executes on button press in ShowWF_CB.
 function ShowWF_CB_Callback(hObject, eventdata, handles)
 
@@ -1695,17 +1789,11 @@ function Spikes_CurrentVersion_RB_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-% Hint: get(hObject,'Value') returns toggle state of Spikes_CurrentVersion_RB
-
-
 % --- Executes on button press in Spikes_OriginalVersion_RB.
 function Spikes_OriginalVersion_RB_Callback(hObject, eventdata, handles)
 % hObject    handle to Spikes_OriginalVersion_RB (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of Spikes_OriginalVersion_RB
-
 
 % --- Executes on button press in ExportData_PB.
 function ExportData_PB_Callback(hObject, eventdata, handles)
@@ -1773,3 +1861,134 @@ function ExportFigs_PB_Callback(hObject, eventdata, handles)
 % hObject    handle to ExportFigs_PB (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
+
+
+% --- Executes on button press in ClassifySU_PB.
+function ClassifySU_PB_Callback(hObject, eventdata, handles)
+
+channelNum=get(handles.SelectElectrode_LB,'value');
+
+if get(handles.ShowAllUnits_RB,'value')
+    helpdlg('All units are selected. Please select Single Units only','SU classification');
+    return;
+else
+    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    if unitID==0
+        return;
+    end
+    selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
+    if isempty(selectedUnitsListIdx) || selectedUnitsListIdx(end)>length(unitID)
+        selectedUnitsListIdx=length(unitID);
+    end
+    selectedUnits=unitID(selectedUnitsListIdx);
+end
+
+for unit=1:length(selectedUnits)
+    %find previous records
+    sortID=handles.classification.SortID(handles.classification.Channel==channelNum &...
+        handles.classification.UnitNumber==selectedUnits(unit));
+    if isempty(sortID)
+        sortID=size(handles.classification,1)+1;
+    end
+    handles.classification(sortID,:)={sortID,channelNum,selectedUnits(unit),'SU',''};
+end
+guidata(hObject, handles);
+
+% --- Executes on button press in ClassifyMU_PB.
+function ClassifyMU_PB_Callback(hObject, eventdata, handles)
+channelNum=get(handles.SelectElectrode_LB,'value');
+
+if get(handles.ShowAllUnits_RB,'value')
+    helpdlg('All units are selected. Please select Single Units only','SU classification');
+    return;
+else
+    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    if unitID==0
+        return;
+    end
+    selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
+    if isempty(selectedUnitsListIdx) || selectedUnitsListIdx(end)>length(unitID)
+        selectedUnitsListIdx=length(unitID);
+    end
+    selectedUnits=unitID(selectedUnitsListIdx);
+end
+
+for unit=1:length(selectedUnits)
+    %find previous records
+    sortID=handles.classification.SortID(handles.classification.Channel==channelNum &...
+        handles.classification.UnitNumber==selectedUnits(unit));
+    if isempty(sortID)
+        sortID=size(handles.classification,1)+1;
+    end
+    handles.classification(sortID,:)={sortID,channelNum,selectedUnits(unit),'MU',''};
+end
+guidata(hObject, handles);
+
+% --- Executes on button press in ClassifySpecial_PB.
+function ClassifySpecial_PB_Callback(hObject, eventdata, handles)
+
+prompt = {'Enter comment about special classification'};
+dlg_title = '';
+num_lines = 1;
+defaultans = {''};
+comment = inputdlg(prompt,dlg_title,num_lines,defaultans);
+
+channelNum=get(handles.SelectElectrode_LB,'value');
+
+if get(handles.ShowAllUnits_RB,'value')
+    helpdlg('All units are selected. Please select Single Units only','SU classification');
+    return;
+else
+    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    if unitID==0
+        return;
+    end
+    selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
+    if isempty(selectedUnitsListIdx) || selectedUnitsListIdx(end)>length(unitID)
+        selectedUnitsListIdx=length(unitID);
+    end
+    selectedUnits=unitID(selectedUnitsListIdx);
+end
+
+for unit=1:length(selectedUnits)
+    %find previous records
+    sortID=handles.classification.SortID(handles.classification.Channel==channelNum &...
+        handles.classification.UnitNumber==selectedUnits(unit));
+    if isempty(sortID)
+        sortID=size(handles.classification,1)+1;
+    end
+    handles.classification(sortID,:)={sortID,channelNum,selectedUnits(unit),'Special',comment};
+end
+guidata(hObject, handles);
+
+% --------------------------------------------------------------------
+function Help_Menu_Callback(hObject, eventdata, handles)
+
+% --------------------------------------------------------------------
+function AddOptions_Menu_Callback(hObject, eventdata, handles)
+
+% --------------------------------------------------------------------
+function DisplayNtrodeMarkers_MenuItem_Callback(hObject, eventdata, handles)
+
+
+% --- Executes on button press in PB_LoadClass.
+function PB_LoadClass_Callback(hObject, eventdata, handles)
+
+% --- Executes on button press in PB_SaveClass.
+function PB_SaveClass_Callback(hObject, eventdata, handles)
+
+if size(handles.classification,1)>0
+    handles.classification = sortrows(handles.classification,2);
+    if exist([handles.fname  '_classification.xlsx'],'file')
+        overwiteFile = questdlg('Classification file exits. Overwrite?', ...
+            '','Yes','No','Yes');
+        switch overwiteFile
+            case 'Yes'
+                delete([handles.fname  '_classification.xlsx'])
+            case 'No'
+                disp('Classification file not saved')
+                return
+        end
+    end
+    writetable(handles.classification,[handles.fname  '_classification.xlsx']);
+end

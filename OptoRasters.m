@@ -70,7 +70,7 @@ for cellNum=1:length(spikeRasters)
     patch([preAlignWindow preAlignWindow preAlignWindow+2 preAlignWindow+2], ...
         [[0 currylim(2)] fliplr([0 currylim(2)])], ...
         [0 0 0 0],[0.3 0.75 0.93],'EdgeColor','none','FaceAlpha',0.5);
-    set(gca,'Color','white','FontSize',12,'FontName','calibri');
+    set(gca,'Color','white','FontSize',18,'FontName','calibri');
 %     title('Neural response to 10mW stimulation intensity, aligned to stimulation onset');
     % hcb = colorbar('southoutside');
     % hcb.Label.String = 'z-scored firing rate';

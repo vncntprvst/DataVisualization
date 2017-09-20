@@ -1,5 +1,5 @@
-channelNum=11;
-
+channelNum=11; %5
+% SpVi12_133_2Hz2ms_10mW_nopp_Ch %SpVi12_133_2Hz2ms_10mW_nopp_Ch
 spikeData=load(['SpVi12_133_2Hz2ms_10mW_nopp_Ch' num2str(channelNum) '.mat'],'waveForms','spikeTimes','unitsIdx','samplingRate','selectedUnits');
 load(['SpVi12_133_2Hz2ms_10mW_nopp_Ch' num2str(channelNum) '.mat'],'TTLs');
 load(['SpVi12_133_2Hz2ms_10mW_nopp_Ch' num2str(channelNum) '.mat'], 'dataExcerpt');
@@ -59,7 +59,7 @@ cellNum=4;
 figure('Position',[296 149 1504 761]);
 
 % waveforms
-subplot(3,3,1); hold on
+subplot(3,3,[1,4]); hold on
 OptoWaveforms(spikeData,TTLtimes,spikeData.selectedUnits(cellNum),gca)
 
 % rasters
@@ -71,16 +71,16 @@ OptoRasters(spikeRasters(cellNum),preAlignWindow,gca);
 subplot(3,3,[3,6])
 OptoSDF(spikeRasters(cellNum),preAlignWindow,gca)
 
-% ISI
-subplot(3,3,4); hold on
-OptoISI(spikeData,TTLtimes,spikeData.selectedUnits(cellNum),gca)
-
-%ACG
-subplot(3,3,7); hold on
-OptoACG(spikeData,TTLtimes,spikeData.selectedUnits(cellNum),gca)
+% % ISI
+% subplot(3,3,4); hold on
+% OptoISI(spikeData,TTLtimes,spikeData.selectedUnits(cellNum),gca)
+% 
+% %ACG
+% subplot(3,3,7); hold on
+% OptoACG(spikeData,TTLtimes,spikeData.selectedUnits(cellNum),gca)
 
 % raw trace
-subplot(3,3,8:9); hold on
+subplot(3,3,7:9); hold on
 
 msConv=double(spikeData.samplingRate/1000);
 excerptTTLtimes=double(TTLtimes(TTLtimes>(dataExcerpt.location-dataExcerpt.excerptSize)/msConv &...

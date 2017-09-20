@@ -8,7 +8,7 @@ for cellNum=1:length(spikeRasters)
     
     %% plot sdf
     conv_sigma=1;
-%     xTickSteps=round(preAlignWindow/50)*10;
+    %     xTickSteps=round(preAlignWindow/50)*10;
     [sdf{1}, ~, rastsem{1}]=conv_raster(spikeRasters{cellNum},conv_sigma);
     % [sdf{2}, ~, rastsem{2}]=conv_raster(spikeRasters{keepChan},conv_sigma);
     hold on;
@@ -36,8 +36,8 @@ for cellNum=1:length(spikeRasters)
         preAlignWindow-(3*conv_sigma)+2, preAlignWindow-(3*conv_sigma)+2], ...
         [[0 currylim(2)] fliplr([0 currylim(2)])], ...
         [0 0 0 0],[0.3 0.75 0.93],'EdgeColor','none','FaceAlpha',0.5);
-        set(gca,'Color','white','FontSize',12,'FontName','calibri');
+    set(gca,'Color','white','FontSize',18,'FontName','calibri');
     %legend
-    legend([FRploth,OptoStimh],{'Average firing rate','Optical stimulation'});
+    legend([FRploth,OptoStimh],{'Average firing rate','Optical stimulation'},'FontSize',12);
     legend('boxoff')
 end

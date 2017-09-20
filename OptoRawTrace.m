@@ -35,5 +35,5 @@ for cellNum=1:length(spikeTimes)
     end
     box off;
     xlabel('Time (ms)');
-    set(gca,'Color','white','FontSize',12,'FontName','calibri');
+    set(gca,'Color','white','FontSize',18,'FontName','calibri');
 end
