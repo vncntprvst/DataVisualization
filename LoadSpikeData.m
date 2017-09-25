@@ -6,7 +6,7 @@ if logical(regexp(fName,'Ch\d+.')) %from Spike2
     Spikes.Waveforms{electrodes,1}=nw_401.values;
     Spikes.samplingRate(electrodes,1)=samplingRate;
 elseif strfind(fName,'.hdf5') % Spyking Circus
-    fName=regexp(fName,'\w+(?=\.\w+\.)','match','once');
+    fName=regexp(fName,'\S+?(?=\.\w+\.\w+$)','match','once');
     templateToEl=h5read([fName '.clusters.hdf5'],'/electrodes'); % this are the *prefered* electrodes for all K templates
     for elNum=1:electrodes
         try

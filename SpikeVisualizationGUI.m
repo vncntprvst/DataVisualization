@@ -1,6 +1,6 @@
 function varargout = SpikeVisualizationGUI(varargin)
 % MATLAB code for SpikeVisualizationGUI.fig
-% Last Modified by GUIDE v2.5 19-Sep-2017 19:18:57
+% Last Modified by GUIDE v2.5 25-Sep-2017 09:59:21
 % version 0.5 (sept 2016), tested in R2014b
 % Vincent Prevosto
 % email: vp35 at duke.edu
@@ -35,9 +35,9 @@ if ~isempty(varargin)
     % http://www.mathworks.com/matlabcentral/fileexchange/7842-CatStruct
     
     if isfield(handles,'fname')
-        set(handles.FileName,'string',handles.fname(1:end-4));
+        set(handles.TB_FileName,'string',handles.fname(1:end-4));
     else
-        set(handles.FileName,'string','');
+        set(handles.TB_FileName,'string','');
     end
     if isempty(handles.spikeFile)
         % check if spike sorting results are present in export folder
@@ -68,22 +68,26 @@ if ~isempty(varargin)
     end
 else
     userinfo=UserDirInfo;
-    %% get most recently changed data folder
+    %% get most recently changed data folder (looks for a folder named "export")
     exportDir=regexprep(userinfo.directory,'\\\w+$','\\export');
     dataDirListing=dir(exportDir);
-    %removing dots
-    dataDirListing=dataDirListing(cellfun('isempty',cellfun(@(x) strfind(x,'.'),...
-        {dataDirListing.name},'UniformOutput',false)));
-    %removing other folders
-    dataDirListing=dataDirListing(cellfun('isempty',cellfun(@(x)...
-        regexp('list | all | unwanted | folders | here ',x),...
-        {dataDirListing.name},'UniformOutput',false)));
-    [~,fDateIdx]=sort([dataDirListing.datenum],'descend');
-    recentDataFolder=[exportDir filesep dataDirListing(fDateIdx(1)).name filesep];
+    if ~isempty(dataDirListing)
+        %removing dots
+        dataDirListing=dataDirListing(cellfun('isempty',cellfun(@(x) strfind(x,'.'),...
+            {dataDirListing.name},'UniformOutput',false)));
+        %removing other folders
+        dataDirListing=dataDirListing(cellfun('isempty',cellfun(@(x)...
+            regexp('list | all | unwanted | folders | here ',x),...
+            {dataDirListing.name},'UniformOutput',false)));
+        [~,fDateIdx]=sort([dataDirListing.datenum],'descend');
+        recentDataFolder=[exportDir filesep dataDirListing(fDateIdx(1)).name filesep];
+    else
+        recentDataFolder=cd;
+    end
     
     % ask user to select file to load
     [handles.spikeFile,handles.exportDir] = uigetfile({'*.mat;*.hdf5','Export Formats';...
-        '*.dat','Raw data';'*.*','All Files' },'Select data to load (Most recent data folder shown)',recentDataFolder);
+        '*.dat','Raw data';'*.*','All Files' },'Select data to load',recentDataFolder);
     if handles.spikeFile==0
         handles.spikeFile='';
         handles.exportDir=recentDataFolder;
@@ -101,17 +105,18 @@ handles.fileLoaded=0;
 handles.classification = table([],[],[],categorical(),{},'VariableNames',{'SortID','Channel','UnitNumber','Classification','Comment'});
 
 if isfield(handles,'spikeFile')
-handles=LoadSpikes(handles);
-handles=LoadRawData(handles);
+    handles=LoadSpikes(handles);
+    handles=LoadRawData(handles);
 end
 % Update handles structure
 guidata(hObject, handles);
+
 %% --- Executes (conditional) at startup and on button press in GetSortedSpikes_PB.
 function GetSortedSpikes_PB_Callback(hObject, ~, handles)
 if ~isfield(handles,'datFile')
     handles.datFile=[cell2mat(regexp(handles.spikeFile,'.+(?=\_\w+\_\w+\.)','match')) '_nopp'];
 end
-[status,cmdout]=RunSpykingCircus(cd,handles.datFile,'runspkc,exportspikes');
+[status,cmdout]=RunSpykingCircus(cd,handles.datFile,{'runspkc,exportspikes'});
 if handles.GetSortedSpikes_PB.ForegroundColor(1)==0.3490
     handles.GetSortedSpikes_PB.ForegroundColor=[0.2 0.5 0.7];
 else
@@ -133,7 +138,7 @@ end
 axis_name= @(x) sprintf('Chan %.0f',x);
 
 if isfield(handles,'fname') && strcmp(handles.fname,'')
-    set(handles.FileName,'string','')
+    set(handles.TB_FileName,'string','')
 else
     if ~isfield(handles,'fname') && isfield(handles,'rec_info')
         try
@@ -157,7 +162,6 @@ else
     elseif handles.fileLoaded==0
         %% load spike data from matlab export, if exists
         cd(handles.exportDir);
-        userinfo=UserDirInfo;
         exportDirListing=dir;
         if isempty({exportDirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_spikes.'),...
                 {exportDirListing.name},'UniformOutput',false))).name})
@@ -211,7 +215,7 @@ else
         %     handles.exportDir='C:\Data\export\PrV75_61_optostim2_BR_6Ch_SyncCh_CAR';
         %     cd(handles.exportDir);
         %     handles.spikeFile='PrV75_61_optostim2_BR_6Ch_SyncCh_CAR_Ch3.mat';
-        set(handles.FileName,'string',[handles.exportDir handles.spikeFile])
+        set(handles.TB_FileName,'string',[handles.exportDir handles.spikeFile])
         
         %% Load spike data
         if ~isempty(handles.spikeFile) && ~get(handles.Spikes_PrevSorted_RB,'value')
@@ -234,7 +238,7 @@ else
                     fileName=regexp(handles.offlineSort_SpikeFile,'.+(?=\.\w+\.\w+$)','match');
                     cd ..
                 end
-                   recInfo=load([fileName{:} '_info.mat']);
+                recInfo=load([fileName{:} '_info.mat']);
             catch
                 [fileInfoName,fileInfoDir,FilterIndex] = uigetfile({'*.mat;*.txt','File Info Formats';...
                     '*.*','All Files' },'Select file providing basic recording info, or cancel and enter info');
@@ -277,12 +281,12 @@ else
             elseif logical(regexp(handles.offlineSort_SpikeFile,'.hdf5')) % Spyking-Circus
                 % first load raw traces in memory
                 fileName=regexp(handles.offlineSort_SpikeFile,'.+(?=\.\w+\.\w+$)','match');
-                %                 fileName=[fileName{1} '.dat'];
-                if ~exist([fileName{:} '.dat'],'file') && ~exist([fileName{:} '.mat'],'file') 
-                    % try one folder up 
+                %                 tb_filename=[tb_filename{1} '.dat'];
+                if ~exist([fileName{:} '.dat'],'file') && ~exist([fileName{:} '.mat'],'file')
+                    % try one folder up
                     cd ..
                 end
-                if ~exist([fileName{:} '.dat'],'file') && ~exist([fileName{:} '.mat'],'file') 
+                if ~exist([fileName{:} '.dat'],'file') && ~exist([fileName{:} '.mat'],'file')
                     % then ask where it is
                     [handles.datFile,handles.datDir] = uigetfile({'*.dat;*.mat','Data Formats';...
                         '*.*','All Files' },'Select data file for spike waveform extraction');
@@ -309,7 +313,7 @@ else
                 clear rawData;
             elseif logical(regexp(handles.offlineSort_SpikeFile,'rez.mat')) % KiloSort
                 fileName=regexp(handles.offlineSort_SpikeFile,'.+?(?=\.)','match');
-                %                 fileName=[fileName{1} '.dat'];
+                %                 tb_filename=[tb_filename{1} '.dat'];
                 if ~exist([fileName{1} '.dat'],'file') ||  ~exist([fileName{1} '.mat'],'file') % then ask where it is
                     [handles.datFile,handles.datDir] = uigetfile({'*.dat;*.mat','Data Formats';...
                         '*.*','All Files' },'Select data file for spike waveform extraction');
@@ -476,6 +480,46 @@ else
     else
         electrodeNum=get(handles.SelectElectrode_LB,'value');
     end
+    
+    %% color electrode by shanks
+    if isfield(handles.rec_info,'probeID')
+        try
+            handles.userinfo=UserDirInfo;
+        catch
+            handles.userinfo=[];
+        end
+        if ~isfield(handles.userinfo,'probemap')
+            if ~exist('probemaps', 'dir')
+                handles.userinfo.probemap = uigetdir(cd,'select probe maps location');
+                path(handles.userinfo.probemap,path)
+            else
+                allPathDirs=strsplit(path,pathsep);
+                handles.userinfo.probemap=allPathDirs{find(cellfun(@(pathdir) contains(pathdir,'probemaps'),allPathDirs),1)};
+            end
+        end
+        mapping=load([handles.userinfo.probemap filesep handles.rec_info.probeID '.mat']);
+        differentShanks=logical(bwlabel(mod([mapping.(handles.rec_info.probeID).Shank]+1,2)));
+        electrodeList= cellstr(get(handles.SelectElectrode_LB,'String'))';
+        colorChannels=cell(length(electrodeList),1);
+        for elNum=1:length(electrodeList) % ASSUMING ALL EXPORTED CHANNELS ARE SORTED !
+            if differentShanks(elNum)>0
+                colorChannels(elNum)=cellfun(@(thatChannel) sprintf(['<HTML><BODY bgcolor="%s">'...
+                    '<FONT color="%s">%s</FONT></BODY></HTML>'],... %size="+1"
+                    'black','white', thatChannel),electrodeList(elNum),'UniformOutput',false);
+            else
+                colorChannels(elNum)=cellfun(@(thatChannel) sprintf(['<HTML><BODY bgcolor="%s">'...
+                    '<FONT color="%s">%s</FONT></BODY></HTML>'],... %size="+1"
+                    'white','black', thatChannel),electrodeList(elNum),'UniformOutput',false);
+            end
+        end
+        set(handles.SelectElectrode_LB, 'String', colorChannels);
+    end
+    
+    % namestr = cellstr(get(hObject, 'String'));
+    % validx = get(hObject, 'Value');
+    % newstr = regexprep(namestr{validx}, '"red"','"green"');
+    % namestr{validx} = newstr;
+    % set(hObject, 'String', namestr);
     
     %% initialize variables
     unitsIdx=handles.Spikes.HandSort.Units{electrodeNum};
@@ -858,12 +902,13 @@ set(handles.TimeRaster_Axes,'Color','white','FontSize',12,'FontName','calibri');
 % else
 set(handles.TW_slider,'value',handles.rawDataInfo.excerptLocation);
 
-% end
-
 %% Plot spike unit markers
 function spkTimes=DisplayRasters(handles)
 % display color-coded markers for each identified spike
 electrodeNum=get(handles.SelectElectrode_LB,'value');
+if contains(get(handles.DisplayNtrodeMarkers_MenuItem,'Checked'),'on')
+    % get channel values from same Ntrode
+end
 axes(handles.TimeRaster_Axes); hold on
 % get which unit to plot
 if get(handles.ShowAllUnits_RB,'value')
@@ -906,13 +951,13 @@ if isfield(handles.Spikes,'Offline_Sorting') % plot below trace
         if ~isempty(spkTimes{unitP})
             rasterHeight=ones(1,size(spkTimes{unitP},2))*(min(get(gca,'ylim'))/4*3);
             if unitID(selectedUnitsListIdx(unitP))==0 %"garbage spikes"
-                            plot(single(spkTimes{unitP})-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
-                rasterHeight,'Color','k',...
-                'linestyle','none','Marker','*');
+                plot(single(spkTimes{unitP})-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
+                    rasterHeight,'Color','k',...
+                    'linestyle','none','Marker','*');
             else
-            plot(single(spkTimes{unitP})-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
-                rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
-                'linestyle','none','Marker','^');
+                plot(single(spkTimes{unitP})-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
+                    rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
+                    'linestyle','none','Marker','^');
             end
         end
     end
@@ -928,13 +973,13 @@ if get(handles.Spikes_CurrentVersion_RB,'Value') % also plot below trace, but ci
         if ~isempty(spkTimes{unitP})
             rasterHeight=ones(1,size(spkTimes{unitP},2))*(min(get(gca,'ylim'))/4*3);
             if unitID(selectedUnitsListIdx(unitP))==0 %"garbage spikes"
-                            plot(spkTimes{unitP}-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
-                rasterHeight,'Color','k',...
-                'linestyle','none','Marker','*');
+                plot(spkTimes{unitP}-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
+                    rasterHeight,'Color','k',...
+                    'linestyle','none','Marker','*');
             else
-            plot(spkTimes{unitP}-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
-                rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
-                'linestyle','none','Marker','o');
+                plot(spkTimes{unitP}-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
+                    rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
+                    'linestyle','none','Marker','o');
             end
         end
     end
@@ -1556,7 +1601,7 @@ if ~isfield(handles,'datFile')
     handles.datFile=[cell2mat(regexp(handles.spikeFile,'.+(?=\_\w+\_\w+\.)','match')) '_nopp'];
 end
 handles.PreviewTh_PB.ForegroundColor=[0.2 0.5 0.7];
-RunSpykingCircus(cd,handles.datFile,'previewspkc');
+RunSpykingCircus(cd,handles.datFile,{'previewspkc'});
 handles.PreviewTh_PB.ForegroundColor=[0.3490 0.2000 0.3294];
 
 %% --- Executes on button press in LauncherGUI_PB.
@@ -1564,7 +1609,7 @@ function LauncherGUI_PB_Callback(hObject, eventdata, handles)
 if ~isfield(handles,'datFile')
     handles.datFile=[cell2mat(regexp(handles.spikeFile,'.+(?=\_\w+\_\w+\.)','match')) '_nopp'];
 end
-RunSpykingCircus(cd,handles.datFile,'launcherGUI');
+RunSpykingCircus(cd,handles.datFile,{'launcherGUI'});
 
 %% --- Executes on button press in RefineSort_PB.
 function RefineSort_PB_Callback(hObject, ~, handles)
@@ -1572,7 +1617,7 @@ if ~isfield(handles,'datFile')
     handles.datFile=[cell2mat(regexp(handles.spikeFile,'.+(?=\_\w+\_\w+\.)','match')) '_nopp'];
 end
 handles.RefineSort_PB.ForegroundColor=[0.2 0.5 0.7];
-[status,cmdout]=RunSpykingCircus(cd,handles.datFile,'startVisGUI');
+[status,cmdout]=RunSpykingCircus(cd,handles.datFile,{'startVisGUI'});
 handles.RefineSort_PB.ForegroundColor=[0.3490 0.2000 0.3294];
 
 %% --- Outputs from this function are returned to the command line.
@@ -1647,8 +1692,8 @@ confirm = questdlg('Realign Spikes Waveforms?', ...
 switch confirm
     case 'Yes'
         % first load raw traces
-        %         fileName=regexp(handles.spikeFile,'.+(?=_\w+.\w+$)','match');
-        %         load([fileName{:} '_raw.mat']);
+        %         tb_filename=regexp(handles.spikeFile,'.+(?=_\w+.\w+$)','match');
+        %         load([tb_filename{:} '_raw.mat']);
         selectedEl=get(handles.SelectElectrode_LB,'value');
         rawData=handles.rawData.(handles.rawDataInfo.name)(selectedEl,:);
         %then re-align (current waveforms, raw data, spike times, unit IDs)
@@ -1969,7 +2014,11 @@ function AddOptions_Menu_Callback(hObject, eventdata, handles)
 
 % --------------------------------------------------------------------
 function DisplayNtrodeMarkers_MenuItem_Callback(hObject, eventdata, handles)
-
+if contains(get(handles.DisplayNtrodeMarkers_MenuItem,'Checked'),'off')
+    set(handles.DisplayNtrodeMarkers_MenuItem,'Checked','on')
+else
+    set(handles.DisplayNtrodeMarkers_MenuItem,'Checked','off')
+end
 
 % --- Executes on button press in PB_LoadClass.
 function PB_LoadClass_Callback(hObject, eventdata, handles)
