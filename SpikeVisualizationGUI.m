@@ -496,13 +496,15 @@ else
                 allPathDirs=strsplit(path,pathsep);
                 handles.userinfo.probemap=allPathDirs{find(cellfun(@(pathdir) contains(pathdir,'probemaps'),allPathDirs),1)};
             end
+            mapping=load([handles.userinfo.probemap filesep handles.rec_info.probeID '.mat']);
+            handles.rec_info.differentShanks=logical(bwlabel(mod([mapping.(handles.rec_info.probeID).Shank]+1,2)));
+        else
+            handles.rec_info.differentShanks=logical(bwlabel(mod([handles.rec_info.probeLayout.Shank]+1,2)));    
         end
-        mapping=load([handles.userinfo.probemap filesep handles.rec_info.probeID '.mat']);
-        differentShanks=logical(bwlabel(mod([mapping.(handles.rec_info.probeID).Shank]+1,2)));
         electrodeList= cellstr(get(handles.SelectElectrode_LB,'String'))';
         colorChannels=cell(length(electrodeList),1);
         for elNum=1:length(electrodeList) % ASSUMING ALL EXPORTED CHANNELS ARE SORTED !
-            if differentShanks(elNum)>0
+            if handles.rec_info.differentShanks(elNum)>0
                 colorChannels(elNum)=cellfun(@(thatChannel) sprintf(['<HTML><BODY bgcolor="%s">'...
                     '<FONT color="%s">%s</FONT></BODY></HTML>'],... %size="+1"
                     'black','white', thatChannel),electrodeList(elNum),'UniformOutput',false);
@@ -566,6 +568,12 @@ else
         Plot_XCG(handles);
     else
         %         unitsID=[];
+        cla(handles.SortedUnits_Axes);
+        cla(handles.MeanSortedUnits_Axes);
+        cla(handles.ISI_Axes_short);
+        cla(handles.ISI_Axes_long);
+        cla(handles.ACG_Axes);
+        cla(handles.XCorr_Axes);
         set(handles.SelectUnit_LB,'string',num2str(0));
         set(handles.SelectUnit_LB,'value',1);
     end
@@ -592,7 +600,7 @@ try
     end
     handles.rawData = matfile(fullfile(handles.datDir,handles.datFile));
 catch % try to load from .dat file
-    if ~(isfield(handles,'datFile') && ~isempty(strfind(fullfile(handles.datDir,handles.datFile),'.dat')))
+    if ~(isfield(handles,'datFile') && contains(fullfile(handles.datDir,handles.datFile),'.dat'))
         if isfield(handles,'offlineSort_SpikeFile')
             handles.datFile=regexp(handles.offlineSort_SpikeFile,'.+?(?=\.)','match');
             handles.datFile=[handles.datFile{1} '.dat'];
@@ -845,17 +853,26 @@ hold off
 function dataExcerpt=DisplayRawData(handles)
 electrodeNum=get(handles.SelectElectrode_LB,'value');
 if isa(handles.rawData,'memmapfile')
-    %set window index to correct point in data vector
-    winIdxStart=(handles.rawDataInfo.excerptLocation-...
-        handles.rawDataInfo.excerptSize)*numel(handles.rec_info.exportedChan);
-    winIdxStart=winIdxStart-...
-        mod(winIdxStart,numel(handles.rec_info.exportedChan))-... % set index loc to first electrode (should be 0 already, he)
-        numel(handles.rec_info.exportedChan)+1;     % set index loc to selected electrode
-    %         (numel(handles.rec_info.exportedChan) - electrodeNum);     % set index loc to selected electrode
+    %     exwdw=[((30000*106)-15000)*28:((30000*106)+15000)*28-1];
+    % % dataExcerpt=rawData.Data(exwdw);
+    % dataExcerpt=handles.rawData.Data(exwdw);
+    % dataExcerpt=reshape(dataExcerpt,[28 30000]);
+    % figure;
+    % plot(dataExcerpt(10,:))
+    % title('el10 106')
+    winIdxStart=((handles.rawDataInfo.excerptLocation-...
+        double(handles.rawDataInfo.excerptSize))*numel(handles.rec_info.exportedChan))+1;
+    if mod(winIdxStart,numel(handles.rec_info.exportedChan))~=1 %set window index to correct point in data vector
+        winIdxStart=winIdxStart-...
+            mod(winIdxStart,numel(handles.rec_info.exportedChan))-...
+            numel(handles.rec_info.exportedChan)+1;    % set index loc to first electrode
+        %             (numel(handles.rec_info.exportedChan) - electrodeNum);     % set index loc to selected electrode
+    end
     winIdxEnd=winIdxStart+...
         (2*handles.rawDataInfo.excerptSize*numel(handles.rec_info.exportedChan));
     excerptWindow=winIdxStart:winIdxEnd-1;
-    if size(excerptWindow,2)>(2*handles.rawDataInfo.excerptSize*numel(handles.rec_info.exportedChan)) %for some reason
+    if size(excerptWindow,2)>(2*handles.rawDataInfo.excerptSize*...
+            numel(handles.rec_info.exportedChan)) %for some reason
         excerptWindow=excerptWindow(1:end-(size(excerptWindow,2)-...
             (2*handles.rawDataInfo.excerptSize*numel(handles.rec_info.exportedChan))));
     end
@@ -908,78 +925,82 @@ function spkTimes=DisplayRasters(handles)
 electrodeNum=get(handles.SelectElectrode_LB,'value');
 if contains(get(handles.DisplayNtrodeMarkers_MenuItem,'Checked'),'on')
     % get channel values from same Ntrode
+    shankNum=cumsum(logical([0 diff(handles.rec_info.differentShanks(1:handles.rec_info.numRecChan))]));
+    electrodeNum=find(shankNum==shankNum(electrodeNum));
 end
 axes(handles.TimeRaster_Axes); hold on
-% get which unit to plot
-if get(handles.ShowAllUnits_RB,'value')
-    unitID=str2num(get(handles.SelectUnit_LB,'string'));
-    selectedUnitsListIdx=find(unitID>=0);
-    selectedUnits=unitID(selectedUnitsListIdx);
-else
-    unitID=str2num(get(handles.SelectUnit_LB,'string'));
-    selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
-    selectedUnits=unitID(selectedUnitsListIdx);
-end
-spkTimes=cell(size(selectedUnits,1),1);
-if isfield(handles.Spikes,'Online_Sorting') % plot above trace
-    if ~isempty(handles.Spikes.Online_Sorting.SpikeTimes)
+for elNum=1:length(electrodeNum)
+    % get which unit to plot
+    if get(handles.ShowAllUnits_RB,'value') || length(electrodeNum)>1
+        unitID=unique(handles.Spikes.HandSort.Units{electrodeNum(elNum), 1});%  unitID=str2num(get(handles.SelectUnit_LB,'string'));
+        selectedUnitsListIdx=find(unitID>=0);
+        selectedUnits=unitID(selectedUnitsListIdx);
+    else
+        unitID=str2num(get(handles.SelectUnit_LB,'string'));
+        selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
+        selectedUnits=unitID(selectedUnitsListIdx);
+    end
+    spkTimes=cell(size(selectedUnits,1),1);
+    if isfield(handles.Spikes,'Online_Sorting') % plot above trace
+        if ~isempty(handles.Spikes.Online_Sorting.SpikeTimes)
+            for unitP=1:size(selectedUnits,1)
+                spkTimes{unitP}=handles.Spikes.Online_Sorting.SpikeTimes{electrodeNum(elNum)}(...
+                    (handles.Spikes.Online_Sorting.SpikeTimes{electrodeNum(elNum)}>=...
+                    handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize) &...
+                    (handles.Spikes.Online_Sorting.SpikeTimes{electrodeNum(elNum)}<...
+                    handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize) &...
+                    handles.Spikes.Online_Sorting.Units{electrodeNum(elNum)}==unitID(selectedUnitsListIdx(unitP)));
+                if ~isempty(spkTimes{unitP})
+                    rasterHeight=ones(1,size(spkTimes{unitP},2))*max(get(gca,'ylim'))/4*3;
+                    wfWidthComp=round(size(handles.Spikes.Online_Sorting.Waveforms{electrodeNum(elNum)},1)); %will substract wf width to raster times
+                    plot(spkTimes{unitP}-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize)-wfWidthComp,...
+                        rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
+                        'linestyle','none','Marker','v');
+                end
+            end
+        end
+    end
+    if isfield(handles.Spikes,'Offline_Sorting') % plot below trace
         for unitP=1:size(selectedUnits,1)
-            spkTimes{unitP}=handles.Spikes.Online_Sorting.SpikeTimes{electrodeNum}(...
-                (handles.Spikes.Online_Sorting.SpikeTimes{electrodeNum}>=...
+            spkTimes{unitP}=handles.Spikes.Offline_Sorting.SpikeTimes{electrodeNum(elNum)}(...
+                (handles.Spikes.Offline_Sorting.SpikeTimes{electrodeNum(elNum)}>=...
                 handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize) &...
-                (handles.Spikes.Online_Sorting.SpikeTimes{electrodeNum}<...
+                (handles.Spikes.Offline_Sorting.SpikeTimes{electrodeNum(elNum)}<...
                 handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize) &...
-                handles.Spikes.Online_Sorting.Units{electrodeNum}==unitID(selectedUnitsListIdx(unitP)));
+                handles.Spikes.Offline_Sorting.Units{electrodeNum(elNum)}==unitID(selectedUnitsListIdx(unitP)));
             if ~isempty(spkTimes{unitP})
-                rasterHeight=ones(1,size(spkTimes{unitP},2))*max(get(gca,'ylim'))/4*3;
-                wfWidthComp=round(size(handles.Spikes.Online_Sorting.Waveforms{electrodeNum},1)); %will substract wf width to raster times
-                plot(spkTimes{unitP}-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize)-wfWidthComp,...
-                    rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
-                    'linestyle','none','Marker','v');
+                rasterHeight=ones(1,size(spkTimes{unitP},2))*(min(get(gca,'ylim'))/4*3);
+                if unitID(selectedUnitsListIdx(unitP))==0 %"garbage spikes"
+                    plot(single(spkTimes{unitP})-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
+                        rasterHeight,'Color','k',...
+                        'linestyle','none','Marker','*');
+                else
+                    plot(single(spkTimes{unitP})-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
+                        rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
+                        'linestyle','none','Marker','^');
+                end
             end
         end
     end
-end
-if isfield(handles.Spikes,'Offline_Sorting') % plot below trace
-    for unitP=1:size(selectedUnits,1)
-        spkTimes{unitP}=handles.Spikes.Offline_Sorting.SpikeTimes{electrodeNum}(...
-            (handles.Spikes.Offline_Sorting.SpikeTimes{electrodeNum}>=...
-            handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize) &...
-            (handles.Spikes.Offline_Sorting.SpikeTimes{electrodeNum}<...
-            handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize) &...
-            handles.Spikes.Offline_Sorting.Units{electrodeNum}==unitID(selectedUnitsListIdx(unitP)));
-        if ~isempty(spkTimes{unitP})
-            rasterHeight=ones(1,size(spkTimes{unitP},2))*(min(get(gca,'ylim'))/4*3);
-            if unitID(selectedUnitsListIdx(unitP))==0 %"garbage spikes"
-                plot(single(spkTimes{unitP})-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
-                    rasterHeight,'Color','k',...
-                    'linestyle','none','Marker','*');
-            else
-                plot(single(spkTimes{unitP})-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
-                    rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
-                    'linestyle','none','Marker','^');
-            end
-        end
-    end
-end
-if get(handles.Spikes_CurrentVersion_RB,'Value') % also plot below trace, but circles
-    for unitP=1:size(selectedUnits,1)
-        spkTimes{unitP}=handles.Spikes.HandSort.SpikeTimes{electrodeNum}(...
-            (handles.Spikes.HandSort.SpikeTimes{electrodeNum}>=...
-            handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize) &...
-            (handles.Spikes.HandSort.SpikeTimes{electrodeNum}<...
-            handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize) &...
-            handles.Spikes.HandSort.Units{electrodeNum}==unitID(selectedUnitsListIdx(unitP)));
-        if ~isempty(spkTimes{unitP})
-            rasterHeight=ones(1,size(spkTimes{unitP},2))*(min(get(gca,'ylim'))/4*3);
-            if unitID(selectedUnitsListIdx(unitP))==0 %"garbage spikes"
-                plot(spkTimes{unitP}-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
-                    rasterHeight,'Color','k',...
-                    'linestyle','none','Marker','*');
-            else
-                plot(spkTimes{unitP}-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
-                    rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
-                    'linestyle','none','Marker','o');
+    if get(handles.Spikes_CurrentVersion_RB,'Value') % also plot below trace, but circles
+        for unitP=1:size(selectedUnits,1)
+            spkTimes{unitP}=handles.Spikes.HandSort.SpikeTimes{electrodeNum(elNum)}(...
+                (handles.Spikes.HandSort.SpikeTimes{electrodeNum(elNum)}>=...
+                handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize) &...
+                (handles.Spikes.HandSort.SpikeTimes{electrodeNum(elNum)}<...
+                handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize) &...
+                handles.Spikes.HandSort.Units{electrodeNum(elNum)}==unitID(selectedUnitsListIdx(unitP)));
+            if ~isempty(spkTimes{unitP})
+                rasterHeight=ones(1,size(spkTimes{unitP},2))*(min(get(gca,'ylim'))/4*3);
+                if unitID(selectedUnitsListIdx(unitP))==0 %"garbage spikes"
+                    plot(spkTimes{unitP}-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
+                        rasterHeight,'Color','k',...
+                        'linestyle','none','Marker','*');
+                else
+                    plot(spkTimes{unitP}-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
+                        rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
+                        'linestyle','none','Marker','o');
+                end
             end
         end
     end
@@ -988,7 +1009,8 @@ hold off
 
 %% --- Executes on slider movement.
 function TW_slider_Callback(hObject, ~, handles)
-handles.rawDataInfo.excerptLocation=round(get(handles.TW_slider,'value'));
+handles.rawDataInfo.excerptLocation=double(round(get(handles.TW_slider,'value')/...
+    handles.rec_info.samplingRate)*handles.rec_info.samplingRate); %round to nearest second
 if handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize<1
     handles.rawDataInfo.excerptLocation=handles.rawDataInfo.excerptSize+1;
 elseif handles.rawDataInfo.excerptLocation+handles.rawDataInfo.excerptSize>get(handles.TW_slider,'max')
@@ -998,6 +1020,9 @@ end
 DisplayRawData(handles);
 % plot spike rasters
 DisplayRasters(handles);
+% update handles
+guidata(hObject, handles);
+
 
 %% --- Executes on button press in TWplus_PB.
 function TWplus_PB_Callback(hObject, ~, handles)
@@ -2015,7 +2040,12 @@ function AddOptions_Menu_Callback(hObject, eventdata, handles)
 % --------------------------------------------------------------------
 function DisplayNtrodeMarkers_MenuItem_Callback(hObject, eventdata, handles)
 if contains(get(handles.DisplayNtrodeMarkers_MenuItem,'Checked'),'off')
-    set(handles.DisplayNtrodeMarkers_MenuItem,'Checked','on')
+    if isfield(handles.rec_info,'differentShanks')
+        set(handles.DisplayNtrodeMarkers_MenuItem,'Checked','on')
+    else
+        disp('no information available about shanks');
+        return;
+    end
 else
     set(handles.DisplayNtrodeMarkers_MenuItem,'Checked','off')
 end
