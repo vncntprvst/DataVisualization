@@ -1,6 +1,6 @@
 function varargout = SpikeVisualizationGUI(varargin)
 % MATLAB code for SpikeVisualizationGUI.fig
-% Last Modified by GUIDE v2.5 25-Sep-2017 09:59:21
+% Last Modified by GUIDE v2.5 28-Sep-2017 17:36:41
 % version 0.5 (sept 2016), tested in R2014b
 % Vincent Prevosto
 % email: vp35 at duke.edu
@@ -156,6 +156,9 @@ else
         end
         if isfield(handles,'Spikes')
             handles = rmfield(handles,'Spikes');
+        end
+        if isfield(spikeData,'classification')
+            handles = rmfield(handles,'classification');
         end
         handles=CatStruct(handles,spikeData);
         clear spikeData;
@@ -515,6 +518,7 @@ else
             end
         end
         set(handles.SelectElectrode_LB, 'String', colorChannels);
+        set(handles.SelectElectrode_LB ,'ListboxTop',max([1 electrodeNum-3]));
     end
     
     % namestr = cellstr(get(hObject, 'String'));
@@ -534,6 +538,7 @@ else
         % how many units on that electrode?
         unitsID=unique(unitsIdx); %number of clustered units
         set(handles.SelectUnit_LB,'string',num2str(unitsID));
+        handles=ClassificationColor(handles);
         set(handles.SelectUnit_LB,'value',find(unitsID>0));
         
         %% take out big ouliers
@@ -700,11 +705,11 @@ axes(handles.SortedUnits_Axes); hold on;%colormap lines; cmap=colormap;
 cla(handles.SortedUnits_Axes);
 set(handles.SortedUnits_Axes,'Visible','on');
 if get(handles.ShowAllUnits_RB,'value') %all units
-    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    unitID=ReturnUnits(handles.SelectUnit_LB);
     selectedUnitsListIdx=find(unitID>0);
     selectedUnits=unitID(selectedUnitsListIdx);
 else %or selected units
-    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    unitID=ReturnUnits(handles.SelectUnit_LB);
     if unitID==0
         return;
     end
@@ -790,11 +795,11 @@ axes(handles.MeanSortedUnits_Axes); hold on;%colormap lines;
 cla(handles.MeanSortedUnits_Axes);
 set(handles.MeanSortedUnits_Axes,'Visible','on');
 if get(handles.ShowAllUnits_RB,'value')
-    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    unitID=ReturnUnits(handles.SelectUnit_LB);
     selectedUnitsListIdx=find(unitID>0);
     selectedUnits=unitID(selectedUnitsListIdx);
 else
-    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    unitID=ReturnUnits(handles.SelectUnit_LB);
     if unitID==0
         return;
     end
@@ -932,11 +937,11 @@ axes(handles.TimeRaster_Axes); hold on
 for elNum=1:length(electrodeNum)
     % get which unit to plot
     if get(handles.ShowAllUnits_RB,'value') || length(electrodeNum)>1
-        unitID=unique(handles.Spikes.HandSort.Units{electrodeNum(elNum), 1});%  unitID=str2num(get(handles.SelectUnit_LB,'string'));
+        unitID=unique(handles.Spikes.HandSort.Units{electrodeNum(elNum), 1});%  unitID=ReturnUnits(handles.SelectUnit_LB);
         selectedUnitsListIdx=find(unitID>=0);
         selectedUnits=unitID(selectedUnitsListIdx);
     else
-        unitID=str2num(get(handles.SelectUnit_LB,'string'));
+        unitID=ReturnUnits(handles.SelectUnit_LB);
         selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
         selectedUnits=unitID(selectedUnitsListIdx);
     end
@@ -1023,7 +1028,6 @@ DisplayRasters(handles);
 % update handles
 guidata(hObject, handles);
 
-
 %% --- Executes on button press in TWplus_PB.
 function TWplus_PB_Callback(hObject, ~, handles)
 handles.rawDataInfo.excerptSize=handles.rawDataInfo.excerptSize*2;
@@ -1073,12 +1077,12 @@ function Plot_ISI(handles)
 
 % get which unit to plot
 if get(handles.ShowAllUnits_RB,'value')
-    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    unitID=ReturnUnits(handles.SelectUnit_LB);
     selectedUnitsListIdx=find(unitID>0);
     selectedUnits=unitID(selectedUnitsListIdx);
     % keep the first one
 else
-    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    unitID=ReturnUnits(handles.SelectUnit_LB);
     selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
     selectedUnits=unitID(selectedUnitsListIdx);
 end
@@ -1136,12 +1140,12 @@ end
 function Plot_ACG(handles)
 % get which unit to plot
 if get(handles.ShowAllUnits_RB,'value')
-    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    unitID=ReturnUnits(handles.SelectUnit_LB);
     selectedUnitsListIdx=find(unitID>0);
     selectedUnits=unitID(selectedUnitsListIdx);
     % keep the first one
 else
-    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    unitID=ReturnUnits(handles.SelectUnit_LB);
     selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
     selectedUnits=unitID(selectedUnitsListIdx);
 end
@@ -1199,7 +1203,7 @@ if get(handles.ShowAllUnits_RB,'value')
     cla(handles.XCorr_Axes);
     return
 else
-    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    unitID=ReturnUnits(handles.SelectUnit_LB);
     selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
     selectedUnits=unitID(selectedUnitsListIdx);
 end
@@ -1334,9 +1338,9 @@ end
 unitSelection(unitsID(unitSelection)==0)=unitSelection(unitsID(unitSelection)==0)+1;
 set(handles.SelectUnit_LB,'Value',unitSelection);
 set(handles.SelectUnit_LB,'String',num2str(unitsID(unitsID>=0)));
-if max(get(handles.SelectUnit_LB,'value'))>length(str2num(get(handles.SelectUnit_LB,'string')))
+if max(get(handles.SelectUnit_LB,'value'))>length(ReturnUnits(handles.SelectUnit_LB))
     newSelection=get(handles.SelectUnit_LB,'value')-...
-        (max(get(handles.SelectUnit_LB,'value'))-length(str2num(get(handles.SelectUnit_LB,'string'))));
+        (max(get(handles.SelectUnit_LB,'value'))-length(ReturnUnits(handles.SelectUnit_LB)));
     newSelection=newSelection(newSelection>0);
     set(handles.SelectUnit_LB,'value',newSelection);
 end
@@ -1359,7 +1363,7 @@ function SortedUnits_Axes_ButtonDownFcn(hObject, ~, handles)
 electrodeNum=get(handles.SelectElectrode_LB,'value');
 
 %% initialize variables
-unitID=str2num(get(handles.SelectUnit_LB,'string'));
+unitID=ReturnUnits(handles.SelectUnit_LB);
 % for uIdxNum=1:length(unitsID)
 %     unitsIdx{uIdxNum}=find(handles.Spikes.HandSort.Units{electrodeNum}==unitsID(uIdxNum));
 % end
@@ -1432,7 +1436,7 @@ guidata(hObject, handles);
 
 %% --- Executes on mouse press over mean sorted units axes.
 function MeanSortedUnits_Axes_ButtonDownFcn(hObject, ~, handles)
-unitID=str2num(get(handles.SelectUnit_LB,'string'));
+unitID=ReturnUnits(handles.SelectUnit_LB);
 electrodeNum=get(handles.SelectElectrode_LB,'value');
 
 %% initialize variables
@@ -1813,32 +1817,40 @@ function Reload_PB_Callback(hObject, ~, handles)
 
 %% --- Executes on button press in Save_PB.
 function Save_PB_Callback(hObject, ~, handles)
-%     userinfo=UserDirInfo;
-%     save([handles.exportDir filesep cell2mat(regexp(handles.fname,'.+(?=\.)','match'))...
-%         '_spikesResorted'],'-struct','handles','Spikes','-v7.3');
-try
-    save([handles.exportDir  cell2mat(regexp(handles.spikeFile,'.+(?=_spikes)','match'))...
-        '_spikesResorted'],'-struct','handles','spikeFile','exportDir','datFile','datDir',...
-        'Spikes','rec_info','subset','-v7.3');
-catch
-    if isfield(handles,'offlineSort_SpikeFile') && ~isempty(handles.offlineSort_SpikeFile)
-        %     handles.offlineSort_SpikeDir=handles.exportDir;
-        %             handles.offlineSort_SpikeFile=handles.spikeFile;
-        %             %go one folder up
-        %             exportDirUp=handles.exportDir(1:regexp(handles.exportDir,'\\\w+\\$'));
-        exportDirListing=dir(handles.datDir);
-        infoFile=exportDirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_info.'),...
-            {exportDirListing.name},'UniformOutput',false))).name;
-        save([handles.datDir  cell2mat(regexp(infoFile,'.+(?=_info)','match'))...
-            '_spikesResorted'],'-struct','handles','spikeFile','exportDir',...
-            'Spikes','rec_info','subset','-v7.3');
-    else
-        save([handles.exportDir  handles.datFile(1:end-4)  ...
-            '_spikesResorted.mat'],'-struct','handles','spikeFile','exportDir',...
-            'Spikes','rec_info','subset','-v7.3');
-    end
+if ~isfield(handles,'exportDir')
+     handles.exportDir=handles.datDir;
+end
+if isfield(handles,'fname')
+    outputName=[handles.exportDir handles.fname '_spikesResorted'];
+elseif isfield(handles,'spikeFile')
+    outputName=[handles.exportDir cell2mat(regexp(handles.spikeFile,'.+(?=_spikes)','match'))...
+            '_spikesResorted'];
+elseif isfield(handles,'offlineSort_SpikeFile') && ~isempty(handles.offlineSort_SpikeFile) 
+    exportDirListing=dir(handles.exportDir);
+    infoFile=exportDirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_info.'),...
+        {exportDirListing.name},'UniformOutput',false))).name;
+    outputName=[handles.datDir  cell2mat(regexp(infoFile,'.+(?=_info)','match'))...
+        '_spikesResorted'];
+elseif isfield(handles,'datFile')
+    outputName=[handles.exportDir handles.datFile(1:end-4)  ...
+        '_spikesResorted.mat'];
 end
 
+% find existing fields 
+allFields=fieldnames(handles);
+exportFields=allFields(cellfun(@(fldName) ...
+        strcmp(fldName,'spikeFile') || strcmp(fldName,'exportDir') || ...
+        strcmp(fldName,'datFile') || strcmp(fldName,'datDir') || ...
+        strcmp(fldName,'classification') || strcmp(fldName,'Spikes') || ...
+        strcmp(fldName,'rec_info') || strcmp(fldName,'subset') || ...
+        strcmp(fldName,'userinfo') || strcmp(fldName,'rawData') || ...
+        strcmp(fldName,'rawDataInfo') || strcmp(fldName,'fname'),...
+        allFields,'UniformOutput',true));
+exportFields=cellfun(@(x) [x '*'], exportFields,'UniformOutput',false); %placeholders for coma separation
+exportFields=strrep([exportFields{:}],'*',[char(39) ',' char(39)]); %insert coma
+% save file
+eval(['save(outputName,''-struct'',''handles'',' [char(39) exportFields(1:end-2)] ',''-v7.3'')'])
+        
 
 % --- Executes on button press in ShowWF_CB.
 function ShowWF_CB_Callback(hObject, eventdata, handles)
@@ -1874,10 +1886,10 @@ unitsIdx=handles.Spikes.HandSort.Units{electrodeNum};
 samplingRate=handles.Spikes.HandSort.samplingRate(electrodeNum,1);
 
 if get(handles.ShowAllUnits_RB,'value')
-    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    unitID=ReturnUnits(handles.SelectUnit_LB);
     selectedUnits=unitID(unitID>0);
 else
-    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    unitID=ReturnUnits(handles.SelectUnit_LB);
     if unitID==0
         return;
     end
@@ -1939,10 +1951,10 @@ function ClassifySU_PB_Callback(hObject, eventdata, handles)
 channelNum=get(handles.SelectElectrode_LB,'value');
 
 if get(handles.ShowAllUnits_RB,'value')
-    helpdlg('All units are selected. Please select Single Units only','SU classification');
+    helpdlg('All Clusters are selected. Please select a specific Cluster','SU classification');
     return;
 else
-    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    unitID=ReturnUnits(handles.SelectUnit_LB);
     if unitID==0
         return;
     end
@@ -1962,6 +1974,7 @@ for unit=1:length(selectedUnits)
     end
     handles.classification(sortID,:)={sortID,channelNum,selectedUnits(unit),'SU',''};
 end
+handles=ClassificationColor(handles);
 guidata(hObject, handles);
 
 % --- Executes on button press in ClassifyMU_PB.
@@ -1969,10 +1982,10 @@ function ClassifyMU_PB_Callback(hObject, eventdata, handles)
 channelNum=get(handles.SelectElectrode_LB,'value');
 
 if get(handles.ShowAllUnits_RB,'value')
-    helpdlg('All units are selected. Please select Single Units only','SU classification');
+    helpdlg('All Clusters are selected. Please select a specific Cluster','MU classification');
     return;
 else
-    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    unitID=ReturnUnits(handles.SelectUnit_LB);
     if unitID==0
         return;
     end
@@ -1992,24 +2005,18 @@ for unit=1:length(selectedUnits)
     end
     handles.classification(sortID,:)={sortID,channelNum,selectedUnits(unit),'MU',''};
 end
+handles=ClassificationColor(handles);
 guidata(hObject, handles);
 
-% --- Executes on button press in ClassifySpecial_PB.
-function ClassifySpecial_PB_Callback(hObject, eventdata, handles)
-
-prompt = {'Enter comment about special classification'};
-dlg_title = '';
-num_lines = 1;
-defaultans = {''};
-comment = inputdlg(prompt,dlg_title,num_lines,defaultans);
-
+% --- Executes on button press in ClassifyOther_PB.
+function ClassifyOther_PB_Callback(hObject, eventdata, handles)
 channelNum=get(handles.SelectElectrode_LB,'value');
 
 if get(handles.ShowAllUnits_RB,'value')
-    helpdlg('All units are selected. Please select Single Units only','SU classification');
+    helpdlg('All Clusters are selected. Please select a specific Cluster','Other classification');
     return;
 else
-    unitID=str2num(get(handles.SelectUnit_LB,'string'));
+    unitID=ReturnUnits(handles.SelectUnit_LB);
     if unitID==0
         return;
     end
@@ -2027,9 +2034,134 @@ for unit=1:length(selectedUnits)
     if isempty(sortID)
         sortID=size(handles.classification,1)+1;
     end
-    handles.classification(sortID,:)={sortID,channelNum,selectedUnits(unit),'Special',comment};
+    handles.classification(sortID,:)={sortID,channelNum,selectedUnits(unit),'Other',''};
+end
+handles=ClassificationColor(handles);
+guidata(hObject, handles);
+
+% --- Executes on button press in Note_PB.
+function Note_PB_Callback(hObject, eventdata, handles)
+
+prompt = {'Enter comment about special classification'};
+dlg_title = '';
+num_lines = 1;
+defaultans = {''};
+comment = inputdlg(prompt,dlg_title,num_lines,defaultans);
+
+channelNum=get(handles.SelectElectrode_LB,'value');
+
+if get(handles.ShowAllUnits_RB,'value')
+    helpdlg('All Clusters are selected. Please select a specific Cluster','Notes');
+    return;
+else
+    unitID=ReturnUnits(handles.SelectUnit_LB);
+    if unitID==0
+        return;
+    end
+    selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
+    if isempty(selectedUnitsListIdx) || selectedUnitsListIdx(end)>length(unitID)
+        selectedUnitsListIdx=length(unitID);
+    end
+    selectedUnits=unitID(selectedUnitsListIdx);
+end
+
+for unit=1:length(selectedUnits)
+    %find previous records
+    sortID=handles.classification.SortID(handles.classification.Channel==channelNum &...
+        handles.classification.UnitNumber==selectedUnits(unit));
+    if isempty(sortID)
+        sortID=size(handles.classification,1)+1;
+        currentClass=categorical();
+    else
+        currentClass=handles.classification(sortID,:).Classification;
+    end
+    handles.classification(sortID,:)={sortID,channelNum,selectedUnits(unit),currentClass,comment};
 end
 guidata(hObject, handles);
+
+% --- Executes on button press in PB_DeleteClass.
+function PB_DeleteClass_Callback(hObject, eventdata, handles)
+channelNum=get(handles.SelectElectrode_LB,'value');
+
+if get(handles.ShowAllUnits_RB,'value')
+    helpdlg('All Clusters are selected. Please select a specific Cluster','Other classification');
+    return;
+else
+    unitID=ReturnUnits(handles.SelectUnit_LB);
+    if unitID==0
+        return;
+    end
+    selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
+    if isempty(selectedUnitsListIdx) || selectedUnitsListIdx(end)>length(unitID)
+        selectedUnitsListIdx=length(unitID);
+    end
+    selectedUnits=unitID(selectedUnitsListIdx);
+end
+
+for unit=1:length(selectedUnits)
+    %find previous records
+    sortID=handles.classification.SortID(handles.classification.Channel==channelNum &...
+        handles.classification.UnitNumber==selectedUnits(unit));
+    if isempty(sortID)
+        sortID=size(handles.classification,1)+1;
+    end
+    handles.classification(sortID,:)={sortID,channelNum,selectedUnits(unit),'',''};
+end
+handles=ClassificationColor(handles);
+guidata(hObject, handles);
+
+function handles=ClassificationColor(handles)
+channelNum=get(handles.SelectElectrode_LB,'value');
+clusterList=ReturnUnits(handles.SelectUnit_LB);
+colorClusters=cell(length(clusterList),1);
+for clusNum=1:length(clusterList)
+    clusterNum=find(handles.classification.Channel==channelNum & ...
+        handles.classification.UnitNumber==clusterList(clusNum));
+    if isempty(clusterNum)
+        colorClusters(clusNum)=cellfun(@(thatCluster) sprintf(['<HTML><BODY bgcolor="%s">'...
+            '<FONT color="%s">%s</FONT></BODY></HTML>'],... %size="+1"
+            'white','black', num2str(thatCluster)),{clusterList(clusNum)},'UniformOutput',false);
+        continue;
+    end
+    if contains(char(handles.classification.Classification(clusterNum)),'SU')
+        colorClusters(clusNum)=cellfun(@(thatCluster) sprintf(['<HTML><BODY bgcolor="%s">'...
+            '<FONT color="%s">%s</FONT></BODY></HTML>'],... %size="+1"
+            'white','red',  num2str(thatCluster)),{clusterList(clusNum)},'UniformOutput',false);
+    elseif contains(char(handles.classification.Classification(clusterNum)),'MU')
+        colorClusters(clusNum)=cellfun(@(thatCluster) sprintf(['<HTML><BODY bgcolor="%s">'...
+            '<FONT color="%s">%s</FONT></BODY></HTML>'],... %size="+1"
+            'white','blue',  num2str(thatCluster)),{clusterList(clusNum)},'UniformOutput',false);
+    elseif contains(char(handles.classification.Classification(clusterNum)),'Other')
+        colorClusters(clusNum)=cellfun(@(thatCluster) sprintf(['<HTML><BODY bgcolor="%s">'...
+            '<FONT color="%s">%s</FONT></BODY></HTML>'],... %size="+1"
+            'white','green',  num2str(thatCluster)),{clusterList(clusNum)},'UniformOutput',false);
+    else
+        colorClusters(clusNum)=cellfun(@(thatCluster) sprintf(['<HTML><BODY bgcolor="%s">'...
+            '<FONT color="%s">%s</FONT></BODY></HTML>'],... %size="+1"
+            'white','black', thatCluster),{clusterList(clusNum)},'UniformOutput',false);
+    end
+end
+set(handles.SelectUnit_LB, 'String', colorClusters);
+
+
+% --- Executes on button press in PB_SaveClass.
+function PB_SaveClass_Callback(hObject, eventdata, handles)
+
+if size(handles.classification,1)>0
+    handles.classification = sortrows(handles.classification,2);
+    if exist([handles.datDir filesep handles.fname  '_classification.xlsx'],'file')
+        overwiteFile = questdlg('Classification file exits. Overwrite?', ...
+            '','Yes','No','Yes');
+        switch overwiteFile
+            case 'Yes'
+                delete([handles.datDir filesep handles.fname  '_classification.xlsx'])
+            case 'No'
+                disp('Classification file not saved')
+                return
+        end
+    end
+    writetable(handles.classification,[handles.datDir filesep handles.fname  '_classification.xlsx']);
+end
 
 % --------------------------------------------------------------------
 function Help_Menu_Callback(hObject, eventdata, handles)
@@ -2050,24 +2182,14 @@ else
     set(handles.DisplayNtrodeMarkers_MenuItem,'Checked','off')
 end
 
-% --- Executes on button press in PB_LoadClass.
-function PB_LoadClass_Callback(hObject, eventdata, handles)
-
-% --- Executes on button press in PB_SaveClass.
-function PB_SaveClass_Callback(hObject, eventdata, handles)
-
-if size(handles.classification,1)>0
-    handles.classification = sortrows(handles.classification,2);
-    if exist([handles.fname  '_classification.xlsx'],'file')
-        overwiteFile = questdlg('Classification file exits. Overwrite?', ...
-            '','Yes','No','Yes');
-        switch overwiteFile
-            case 'Yes'
-                delete([handles.fname  '_classification.xlsx'])
-            case 'No'
-                disp('Classification file not saved')
-                return
-        end
-    end
-    writetable(handles.classification,[handles.fname  '_classification.xlsx']);
+function units=ReturnUnits(unitsHandle)
+unitString=get(unitsHandle,'string');
+try
+    units=str2num(unitString);
+catch
+    units=cellfun(@(x) str2double(regexp(x,'(?<=>)\s*\d+(?=</FONT>)','match')),unitString,'UniformOutput',true);
 end
+
+
+
+

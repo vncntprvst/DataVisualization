@@ -1,8 +1,9 @@
-channelNum=11; %5
+fileName='039v_0925_2Hz20ms_20mW_28Ch_nopp'; % '039v_0927_2Hz20ms_20mW_28Ch_nopp'; % 'SpVi12_133_2Hz2ms_10mW_nopp';
+channelNum=5;
 % SpVi12_133_2Hz2ms_10mW_nopp_Ch %SpVi12_133_2Hz2ms_10mW_nopp_Ch
-spikeData=load(['SpVi12_133_2Hz2ms_10mW_nopp_Ch' num2str(channelNum) '.mat'],'waveForms','spikeTimes','unitsIdx','samplingRate','selectedUnits');
-load(['SpVi12_133_2Hz2ms_10mW_nopp_Ch' num2str(channelNum) '.mat'],'TTLs');
-load(['SpVi12_133_2Hz2ms_10mW_nopp_Ch' num2str(channelNum) '.mat'], 'dataExcerpt');
+spikeData=load([fileName '_Ch' num2str(channelNum) '.mat'],'waveForms','spikeTimes','unitsIdx','samplingRate','selectedUnits');
+load([fileName '_Ch' num2str(channelNum) '.mat'],'TTLs');
+load([fileName '_Ch' num2str(channelNum) '.mat'], 'dataExcerpt');
 
 %% get spike times and convert to binary array
 for clusNum=1:size(spikeData.selectedUnits,1)
@@ -31,11 +32,9 @@ for clusNum=1:size(spikeData.selectedUnits,1)
     %define parameters
     preAlignWindow=20;
     postAlignWindow=59;
-    firstONpulse=find(diff(TTLs.TTL_times)==mode(diff(TTLs.TTL_times)),1)+1; %assuming mode(diff(TTLs.TTL_times)) = IPI
-    TTLtimes=TTLs.TTL_times(firstONpulse:2:end);
-    TTLtimes=uint32(TTLtimes)/(TTLs.samplingRate{1}/1000);
-    raster=nan(numel(TTLs.TTL_times),preAlignWindow+postAlignWindow+1);
-    for trialNum=1:numel(TTLs.TTL_times)
+    TTLtimes=uint32(TTLtimes)/(TTLs.samplingRate/1000);
+    raster=nan(numel(TTLs.TTLtimes),preAlignWindow+postAlignWindow+1);
+    for trialNum=1:numel(TTLs.TTLtimes)
         try
             raster(trialNum,:)=spikeArray(...
                 TTLtimes(trialNum)-preAlignWindow:...
@@ -52,9 +51,12 @@ for clusNum=1:size(spikeData.selectedUnits,1)
     %     figure; imagesc(raster)
 end
 
-%% Figure
+pulseDur=mode(TTLs.end-TTLs.start);
+
+%% Figures
+for cellNum=1:size(spikeData.selectedUnits,1)
 % keep one cell 
-cellNum=4;
+% cellNum=2;
 
 figure('Position',[296 149 1504 761]);
 
@@ -64,12 +66,12 @@ OptoWaveforms(spikeData,TTLtimes,spikeData.selectedUnits(cellNum),gca)
 
 % rasters
 subplot(3,3,[2,5]);
-OptoRasters(spikeRasters(cellNum),preAlignWindow,gca);
+OptoRasters(spikeRasters(cellNum),preAlignWindow,pulseDur,gca);
 % title(['Channel ' num2str(channelNum) ', Neuron ' num2str(spikeData.selectedUnits(cellNum))],'FontName','Cambria');
 
 % SDF
 subplot(3,3,[3,6])
-OptoSDF(spikeRasters(cellNum),preAlignWindow,gca)
+OptoSDF(spikeRasters(cellNum),preAlignWindow,pulseDur,gca)
 
 % % ISI
 % subplot(3,3,4); hold on
@@ -80,13 +82,13 @@ OptoSDF(spikeRasters(cellNum),preAlignWindow,gca)
 % OptoACG(spikeData,TTLtimes,spikeData.selectedUnits(cellNum),gca)
 
 % raw trace
-subplot(3,3,7:9); hold on
-
-msConv=double(spikeData.samplingRate/1000);
-excerptTTLtimes=double(TTLtimes(TTLtimes>(dataExcerpt.location-dataExcerpt.excerptSize)/msConv &...
-    TTLtimes<(dataExcerpt.location+dataExcerpt.excerptSize)/msConv)-...
-    (dataExcerpt.location-dataExcerpt.excerptSize)/msConv)*msConv;
-excerptTTLtimes=excerptTTLtimes(2); %if wants to keep only one pulse 
-OptoRawTrace(dataExcerpt,dataExcerpt.spkTimes(cellNum),msConv,excerptTTLtimes,gca)
-
+% subplot(3,3,7:9); hold on
+% 
+% msConv=double(spikeData.samplingRate/1000);
+% excerptTTLtimes=double(TTLtimes(TTLtimes>(dataExcerpt.location-dataExcerpt.excerptSize)/msConv &...
+%     TTLtimes<(dataExcerpt.location+dataExcerpt.excerptSize)/msConv)-...
+%     (dataExcerpt.location-dataExcerpt.excerptSize)/msConv)*msConv;
+% excerptTTLtimes=excerptTTLtimes(2); %if wants to keep only one pulse 
+% OptoRawTrace(dataExcerpt,dataExcerpt.spkTimes(cellNum),msConv,excerptTTLtimes,gca)
+end
 

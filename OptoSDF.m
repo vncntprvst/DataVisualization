@@ -1,4 +1,4 @@
-function OptoSDF(spikeRasters,preAlignWindow,axisHandle)
+function OptoSDF(spikeRasters,preAlignWindow,pulseDur,axisHandle)
 
 for cellNum=1:length(spikeRasters)
     if ~exist('axisHandle','var') || isempty(axisHandle)
@@ -33,7 +33,7 @@ for cellNum=1:length(spikeRasters)
     % draw opto stim bar
     currylim=get(gca,'YLim');
     OptoStimh=patch([preAlignWindow-(3*conv_sigma), preAlignWindow-(3*conv_sigma),...
-        preAlignWindow-(3*conv_sigma)+2, preAlignWindow-(3*conv_sigma)+2], ...
+        preAlignWindow-(3*conv_sigma)+pulseDur-1, preAlignWindow-(3*conv_sigma)+pulseDur-1], ...
         [[0 currylim(2)] fliplr([0 currylim(2)])], ...
         [0 0 0 0],[0.3 0.75 0.93],'EdgeColor','none','FaceAlpha',0.5);
     set(gca,'Color','white','FontSize',18,'FontName','calibri');

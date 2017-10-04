@@ -1,4 +1,4 @@
-function OptoRasters(spikeRasters,preAlignWindow,axisHandle)
+function OptoRasters(spikeRasters,preAlignWindow,pulseDur,axisHandle)
 
 %% plot raster showing all channels
 % figure('Position',[1050 120 750 790]);
@@ -67,7 +67,7 @@ for cellNum=1:length(spikeRasters)
     set(gca,'XTickLabel',-10:10:40,'FontSize',10,'FontName','calibri','TickDir','out');
     
     %opto stim patch
-    patch([preAlignWindow preAlignWindow preAlignWindow+2 preAlignWindow+2], ...
+    patch([preAlignWindow preAlignWindow preAlignWindow+pulseDur-1 preAlignWindow+pulseDur-1], ...
         [[0 currylim(2)] fliplr([0 currylim(2)])], ...
         [0 0 0 0],[0.3 0.75 0.93],'EdgeColor','none','FaceAlpha',0.5);
     set(gca,'Color','white','FontSize',18,'FontName','calibri');
