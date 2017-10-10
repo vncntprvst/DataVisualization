@@ -1,0 +1,41 @@
+function labels=dgsagfd(snippets,labels,option)
+
+%load('040v_1002_2Hz20ms_30mW_22Ch_nopp_Ch12.mat')
+
+numDims=2;
+pcaDims=50;
+perplexity=50;
+theta=0.5;
+alg='svd';
+
+comps = tsne(single(waveForms'));
+[~,comps] = pca(single(waveForms'));
+comps = fast_tsne(waveForms', numDims, pcaDims, perplexity, theta, alg);
+
+cmap=lines; cmap=[0,0,0;cmap];
+figure; scatter(comps(:,2), comps(:,2), unitsIdx,cmap,'.',7);
+
+% 
+% clusterCat = gmdistribution(PrComps(1,:),...
+%     [abs(min(PrComps(:,1)))+abs(max(PrComps(:,1))),...
+%     -0; -0, abs(min(PrComps(:,2)))+abs(max(PrComps(:,2)))]);
+% mahalDis = mahal(clusterCat,PrComps(2:end,:));
+% % scatter(PrComps(:,1),PrComps(:,2),50,mahalDis(:,1),'.')
+% % hb = colorbar;
+% % ylabel(hb,'Mahalanobis Distance to Component 1')
+% 
+% similIdx=find(mahalDis<max(mahalDis)/10);
+% % figure
+% % scatter(PrComps(similIdx,1), PrComps(similIdx,2), 'k.');
+
+dist = pdist2(Y,Y);
+
+% options.method = 'gaussian';
+% options.percent = 2;
+% options.sigma = 20;
+% options.trim_halo = false;
+% options.n_clusters = Inf;
+% options.show_plot = false;
+% options.M = 10;
+
+[L, center_idxs] = cluster_dp(dist); %get from https://github.com/shihai1991/kernel-density-peaks

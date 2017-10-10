@@ -1,6 +1,6 @@
 function varargout = SpikeVisualizationGUI(varargin)
 % MATLAB code for SpikeVisualizationGUI.fig
-% Last Modified by GUIDE v2.5 28-Sep-2017 17:36:41
+% Last Modified by GUIDE v2.5 04-Oct-2017 19:17:57
 % version 0.5 (sept 2016), tested in R2014b
 % Vincent Prevosto
 % email: vp35 at duke.edu
@@ -221,7 +221,7 @@ else
         set(handles.TB_FileName,'string',[handles.exportDir handles.spikeFile])
         
         %% Load spike data
-        if ~isempty(handles.spikeFile) && ~get(handles.Spikes_PrevSorted_RB,'value')
+        if ~isempty(handles.spikeFile) && ~strcmp(set(handles.Spikes_PrevSorted_Menu,'Checked'),'on')
             spikeData=load(handles.spikeFile);
             if isfield(handles,'Spikes')
                 % This will delete all Spikes data inlcuding any changes to HandSort
@@ -344,7 +344,7 @@ else
             end
             cd(handles.exportDir);
         end
-        if get(handles.Spikes_Th_RB,'value')
+        if strcmp(get(handles.Spikes_Th_Menu,'Checked'),'on')
             %extract waveforms if needed
             if ~isfield(handles.Spikes.Offline_Threshold,'Waveforms')
                 % first load raw traces
@@ -362,23 +362,23 @@ else
             % all good
         elseif isfield(handles.Spikes,'Online_Sorting') || isfield(handles.Spikes,'Offline_Sorting') ...
                 || isfield(handles.Spikes,'Offline_Threshold')
-            if isfield(handles.Spikes,'Offline_Threshold') && get(handles.Spikes_Th_RB,'value')
-                set(handles.Spikes_SortOff_RB,'value',0);
-                set(handles.Spikes_SortOn_RB,'value',0);
+            if isfield(handles.Spikes,'Offline_Threshold') && strcmp(get(handles.Spikes_Th_Menu,'Checked'),'on')
+                set(handles.Spikes_SortOff_Menu,'Checked','off');
+                set(handles.Spikes_SortOn_Menu,'Checked','off');
                 handles.Spikes.HandSort.Units=handles.Spikes.Offline_Threshold.Units;
                 handles.Spikes.HandSort.SpikeTimes=handles.Spikes.Offline_Threshold.SpikeTimes;
                 handles.Spikes.HandSort.Waveforms=handles.Spikes.Offline_Threshold.Waveforms;
                 handles.Spikes.HandSort.samplingRate=handles.Spikes.Offline_Threshold.samplingRate;
-            elseif isfield(handles.Spikes,'Offline_Sorting') || get(handles.Spikes_SortOff_RB,'value')
-                set(handles.Spikes_SortOff_RB,'value',1);
-                set(handles.Spikes_SortOn_RB,'value',0);
+            elseif isfield(handles.Spikes,'Offline_Sorting') || strcmp(get(handles.Spikes_SortOff_Menu,'Checked'),'on')
+                set(handles.Spikes_SortOff_Menu,'Checked','on');
+                set(handles.Spikes_SortOn_Menu,'Checked','off');
                 handles.Spikes.HandSort.Units=handles.Spikes.Offline_Sorting.Units;
                 handles.Spikes.HandSort.SpikeTimes=handles.Spikes.Offline_Sorting.SpikeTimes;
                 handles.Spikes.HandSort.Waveforms=handles.Spikes.Offline_Sorting.Waveforms;
                 handles.Spikes.HandSort.samplingRate=handles.Spikes.Offline_Sorting.samplingRate;
-            elseif isfield(handles.Spikes,'Online_Sorting') || get(handles.Spikes_SortOn_RB,'value')
-                set(handles.Spikes_SortOff_RB,'value',0);
-                set(handles.Spikes_SortOn_RB,'value',1);
+            elseif isfield(handles.Spikes,'Online_Sorting') || strcmp(get(handles.Spikes_SortOn_Menu,'Checked'),'on')
+                set(handles.Spikes_SortOff_Menu,'Checked','off');
+                set(handles.Spikes_SortOn_Menu,'Checked','on');
                 handles.Spikes.HandSort.Units=handles.Spikes.Online_Sorting.Units;
                 handles.Spikes.HandSort.SpikeTimes=handles.Spikes.Online_Sorting.SpikeTimes;
                 handles.Spikes.HandSort.Waveforms=handles.Spikes.Online_Sorting.Waveforms;
@@ -987,7 +987,7 @@ for elNum=1:length(electrodeNum)
             end
         end
     end
-    if get(handles.Spikes_CurrentVersion_RB,'Value') % also plot below trace, but circles
+    if strcmp(get(handles.Spikes_CurrentVersion_Menu,'Checked'),'on') % also plot below trace, but circles
         for unitP=1:size(selectedUnits,1)
             spkTimes{unitP}=handles.Spikes.HandSort.SpikeTimes{electrodeNum(elNum)}(...
                 (handles.Spikes.HandSort.SpikeTimes{electrodeNum(elNum)}>=...
@@ -1401,8 +1401,8 @@ end
 if lineSelecIdx==0
     return
 else
-    set(handles.Spikes_OriginalVersion_RB,'Value',0);
-    set(handles.Spikes_CurrentVersion_RB,'Value',1);
+    set(handles.Spikes_OriginalVersion_Menu,'Checked','off');
+    set(handles.Spikes_CurrentVersion_Menu,'Checked','on');
 end
 handles.Spikes.HandSort.Units{electrodeNum}(linesTags(lineSelecIdx))=...
     clusterClasses(lineSelecIdx);
@@ -1466,8 +1466,8 @@ waveForms=waveForms';%one waveform per row
 if lineSelecIdx==0
     return
 else
-    set(handles.Spikes_OriginalVersion_RB,'Value',0);
-    set(handles.Spikes_CurrentVersion_RB,'Value',1);
+    set(handles.Spikes_OriginalVersion_Menu,'Checked','off');
+    set(handles.Spikes_CurrentVersion_Menu,'Checked','on');
 end
 
 changeUnits=clusterClasses(clusterClasses~=unique(newClasses(lineSelecIdx)) & lineSelecIdx');
@@ -1655,64 +1655,6 @@ function varargout = SpikeVisualizationGUI_OutputFcn(hObject, ~, handles)
 % Get default command line output from handles structure
 varargout{1} = handles.output;
 
-%% --- Executes on button press in Spikes_SortOn_RB.
-function Spikes_SortOn_RB_Callback(hObject, ~, handles)
-set(handles.Spikes_SortOn_RB,'value',1);
-set(handles.Spikes_SortOff_RB,'value',0);
-set(handles.Spikes_Th_RB,'value',0);
-% [handles.spikeFile,handles.exportDir] = uigetfile({'*.mat;*.hdf5','All Data Formats';...
-%     '*.*','All Files' },'Export folder',handles.exportDir);
-handles.fileLoaded=0;
-handles=LoadSpikes(handles);
-% Update handles structure
-guidata(hObject, handles);
-
-%% --- Executes on button press in Spikes_SortOff_RB.
-function Spikes_SortOff_RB_Callback(hObject, ~, handles)
-set(handles.Spikes_SortOff_RB,'value',1);
-set(handles.Spikes_SortOn_RB,'value',0);
-set(handles.Spikes_Th_RB,'value',0);
-
-[handles.spikeFile,handles.exportDir] = uigetfile({'*.mat;*.hdf5','All Data Formats';...
-    '*.*','All Files' },'Export folder',handles.exportDir);
-handles.fileLoaded=0;
-handles=LoadSpikes(handles);
-% plot "raw" (filtered) trace
-DisplayRawData(handles);
-% plot spike rasters
-DisplayRasters(handles);
-% Update handles structure
-guidata(hObject, handles);
-
-%% --- Executes on button press in Spikes_Th_RB.
-function Spikes_Th_RB_Callback(hObject, ~, handles)
-set(handles.Spikes_Th_RB,'value',1);
-set(handles.Spikes_SortOn_RB,'value',0);
-set(handles.Spikes_SortOff_RB,'value',0);
-if isempty(handles.spikeFile) || ~strcmp(handles.spikeFile(end-2:end),'mat')
-    [handles.spikeFile,handles.exportDir] = uigetfile({'*.mat;*.hdf5','All Data Formats';...
-        '*.*','All Files' },'Export folder',handles.exportDir);
-end
-handles.fileLoaded=0;
-handles=LoadSpikes(handles);
-% Update handles structure
-guidata(hObject, handles);
-
-% --- Executes on button press in Spikes_PrevSorted_RB.
-function Spikes_PrevSorted_RB_Callback(hObject, eventdata, handles)
-set(handles.Spikes_PrevSorted_RB,'value',1);
-set(handles.Spikes_Th_RB,'value',0);
-set(handles.Spikes_SortOn_RB,'value',0);
-set(handles.Spikes_SortOff_RB,'value',0);
-if ~strcmp(handles.spikeFile(end-2:end),'mat')
-    [handles.spikeFile,handles.exportDir] = uigetfile({'*.mat;*.hdf5','All Data Formats';...
-        '*.*','All Files' },'Export folder',handles.exportDir);
-end
-handles.fileLoaded=0;
-handles=LoadSpikes(handles);
-% Update handles structure
-guidata(hObject, handles);
-
 % --- Executes on button press in PeakReAlign_PB.
 function PeakReAlign_PB_Callback(hObject, eventdata, handles)
 % confirm re-alignment
@@ -1864,22 +1806,11 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
     set(hObject,'BackgroundColor','white');
 end
 
-
-% --- Executes on button press in Spikes_CurrentVersion_RB.
-function Spikes_CurrentVersion_RB_Callback(hObject, eventdata, handles)
-% hObject    handle to Spikes_CurrentVersion_RB (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% --- Executes on button press in Spikes_OriginalVersion_RB.
-function Spikes_OriginalVersion_RB_Callback(hObject, eventdata, handles)
-% hObject    handle to Spikes_OriginalVersion_RB (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
 % --- Executes on button press in ExportData_PB.
 function ExportData_PB_Callback(hObject, eventdata, handles)
 electrodeNum=get(handles.SelectElectrode_LB,'value');
+electrodeList=ReturnElectrodes(handles.SelectElectrode_LB);
+electrodeLabel=electrodeList(electrodeNum);
 waveForms=handles.Spikes.HandSort.Waveforms{electrodeNum};
 spikeTimes=handles.Spikes.HandSort.SpikeTimes{electrodeNum,:};
 unitsIdx=handles.Spikes.HandSort.Units{electrodeNum};
@@ -1913,11 +1844,11 @@ dataExcerpt.spkTimes=DisplayRasters(handles);
 cd(handles.exportDir);
 if isfield(handles,'Trials')
     TTLs=handles.Trials;
-    save([handles.datFile(1:end-4) '_Ch' num2str(electrodeNum) '.mat'],...
+    save([handles.datFile(1:end-4) '_Ch' num2str(electrodeLabel) '.mat'],...
         'waveForms','spikeTimes','unitsIdx','samplingRate','selectedUnits',...
         'TTLs','dataExcerpt');
 else
-    save([handles.datFile(1:end-4) '_Ch' num2str(electrodeNum) '.mat'],...
+    save([handles.datFile(1:end-4) '_Ch' num2str(electrodeLabel) '.mat'],...
         'waveForms','spikeTimes','unitsIdx','samplingRate','selectedUnits',...
         'dataExcerpt');
 end
@@ -2182,6 +2113,97 @@ else
     set(handles.DisplayNtrodeMarkers_MenuItem,'Checked','off')
 end
 
+% --------------------------------------------------------------------
+function SpikeSource_MenuItem_Callback(hObject, eventdata, handles)
+
+% --------------------------------------------------------------------
+function SortVersion_MenuItem_Callback(hObject, eventdata, handles)
+
+% --------------------------------------------------------------------
+function Spikes_OriginalVersion_Menu_Callback(hObject, eventdata, handles)
+
+% --------------------------------------------------------------------
+function Spikes_CurrentVersion_Menu_Callback(hObject, eventdata, handles)
+
+% --------------------------------------------------------------------
+function Spikes_SortOn_Menu_Callback(hObject, eventdata, handles)
+set(handles.Spikes_SortOn_Menu,'Checked','on');
+set(handles.Spikes_SortOff_Menu,'Checked','off');
+set(handles.Spikes_Th_Menu,'Checked','off');
+% [handles.spikeFile,handles.exportDir] = uigetfile({'*.mat;*.hdf5','All Data Formats';...
+%     '*.*','All Files' },'Export folder',handles.exportDir);
+handles.fileLoaded=0;
+handles=LoadSpikes(handles);
+% Update handles structure
+guidata(hObject, handles);
+
+% --------------------------------------------------------------------
+function Spikes_SortOff_Menu_Callback(hObject, eventdata, handles)
+set(handles.Spikes_SortOff_Menu,'Checked','on');
+set(handles.Spikes_SortOn_Menu,'Checked','off');
+set(handles.Spikes_Th_Menu,'Checked','off');
+
+[handles.spikeFile,handles.exportDir] = uigetfile({'*.mat;*.hdf5','All Data Formats';...
+    '*.*','All Files' },'Export folder',handles.exportDir);
+handles.fileLoaded=0;
+handles=LoadSpikes(handles);
+% plot "raw" (filtered) trace
+DisplayRawData(handles);
+% plot spike rasters
+DisplayRasters(handles);
+% Update handles structure
+guidata(hObject, handles);
+
+% --------------------------------------------------------------------
+function Spikes_Th_Menu_Callback(hObject, eventdata, handles)
+set(handles.Spikes_Th_Menu,'Checked','on');
+set(handles.Spikes_SortOn_Menu,'Checked','off');
+set(handles.Spikes_SortOff_Menu,'Checked','off');
+if isempty(handles.spikeFile) || ~strcmp(handles.spikeFile(end-2:end),'mat')
+    [handles.spikeFile,handles.exportDir] = uigetfile({'*.mat;*.hdf5','All Data Formats';...
+        '*.*','All Files' },'Export folder',handles.exportDir);
+end
+handles.fileLoaded=0;
+handles=LoadSpikes(handles);
+% Update handles structure
+guidata(hObject, handles);
+
+% --------------------------------------------------------------------
+function Spikes_PrevSorted_Menu_Callback(hObject, eventdata, handles)
+set(handles.Spikes_SortOn_Menu,'Checked','off');
+set(handles.Spikes_SortOff_Menu,'Checked','off');
+set(handles.Spikes_Th_Menu,'Checked','off');
+set(handles.Spikes_PrevSorted_Menu,'Checked','on');
+if ~strcmp(handles.spikeFile(end-2:end),'mat')
+    [handles.spikeFile,handles.exportDir] = uigetfile({'*.mat;*.hdf5','All Data Formats';...
+        '*.*','All Files' },'Export folder',handles.exportDir);
+end
+handles.fileLoaded=0;
+handles=LoadSpikes(handles);
+% Update handles structure
+guidata(hObject, handles);
+
+% --- Executes on button press in PCA_PB.
+function PCA_PB_Callback(hObject, eventdata, handles)
+electrodeNum=get(handles.SelectElectrode_LB,'value');
+SpikeData=double(handles.Spikes.HandSort.Waveforms{electrodeNum,:});
+SpikeNum = size(SpikeData,2);
+SpikeData = SpikeData - repmat(mean(SpikeData,2),1,SpikeNum);
+[Y,Sig,~] = svd(SpikeData);
+% sig = diag(Sig);
+% figure; semilogy(sig(sig>1),'kx-') % plot the significant singular values
+% xlabel('index','fontsize',14); ylabel('singular value','fontsize',14)
+figure;
+plot3(SpikeData'*Y(:,1),SpikeData'*Y(:,2),SpikeData'*Y(:,3),'.')
+
+function electrodes=ReturnElectrodes(unitsHandle)
+elecString=get(unitsHandle,'string');
+try
+    electrodes=str2num(elecString);
+catch
+    electrodes=cellfun(@(x) str2double(regexp(x,'(?<=>)\s*\d+(?=</FONT>)','match')),elecString,'UniformOutput',true);
+end
+
 function units=ReturnUnits(unitsHandle)
 unitString=get(unitsHandle,'string');
 try
@@ -2189,7 +2211,3 @@ try
 catch
     units=cellfun(@(x) str2double(regexp(x,'(?<=>)\s*\d+(?=</FONT>)','match')),unitString,'UniformOutput',true);
 end
-
-
-
-
