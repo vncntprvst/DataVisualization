@@ -811,6 +811,9 @@ else
 end
 numWFtoPlot=str2double(get(handles.ShowHowManyWF_ET,'string'));
 for unitP=1:length(selectedUnits)
+    if selectedUnits(unitP)==0
+        continue
+    end
     %if subset is not defined
     if size(handles.subset,2)<selectedUnitsListIdx(unitP) || isempty(handles.subset{selectedUnitsListIdx(unitP)})
         if sum(unitsIdx==selectedUnits(unitP))>numWFtoPlot %then only plot subset of waveforms
@@ -1086,7 +1089,7 @@ else
     selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
     selectedUnits=unitID(selectedUnitsListIdx);
 end
-if isempty(selectedUnits)
+if isempty(selectedUnits) || sum(selectedUnits)==0
     cla(handles.ISI_Axes_short);
     cla(handles.ISI_Axes_long);
     return
@@ -1131,7 +1134,7 @@ if ~isempty(diff(unitST))
     ISIhist.EdgeColor = 'k';
     xlabel('Interspike Interval (ms)')
     axis('tight');box off;
-    set(gca,'xlim',[0 700],'XTick',linspace(0,700,5),'XTickLabel',linspace(0,700,5),...
+    set(gca,'xlim',[0 200],'XTick',linspace(0,200,5),'XTickLabel',linspace(0,200,5),...
         'TickDir','out','Color','white','FontSize',10,'FontName','Calibri');
     hold off
 end
@@ -1149,7 +1152,7 @@ else
     selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
     selectedUnits=unitID(selectedUnitsListIdx);
 end
-if isempty(selectedUnits)
+if isempty(selectedUnits) || sum(selectedUnits)==0
     cla(handles.ACG_Axes);
     return
 end
@@ -1207,7 +1210,7 @@ else
     selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
     selectedUnits=unitID(selectedUnitsListIdx);
 end
-if isempty(selectedUnits)
+if isempty(selectedUnits) || sum(selectedUnits)==0
     cla(handles.XCorr_Axes);
     return
 end

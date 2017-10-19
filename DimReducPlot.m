@@ -1,14 +1,15 @@
 function labels=DimReducPlot(snippets,labels,option)
 
 %load('040v_1002_2Hz20ms_30mW_22Ch_nopp_Ch12.mat')
+if size(snippets,1)<size(snippets,2)
+    snippets=snippets';
+end
 
-
-
-if strcmp(option,'tsne')
+if strcmp(option{1},'tsne')
     comps = tsne(single(snippets));
-elseif strcmp(option,'pca')
+elseif strcmp(option{1},'pca')
     [~,comps] = pca(single(snippets));
-elseif strcmp(option,'ftsne')
+elseif strcmp(option{1},'ftsne')
     numDims=2;
     pcaDims=50;
     perplexity=50;
@@ -17,12 +18,19 @@ elseif strcmp(option,'ftsne')
     comps = fast_tsne(snippets, numDims, pcaDims, perplexity, theta, alg);
 end
 
-cmap=lines; cmap=[0,0,0;cmap];
-figure; scatter(comps(:,2), comps(:,2), labels ,cmap,'.',7);
+if numel(option)>1 && strcmp(option{2},'plot')
+    cmap=lines; cmap=[0,0,0;cmap];
+    figure; gscatter(comps(:,1), comps(:,2), labels ,cmap,'.',7);
+end
+
+dist = pdist2(comps,comps);
+
+% [L, center_idxs] = cluster_dp(dist); %get from https://github.com/shihai1991/kernel-density-peaks
+
+labels = cluster_dp(comps, 3, 0, 0);
 
 
-dist = pdist2(comp,comp);
-[L, center_idxs] = cluster_dp(dist); %get from https://github.com/shihai1991/kernel-density-peaks
+figure; gscatter(comps(:,1), comps(:,2), Labels ,cmap,'.',7);
 
 
 %
@@ -38,14 +46,5 @@ dist = pdist2(comp,comp);
 % % figure
 % % scatter(PrComps(similIdx,1), PrComps(similIdx,2), 'k.');
 
-
-
-% options.method = 'gaussian';
-% options.percent = 2;
-% options.sigma = 20;
-% options.trim_halo = false;
-% options.n_clusters = Inf;
-% options.show_plot = false;
-% options.M = 10;
 
 
