@@ -1,5 +1,5 @@
-fileName='039v_0925_2Hz20ms_20mW_28Ch_nopp'; % '039v_0927_2Hz20ms_20mW_28Ch_nopp'; % 'SpVi12_133_2Hz2ms_10mW_nopp';
-channelNum=5;
+fileName='SpVi12_1024_KX_MLStim_26Ch_nopp'; %'039v_0925_2Hz20ms_20mW_28Ch_nopp'; % '039v_0927_2Hz20ms_20mW_28Ch_nopp'; % 'SpVi12_133_2Hz2ms_10mW_nopp';
+channelNum=26;
 % SpVi12_133_2Hz2ms_10mW_nopp_Ch %SpVi12_133_2Hz2ms_10mW_nopp_Ch
 spikeData=load([fileName '_Ch' num2str(channelNum) '.mat'],'waveForms','spikeTimes','unitsIdx','samplingRate','selectedUnits');
 load([fileName '_Ch' num2str(channelNum) '.mat'],'TTLs');
@@ -32,7 +32,7 @@ for clusNum=1:size(spikeData.selectedUnits,1)
     %define parameters
     preAlignWindow=20;
     postAlignWindow=59;
-    TTLtimes=uint32(TTLtimes)/(TTLs.samplingRate/1000);
+    TTLtimes=uint32(TTLs.TTLtimes)/(TTLs.samplingRate/1000);
     raster=nan(numel(TTLs.TTLtimes),preAlignWindow+postAlignWindow+1);
     for trialNum=1:numel(TTLs.TTLtimes)
         try
@@ -62,7 +62,8 @@ figure('Position',[296 149 1504 761]);
 
 % waveforms
 subplot(3,3,[1,4]); hold on
-OptoWaveforms(spikeData,TTLtimes,spikeData.selectedUnits(cellNum),gca)
+duration=10;
+OptoWaveforms(spikeData,TTLtimes,spikeData.selectedUnits(cellNum),duration,gca)
 
 % rasters
 subplot(3,3,[2,5]);
@@ -82,13 +83,13 @@ OptoSDF(spikeRasters(cellNum),preAlignWindow,pulseDur,gca)
 % OptoACG(spikeData,TTLtimes,spikeData.selectedUnits(cellNum),gca)
 
 % raw trace
-% subplot(3,3,7:9); hold on
-% 
-% msConv=double(spikeData.samplingRate/1000);
-% excerptTTLtimes=double(TTLtimes(TTLtimes>(dataExcerpt.location-dataExcerpt.excerptSize)/msConv &...
-%     TTLtimes<(dataExcerpt.location+dataExcerpt.excerptSize)/msConv)-...
-%     (dataExcerpt.location-dataExcerpt.excerptSize)/msConv)*msConv;
-% excerptTTLtimes=excerptTTLtimes(2); %if wants to keep only one pulse 
-% OptoRawTrace(dataExcerpt,dataExcerpt.spkTimes(cellNum),msConv,excerptTTLtimes,gca)
+subplot(3,3,7:9); hold on
+
+msConv=double(spikeData.samplingRate/1000);
+excerptTTLtimes=double(TTLtimes(TTLtimes>(dataExcerpt.location-dataExcerpt.excerptSize)/msConv &...
+    TTLtimes<(dataExcerpt.location+dataExcerpt.excerptSize)/msConv)-...
+    (dataExcerpt.location-dataExcerpt.excerptSize)/msConv)*msConv;
+excerptTTLtimes=excerptTTLtimes(2); %if wants to keep only one pulse 
+OptoRawTrace(dataExcerpt,dataExcerpt.spkTimes(cellNum),msConv,excerptTTLtimes,gca)
 end
 

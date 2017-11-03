@@ -1,4 +1,4 @@
-function OptoWaveforms(spikeData,TTLtimes,keepCell,axisHandle)
+function OptoWaveforms(spikeData,TTLtimes,keepCell,duration,axisHandle)
 
 for cellNum=1:length(keepCell)
     %find(mean(meanChan)==max(mean(meanChan)));
@@ -14,7 +14,7 @@ for cellNum=1:length(keepCell)
     pulseIdx=false(size(spikeTimes,1),size(TTLtimes,1));
     %     figure; hold on; plot(spikeTimes,'*'); plot(TTLtimes,'d')
     for TTLNum=1:size(TTLtimes,1)
-        pulseIdx(:,TTLNum)=spikeTimes>TTLtimes(TTLNum) & spikeTimes<TTLtimes(TTLNum)+5;
+        pulseIdx(:,TTLNum)=spikeTimes>TTLtimes(TTLNum) & spikeTimes<=TTLtimes(TTLNum)+duration;
     end
     onSpikes=logical(sum(pulseIdx,2));
     

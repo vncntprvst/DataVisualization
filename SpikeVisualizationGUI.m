@@ -1134,7 +1134,7 @@ if ~isempty(diff(unitST))
     ISIhist.EdgeColor = 'k';
     xlabel('Interspike Interval (ms)')
     axis('tight');box off;
-    set(gca,'xlim',[0 200],'XTick',linspace(0,200,5),'XTickLabel',linspace(0,200,5),...
+    set(gca,'xlim',[0 1100],'XTick',linspace(0,1100,5),'XTickLabel',linspace(0,1100,5),...
         'TickDir','out','Color','white','FontSize',10,'FontName','Calibri');
     hold off
 end
@@ -2189,15 +2189,53 @@ guidata(hObject, handles);
 % --- Executes on button press in PCA_PB.
 function PCA_PB_Callback(hObject, eventdata, handles)
 electrodeNum=get(handles.SelectElectrode_LB,'value');
-SpikeData=double(handles.Spikes.HandSort.Waveforms{electrodeNum,:});
-SpikeNum = size(SpikeData,2);
-SpikeData = SpikeData - repmat(mean(SpikeData,2),1,SpikeNum);
-[Y,Sig,~] = svd(SpikeData);
+
+if contains(get(handles.DisplayNtrodeMarkers_MenuItem,'Checked'),'on')
+    % get channel values from same Ntrode
+    shankNum=cumsum(logical([0 diff(handles.rec_info.differentShanks(1:handles.rec_info.numRecChan))]));
+    electrodeNum=find(shankNum==shankNum(electrodeNum));
+end
+
+[spikeTimes,sortIdx]=sort(vertcat(handles.Spikes.HandSort.SpikeTimes{electrodeNum,1}));
+clusterID={handles.Spikes.HandSort.Units{electrodeNum,1}};
+clusterIncrement=cumsum(cellfun(@(x) length(unique(x)),clusterID)); clusterIncrement=clusterIncrement-min(clusterIncrement);
+clusterID=cellfun(@(x,y) x+y, clusterID,num2cell(clusterIncrement,4),'UniformOutput',false);
+clusterID=vertcat(clusterID{:}); clusterID=clusterID(sortIdx);
+
+waveForms=NaN(length(spikeTimes),length(electrodeNum),size(handles.Spikes.HandSort.Waveforms{1},1));
+for elNum=1:length(electrodeNum)
+    if isa(handles.rawData,'memmapfile') % reading electrode data from .dat file
+        waveForms(:,elNum,:)=ExtractChunks(handles.rawData.Data(electrodeNum(elNum):...
+            handles.rec_info.numRecChan:max(size(handles.rawData.Data))),...
+            spikeTimes,50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
+    else
+        waveForms(:,elNum,:)=ExtractChunks(handles.rawData(electrodeNum(elNum),:),...
+            spikeTimes,50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
+    end
+end
+
+features = Create_FeatureSpace(waveForms);
+figure;
+plot3(features(:,1),features(:,2),features(:,8),'.')
+
+[CluSep, m] = Cluster_Quality(Fet, clusterID);
+
+
+[SpikeData,Y]=deal(cell(1,length(electrodeNum)));
+for elNum=1:length(electrodeNum)
+    SpikeData{elNum}=double(handles.Spikes.HandSort.Waveforms{electrodeNum(elNum),:});
+    SpikeNum = size(SpikeData{elNum},2);
+    SpikeData{elNum} = SpikeData{elNum} - repmat(mean(SpikeData{elNum},2),1,SpikeNum);
+    [Y{elNum},Sig,~] = svd(SpikeData{elNum});
+end
 % sig = diag(Sig);
 % figure; semilogy(sig(sig>1),'kx-') % plot the significant singular values
 % xlabel('index','fontsize',14); ylabel('singular value','fontsize',14)
 figure;
-plot3(SpikeData'*Y(:,1),SpikeData'*Y(:,2),SpikeData'*Y(:,3),'.')
+for elNum=1:length(electrodeNum)
+    subplot(2,2,elNum)
+plot3(SpikeData{elNum}'*Y{elNum}(:,1),SpikeData{elNum}'*Y{elNum}(:,2),SpikeData{elNum}'*Y{elNum}(:,3),'.')
+end
 
 function electrodes=ReturnElectrodes(unitsHandle)
 elecString=get(unitsHandle,'string');
