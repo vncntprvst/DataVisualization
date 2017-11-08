@@ -10,11 +10,12 @@ for cellNum=1:length(keepCell)
     waveForms=double(spikeData.waveForms(:,spikeData.unitsIdx==keepCell(cellNum))');
     spikeTimes=spikeData.spikeTimes(spikeData.unitsIdx==keepCell(cellNum),:)/(spikeData.samplingRate/1000);
     
-    %get wich spike time occur during TTL
+    %get wich spike times occur during TTL
     pulseIdx=false(size(spikeTimes,1),size(TTLtimes,1));
-    %     figure; hold on; plot(spikeTimes,'*'); plot(TTLtimes,'d')
-    for TTLNum=1:size(TTLtimes,1)
-        pulseIdx(:,TTLNum)=spikeTimes>TTLtimes(TTLNum) & spikeTimes<=TTLtimes(TTLNum)+duration;
+%     figure; hold on; plot(spikeTimes,ones(length(spikeTimes),1),'*');...
+%     plot(TTLtimes,ones(length(TTLtimes),1),'d')
+    for TTLNum=1:length(TTLtimes)
+        pulseIdx(:,TTLNum)=spikeTimes>=TTLtimes(TTLNum) & spikeTimes<=TTLtimes(TTLNum)+duration;
     end
     onSpikes=logical(sum(pulseIdx,2));
     

@@ -9,7 +9,7 @@ for cellNum=1:length(spikeRasters)
     %% plot sdf
     conv_sigma=1;
     %     xTickSteps=round(preAlignWindow/50)*10;
-    [sdf{1}, ~, rastsem{1}]=conv_raster(spikeRasters{cellNum},conv_sigma);
+    [sdf{1}, ~, rastsem{1}]=conv_raster(spikeRasters{cellNum},conv_sigma,1);
     % [sdf{2}, ~, rastsem{2}]=conv_raster(spikeRasters{keepChan},conv_sigma);
     hold on;
     

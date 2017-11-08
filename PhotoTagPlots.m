@@ -1,5 +1,7 @@
-fileName='SpVi12_1024_KX_MLStim_26Ch_nopp'; %'039v_0925_2Hz20ms_20mW_28Ch_nopp'; % '039v_0927_2Hz20ms_20mW_28Ch_nopp'; % 'SpVi12_133_2Hz2ms_10mW_nopp';
-channelNum=26;
+fileName='SpVi12_1107_WR_MS_LS500mHz2ms6_24Ch_nopp'; 
+%'SpVi12_1024_KX_MLStim_26Ch_nopp'; %'039v_0925_2Hz20ms_20mW_28Ch_nopp'; 
+% '039v_0927_2Hz20ms_20mW_28Ch_nopp'; % 'SpVi12_133_2Hz2ms_10mW_nopp';
+channelNum=6;
 % SpVi12_133_2Hz2ms_10mW_nopp_Ch %SpVi12_133_2Hz2ms_10mW_nopp_Ch
 spikeData=load([fileName '_Ch' num2str(channelNum) '.mat'],'waveForms','spikeTimes','unitsIdx','samplingRate','selectedUnits');
 load([fileName '_Ch' num2str(channelNum) '.mat'],'TTLs');
@@ -58,12 +60,13 @@ for cellNum=1:size(spikeData.selectedUnits,1)
 % keep one cell 
 % cellNum=2;
 
-figure('Position',[296 149 1504 761]);
+figure('Position',[296 149 1504 761],'name',...
+    [fileName ' Ch' num2str(channelNum) ' Unit' num2str(spikeData.selectedUnits(cellNum))] );
 
 % waveforms
 subplot(3,3,[1,4]); hold on
-duration=10;
-OptoWaveforms(spikeData,TTLtimes,spikeData.selectedUnits(cellNum),duration,gca)
+delay=5;
+OptoWaveforms(spikeData,TTLtimes,spikeData.selectedUnits(cellNum),delay,gca)
 
 % rasters
 subplot(3,3,[2,5]);
@@ -89,7 +92,9 @@ msConv=double(spikeData.samplingRate/1000);
 excerptTTLtimes=double(TTLtimes(TTLtimes>(dataExcerpt.location-dataExcerpt.excerptSize)/msConv &...
     TTLtimes<(dataExcerpt.location+dataExcerpt.excerptSize)/msConv)-...
     (dataExcerpt.location-dataExcerpt.excerptSize)/msConv)*msConv;
-excerptTTLtimes=excerptTTLtimes(2); %if wants to keep only one pulse 
-OptoRawTrace(dataExcerpt,dataExcerpt.spkTimes(cellNum),msConv,excerptTTLtimes,gca)
+if ~isempty(excerptTTLtimes)
+%     excerptTTLtimes=excerptTTLtimes(end); %if wants to keep only one pulse
+end %plot anyway
+OptoRawTrace(dataExcerpt,dataExcerpt.spkTimes(cellNum),msConv,excerptTTLtimes,'',gca)
 end
 

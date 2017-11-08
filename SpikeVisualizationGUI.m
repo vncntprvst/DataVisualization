@@ -1134,7 +1134,7 @@ if ~isempty(diff(unitST))
     ISIhist.EdgeColor = 'k';
     xlabel('Interspike Interval (ms)')
     axis('tight');box off;
-    set(gca,'xlim',[0 1100],'XTick',linspace(0,1100,5),'XTickLabel',linspace(0,1100,5),...
+    set(gca,'xlim',[0 2100],'XTick',linspace(0,2100,5),'XTickLabel',linspace(0,2100,5),...
         'TickDir','out','Color','white','FontSize',10,'FontName','Calibri');
     hold off
 end

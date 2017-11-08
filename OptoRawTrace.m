@@ -1,39 +1,49 @@
-function OptoRawTrace(recTrace,spikeTimes,msConv,TTLtimes,axisHandle)
+function OptoRawTrace(recTrace,spikeTimes,msConv,TTLtimes,option,axisHandle)
+
+if ~exist('axisHandle','var') | isempty(axisHandle)
+    figure('Position',[1092 149 708 761]); hold on
+end
+colormap(parula); cmap=colormap;
+%plot raw trace
+plot(recTrace.data,'color','k');
 
 
-for cellNum=1:length(spikeTimes)
-    if ~exist('axisHandle','var') | isempty(axisHandle)
-        figure('Position',[1092 149 708 761]); hold on
-    end
-    colormap(parula); cmap=colormap;
-    %plot raw trace
-    plot(recTrace.data,'color','k');
-    %plot spike id labels
-    %     spkLabelYLoc=ones(1,size(spikeTimes{cellNum},2))*(min(get(gca,'ylim'))/4*3);
-    %     plot(single(spikeTimes{cellNum})-(recTrace.location-recTrace.excerptSize),...
-    %         spkLabelYLoc,'Color',[cmap(cellNum,:),0.4],...
-    %         'linestyle','none','Marker','^');
-    
+if ~isempty(TTLtimes)
     for TTLNum=1:length(TTLtimes)
         patch([TTLtimes(TTLNum), TTLtimes(TTLNum),...
             TTLtimes(TTLNum)+2*msConv, TTLtimes(TTLNum)+2*msConv], ...
             [get(gca,'ylim') fliplr(get(gca,'ylim'))], ...
             [0 0 0 0],[0.3 0.75 0.93],'EdgeColor','none','FaceAlpha',0.5);
     end
-    if length(TTLtimes)==1
-        set(gca,'xlim',[TTLtimes-50*msConv TTLtimes+50*msConv])
-        set(gca,'xtick',TTLtimes-50*msConv:10*msConv:TTLtimes+50*msConv,'xticklabel',-50:10:50);
+    if strcmp(option,'center') %length(TTLtimes)==1
+        set(gca,'xlim',[TTLtimes(end)-50*msConv TTLtimes(end)+50*msConv])
+        set(gca,'xtick',TTLtimes(end)-50*msConv:10*msConv:TTLtimes(end)+50*msConv,'xticklabel',-50:10:50);
         set(gca,'ytick',[],'yticklabel',[],'TickDir','out');
-        
     else
         %     set(gca,'xtick',recTrace.xTicks,'xticklabel',recTrace.xTicklabels,...
         %         'ytick',[],'yticklabel',[],'TickDir','out');
-        set(gca,'xtick',linspace(0,2*recTrace.excerptSize,50),'xticklabel',linspace(0,2*recTrace.excerptSize,50)/double(msConv),...
+        set(gca,'xtick',linspace(0,2*recTrace.excerptSize,9),...
+            'xticklabel',round(linspace(0,2*recTrace.excerptSize,9)/double(msConv)),...
             'ytick',[],'yticklabel',[],'TickDir','out');
+    end
+end
+box off;
+xlabel('Time (ms)');
+set(gca,'Color','white','FontSize',18,'FontName','calibri');
+
+for cellNum=1:length(spikeTimes)
+    if ~isempty(spikeTimes{cellNum})
+        %plot spike id labels
+        spkLabelYLoc=ones(1,size(spikeTimes{cellNum},2))*(min(get(gca,'ylim'))/4*3);
+        plot(single(spikeTimes{cellNum})-(recTrace.location-recTrace.excerptSize),...
+            spkLabelYLoc,'Color',[cmap(cellNum,:),0.4],...
+            'linestyle','none','Marker','^');
+        
+        % plot unit markers
+        %                         plot(spkTimes{unitP}-(handles.rawDataInfo.excerptLocation-handles.rawDataInfo.excerptSize),...
+        %                         rasterHeight,'Color','k',...
+        %                         'linestyle','none','Marker','*');
         
         
     end
-    box off;
-    xlabel('Time (ms)');
-    set(gca,'Color','white','FontSize',18,'FontName','calibri');
 end
