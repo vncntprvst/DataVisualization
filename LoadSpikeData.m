@@ -5,7 +5,7 @@ if logical(regexp(fName,'Ch\d+.')) %from Spike2
     Spikes.SpikeTimes{electrodes,1}=uint32(nw_401.times*samplingRate);
     Spikes.Waveforms{electrodes,1}=nw_401.values;
     Spikes.samplingRate(electrodes,1)=samplingRate;
-elseif strfind(fName,'.hdf5') % Spyking Circus
+elseif contains(fName,'.hdf5') % Spyking Circus
     fName=regexp(fName,'\S+?(?=\.\w+\.\w+$)','match','once');
     templateToEl=h5read([fName '.clusters.hdf5'],'/electrodes'); % this are the *prefered* electrodes for all K templates
     for elNum=1:electrodes
@@ -19,13 +19,13 @@ elseif strfind(fName,'.hdf5') % Spyking Circus
             [spktimes,units]=deal(cell(size(thisElTemplates,1)+1,1));
             for templt=1:size(thisElTemplates,1)
                 spktimes{templt}=h5read([fName '.result.hdf5'],['/spiketimes/temp_' num2str(thisElTemplates(templt))]);
-                units{templt}=ones(size(spktimes{templt},1),1)*templt;               
+                units{templt}=ones(size(spktimes{templt},1),1)*templt;
             end
             % collect non-fitted ("garbage") spikes, with unit ID 0
             try
-            spktimes{templt+1}=h5read([fName '.result.hdf5'],['/gspikes/elec_' num2str(elNum-1)]);
-            units{templt+1}=zeros(size(spktimes{templt+1},1),1);
-            catch 
+                spktimes{templt+1}=h5read([fName '.result.hdf5'],['/gspikes/elec_' num2str(elNum-1)]);
+                units{templt+1}=zeros(size(spktimes{templt+1},1),1);
+            catch
                 % no "garbage" spikes
             end
             % concatenate values
@@ -34,7 +34,7 @@ elseif strfind(fName,'.hdf5') % Spyking Circus
             % sort times, and adjust unit orders
             [Spikes.SpikeTimes{elNum,1},timeIdx]=sort(Spikes.SpikeTimes{elNum,1});
             Spikes.Units{elNum,1}=Spikes.Units{elNum,1}(timeIdx);
-            % extract spike waveforms 
+            % extract spike waveforms
             if isa(rawData,'memmapfile') % reading electrode data from .dat file
                 Spikes.Waveforms{elNum,1}=ExtractChunks(rawData.Data(elNum:electrodes:max(size(rawData.Data))),...
                     Spikes.SpikeTimes{elNum,1},50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
@@ -47,27 +47,27 @@ elseif strfind(fName,'.hdf5') % Spyking Circus
             Spikes.samplingRate(elNum,1)=samplingRate;
             
             % plots
-%             foo=rawData.Data(elNum:electrodes:max(size(rawData.Data)));
-%             figure; hold on
-%             plot(foo(round(size(foo,1)/2)-samplingRate:round(size(foo,1)/2)+samplingRate));
-%             axis('tight');box off;
-%             text(100,100,num2str(round(size(foo,1)/2)))
-%             text(100,50,'PrV 77 115 El 11');
-%             allunits= Spikes.Units{elNum,1};
-%             allspktimes=Spikes.SpikeTimes{elNum,1};
-%             spkTimes=allspktimes(allspktimes>=round(size(foo,1)/2)-samplingRate &...
-%                 allspktimes<round(size(foo,1)/2)+samplingRate & allunits==1);
-%             rasterHeight=ones(1,size(spkTimes,2))*(min(get(gca,'ylim'))/4*3);
-%             plot(spkTimes-(round(size(foo,1)/2)-samplingRate),...
-%                 rasterHeight,'Color','r',...
-%                 'linestyle','none','Marker','^');
+            %             foo=rawData.Data(elNum:electrodes:max(size(rawData.Data)));
+            %             figure; hold on
+            %             plot(foo(round(size(foo,1)/2)-samplingRate:round(size(foo,1)/2)+samplingRate));
+            %             axis('tight');box off;
+            %             text(100,100,num2str(round(size(foo,1)/2)))
+            %             text(100,50,'PrV 77 115 El 11');
+            %             allunits= Spikes.Units{elNum,1};
+            %             allspktimes=Spikes.SpikeTimes{elNum,1};
+            %             spkTimes=allspktimes(allspktimes>=round(size(foo,1)/2)-samplingRate &...
+            %                 allspktimes<round(size(foo,1)/2)+samplingRate & allunits==1);
+            %             rasterHeight=ones(1,size(spkTimes,2))*(min(get(gca,'ylim'))/4*3);
+            %             plot(spkTimes-(round(size(foo,1)/2)-samplingRate),...
+            %                 rasterHeight,'Color','r',...
+            %                 'linestyle','none','Marker','^');
             
         catch
         end
     end
-elseif strfind(fName,'.mat')
+elseif contains(fName,'.mat') % Kilosort or just Matlab processing
     load(fName);
-    if strfind(fName,'rez') || strfind(fName,'_KS') %Kilosort
+    if contains(fName,'rez') || contains(fName,'_KS') %Kilosort
         spikeTimes = uint64(rez.st3(:,1));
         spikeTemplates = uint32(rez.st3(:,2));
         templates=abs(rez.Wraw);
@@ -113,7 +113,6 @@ elseif strfind(fName,'.mat')
     else
         %Matlab export - all units unsorted by default
         
-        
         for elNum=1:numel(electrodes)
             try
                 Spikes.Units{elNum,1}=zeros(1,numel(find(Spikes.data{electrodes(elNum)})));
@@ -125,6 +124,36 @@ elseif strfind(fName,'.mat')
                 Spikes.Waveforms{elNum,1}=Spikes.Waveforms{elNum,1}./4;
             catch
             end
+        end
+    end
+elseif contains(fName,'.csv') %from JRClust
+    clusterInfo = ImportJRClusSortInfo(fName);
+    allClusters=unique(clusterInfo.clusterNum);
+    for clusNum=1:length(allClusters)
+        bestSite=mode(clusterInfo.bestSite(clusterInfo.clusterNum==allClusters(clusNum)));
+        clusterInfo.bestSite(clusterInfo.clusterNum==allClusters(clusNum))=bestSite;
+    end
+    clusterInfo=clusterInfo(~clusterInfo.clusterNum==0,:);
+    %     Spikes.Units=clusterInfo.clusterNum;
+    %     Spikes.SpikeTimes=clusterInfo.bestSite;
+    for elNum=1:electrodes
+        try
+            units=clusterInfo.bestSite==elNum;
+            Spikes.Units{elNum,1}=clusterInfo.clusterNum(units);
+            Spikes.SpikeTimes{elNum,1}=clusterInfo.timeStamps(units)*samplingRate;
+            % extract spike waveforms  rawData = memmapfile('example.dat','Format','int16');
+            if isa(rawData,'memmapfile') % reading electrode data from .dat file
+                Spikes.Waveforms{elNum,1}=ExtractChunks(rawData.Data(elNum:electrodes:max(size(rawData.Data))),...
+                    Spikes.SpikeTimes{elNum,1},50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
+            else
+                Spikes.Waveforms{elNum,1}=ExtractChunks(rawData(elNum,:),...
+                    Spikes.SpikeTimes{elNum,1},50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
+            end
+            % scale to resolution
+            Spikes.Waveforms{elNum,1}=Spikes.Waveforms{elNum,1}.*bitResolution;
+            Spikes.samplingRate(elNum,1)=samplingRate;
+        catch
+            [Spikes.Units{elNum,1},Spikes.SpikeTimes{elNum,1}]=deal([]);
         end
     end
 end

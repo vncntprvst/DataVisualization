@@ -57,7 +57,7 @@ if ~isempty(varargin)
                 handles.spikeFile=listSpikeSortingFolder(spikeFileIdx).name;
             else
                 % ask user to select file to load
-                [handles.spikeFile,handles.exportDir] = uigetfile({'*.mat;*.hdf5','Export Formats';...
+                [handles.spikeFile,handles.exportDir] = uigetfile({'*.mat;*.hdf5;*.csv','Export Formats';...
                     '*.dat','Raw data';'*.*','All Files' },'Select data to load',cd);
                 if handles.spikeFile==0
                     handles=rmfield(handles,'spikeFile');
@@ -67,9 +67,18 @@ if ~isempty(varargin)
         end
     end
 else
-    userinfo=UserDirInfo;
+    try
+        handles.userinfo=UserDirInfo;
+    catch
+        handles.userinfo=[];
+        handles.userinfo.user=getenv('username');
+    end
     %% get most recently changed data folder (looks for a folder named "export")
-    exportDir=regexprep(userinfo.directory,'\\\w+$','\\export');
+    if isfield(handles.userinfo,'directory')
+        exportDir=regexprep(handles.userinfo.directory,'\\\w+$','\\export');
+    else
+        [exportDir,handles.userinfo.directory]=deal(cd);
+    end
     dataDirListing=dir(exportDir);
     if ~isempty(dataDirListing)
         %removing dots
@@ -86,7 +95,7 @@ else
     end
     
     % ask user to select file to load
-    [handles.spikeFile,handles.exportDir] = uigetfile({'*.mat;*.hdf5','Export Formats';...
+    [handles.spikeFile,handles.exportDir] = uigetfile({'*.mat;*.hdf5;*.csv','Export Formats';...
         '*.dat','Raw data';'*.*','All Files' },'Select data to load',recentDataFolder);
     if handles.spikeFile==0
         handles.spikeFile='';
@@ -237,11 +246,15 @@ else
             try
                 if ~isempty(handles.spikeFile)
                     fileName=regexp(handles.spikeFile,'.+(?=_\w+.mat$)','match');
+                    recInfo=load([fileName{:} '_info.mat']);
                 elseif ~isempty(handles.offlineSort_SpikeFile)
-                    fileName=regexp(handles.offlineSort_SpikeFile,'.+(?=\.\w+\.\w+$)','match');
-                    cd ..
-                end
-                recInfo=load([fileName{:} '_info.mat']);
+                    exportDirListing=dir(cd);
+                    fileName=exportDirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_info.'),...
+                {exportDirListing.name},'UniformOutput',false))).name;
+                    recInfo=load(fileName);
+%                     fileName=regexp(handles.offlineSort_SpikeFile,'.+(?=\.\w+\.\w+$)','match');
+%                     cd ..
+                end 
             catch
                 [fileInfoName,fileInfoDir,FilterIndex] = uigetfile({'*.mat;*.txt','File Info Formats';...
                     '*.*','All Files' },'Select file providing basic recording info, or cancel and enter info');
@@ -277,6 +290,7 @@ else
             clear recInfo;
         end
         if isfield(handles,'offlineSort_SpikeFile')
+%             cd(handles.exportDir);
             if logical(regexp(handles.offlineSort_SpikeFile,'Ch\d+.')) % Spike2
                 cd(handles.offlineSort_SpikeDir);
                 handles.Spikes.Offline_Sorting=LoadSpikeData(handles.offlineSort_SpikeFile,...
@@ -315,17 +329,18 @@ else
                     numel(handles.rec_info.exportedChan),handles.rec_info.samplingRate,handles.rec_info.bitResolution); %handles.rawDataInfo.size(1)
                 clear rawData;
             elseif logical(regexp(handles.offlineSort_SpikeFile,'rez.mat')) % KiloSort
-                fileName=regexp(handles.offlineSort_SpikeFile,'.+?(?=\.)','match');
+                fileName=exportDirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'.dat'),...
+                {exportDirListing.name},'UniformOutput',false))).name;
+                if iscell(fileName) && length(fileName)>1
+                    fileName=exportDirListing(~cellfun('isempty',cellfun(@(x) strfind(x,rec_info.exportname),...
+                fileName,'UniformOutput',false))).name;
+                end
                 %                 tb_filename=[tb_filename{1} '.dat'];
-                if ~exist([fileName{1} '.dat'],'file') ||  ~exist([fileName{1} '.mat'],'file') % then ask where it is
+                if ~exist(fileName,'file') % then ask where it is
                     [handles.datFile,handles.datDir] = uigetfile({'*.dat;*.mat','Data Formats';...
                         '*.*','All Files' },'Select data file for spike waveform extraction');
                 else
-                    if exist([fileName{1} '.dat'],'file')
-                        handles.datFile=[fileName{1} '.dat'];
-                    elseif exist([fileName{1} '.mat'],'file')
-                        handles.datFile=[fileName{1} '.mat'];
-                    end
+                    handles.datFile=fileName;
                     handles.datDir=cd;
                 end
                 if strfind(handles.datFile,'.mat') % .mat file contain rawData
@@ -340,6 +355,35 @@ else
                 end
                 handles.Spikes.Offline_Sorting=LoadSpikeData(handles.offlineSort_SpikeFile,rawData,...
                     numel(handles.rec_info.exportedChan),handles.rec_info.samplingRate,handles.rec_info.bitResolution); %handles.rawDataInfo.size(1)
+                clear rawData;
+            elseif logical(regexp(handles.offlineSort_SpikeFile,'.csv')) % assuming JRClus
+                fileName=exportDirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'.dat'),...
+                {exportDirListing.name},'UniformOutput',false))).name;
+                if iscell(fileName) && length(fileName)>1
+                    fileName=exportDirListing(~cellfun('isempty',cellfun(@(x) strfind(x,rec_info.exportname),...
+                fileName,'UniformOutput',false))).name;
+                end
+                %                 tb_filename=[tb_filename{1} '.dat'];
+                if ~exist(fileName,'file') % then ask where it is
+                    [handles.datFile,handles.datDir] = uigetfile({'*.dat;*.mat','Data Formats';...
+                        '*.*','All Files' },'Select data file for spike waveform extraction');
+                else
+                    handles.datFile=fileName;
+                    handles.datDir=cd;
+                end
+                if strfind(handles.datFile,'.mat') % .mat file contain rawData
+                    load(handles.datFile);
+                elseif strfind(handles.datFile,'.dat')
+                    rawData = memmapfile(fullfile(handles.datDir,handles.datFile),'Format','int16');
+                end
+                %then import
+                cd(handles.offlineSort_SpikeDir);
+                                if ~isfield(handles.rec_info,'bitResolution') || isempty(handles.rec_info.bitResolution)
+                    handles.rec_info.bitResolution=0.25; %default 0.25 uV/bit
+                end
+                handles.Spikes.Offline_Sorting=LoadSpikeData(handles.offlineSort_SpikeFile,...
+                    rawData,numel(handles.rec_info.exportedChan),handles.rec_info.samplingRate,...
+                    handles.rec_info.bitResolution); %handles.rawDataInfo.size(1)   
                 clear rawData;
             end
             cd(handles.exportDir);
@@ -741,7 +785,7 @@ for unitP=1:length(selectedUnits)
     end
     %make sure waveforms can be plotted
     if find(size(waveForms)==length(unitsIdx))==1
-        waveForms=waveForms';
+        waveForms=waveForms'; %figure; hold on; plot(waveForms(:,1:10))
     end
     plot(waveForms(:,handles.subset{selectedUnitsListIdx(unitP)}),...
         'linewidth',1,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
@@ -1729,9 +1773,18 @@ function LoadFile_PB_Callback(hObject, ~, handles)
 if isfield(handles,'spikeFile')
     handles = rmfield(handles,'spikeFile');
 end
-userinfo=UserDirInfo;
-%% get most recently changed data folder
-exportDir=regexprep(userinfo.directory,'\\\w+$','\\export');
+try
+    handles.userinfo=UserDirInfo;
+catch
+    handles.userinfo=[];
+    handles.userinfo.user=getenv('username');
+end
+%% get most recently changed data folder (looks for a folder named "export")
+if isfield(handles.userinfo,'directory')
+    exportDir=regexprep(handles.userinfo.directory,'\\\w+$','\\export');
+else
+    [exportDir,handles.userinfo.directory]=deal(cd);
+end
 dataDirListing=dir(exportDir);
 %removing dots
 dataDirListing=dataDirListing(cellfun('isempty',cellfun(@(x) strfind(x,'.'),...
@@ -1744,7 +1797,7 @@ dataDirListing=dataDirListing(cellfun('isempty',cellfun(@(x)...
 recentDataFolder=[exportDir filesep dataDirListing(fDateIdx(1)).name filesep];
 
 % open user input window
-[handles.spikeFile,handles.exportDir] = uigetfile({'*.mat;*.hdf5','Export Formats';...
+[handles.spikeFile,handles.exportDir] = uigetfile({'*.mat;*.hdf5;*.csv','Export Formats';...
     '*.dat','Raw data';'*.*','All Files' },'Most recent data',recentDataFolder);
 if handles.spikeFile==0
     handles.spikeFile='';
