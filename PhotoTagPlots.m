@@ -1,7 +1,8 @@
-fileName='SpVi12_1107_WR_MS_LS500mHz2ms6_24Ch_nopp'; 
+fileName='SpVi12_1107_WR_MS_LS500mHz2ms6_nopp';
+%'SpVi12_1107_WR_MS_LS500mHz2ms6_24Ch_nopp'; 
 %'SpVi12_1024_KX_MLStim_26Ch_nopp'; %'039v_0925_2Hz20ms_20mW_28Ch_nopp'; 
 % '039v_0927_2Hz20ms_20mW_28Ch_nopp'; % 'SpVi12_133_2Hz2ms_10mW_nopp';
-channelNum=6;
+channelNum=22;
 % SpVi12_133_2Hz2ms_10mW_nopp_Ch %SpVi12_133_2Hz2ms_10mW_nopp_Ch
 spikeData=load([fileName '_Ch' num2str(channelNum) '.mat'],'waveForms','spikeTimes','unitsIdx','samplingRate','selectedUnits');
 load([fileName '_Ch' num2str(channelNum) '.mat'],'TTLs');

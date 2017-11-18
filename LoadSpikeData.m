@@ -127,29 +127,106 @@ elseif contains(fName,'.mat') % Kilosort or just Matlab processing
         end
     end
 elseif contains(fName,'.csv') %from JRClust
+    
+    %% locate the _jrc file
+    dirListing=dir;
+    S0struct=dirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_jrc.mat'),...
+        {dirListing.name},'UniformOutput',false))).name;
+    
+    load(S0struct, 'dimm_spk','viTime_spk','cviSpk_site','miClu_log','P','S_clu')
+    
+    %% import info from cvs file export
     clusterInfo = ImportJRClusSortInfo(fName);
-    allClusters=unique(clusterInfo.clusterNum);
-    for clusNum=1:length(allClusters)
-        bestSite=mode(clusterInfo.bestSite(clusterInfo.clusterNum==allClusters(clusNum)));
-        clusterInfo.bestSite(clusterInfo.clusterNum==allClusters(clusNum))=bestSite;
-    end
-    clusterInfo=clusterInfo(~clusterInfo.clusterNum==0,:);
+    
+    %% if we want to attribute each cluster to a specifc electrode:
+    %     allClusters=unique(clusterInfo.clusterNum);
+    %     for clusNum=1:length(allClusters)
+    %         bestSite=mode(clusterInfo.bestSite(clusterInfo.clusterNum==allClusters(clusNum)));
+    %         clusterInfo.bestSite(clusterInfo.clusterNum==allClusters(clusNum))=bestSite;
+    %     end
+    
     %     Spikes.Units=clusterInfo.clusterNum;
     %     Spikes.SpikeTimes=clusterInfo.bestSite;
+    
+    
+    %% get filtered waveforms
+    vcFile=dirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_spkwav'),...
+        {dirListing.name},'UniformOutput',false))).name;
+    vcDataType = 'int16';
+    fid=fopen(vcFile, 'r');
+    % mnWav = fread_workingresize(fid, dimm, vcDataType);
+    mnWav = fread(fid, prod(dimm_spk), ['*', vcDataType]);
+    if numel(mnWav) == prod(dimm_spk)
+        mnWav = reshape(mnWav, dimm_spk);
+    else
+        dimm2 = floor(numel(mnWav) / dimm_spk(1));
+        if dimm2 >= 1
+            mnWav = reshape(mnWav, dimm_spk(1), dimm2);
+        else
+            mnWav = [];
+        end
+    end
+    if ~isempty(vcFile), fclose(fid); end
+    %% degenerate. keeping largest waveforms
+    %     keepSite=squeeze(prod(abs(mnWav)));[keepSite,~]=find(keepSite==max(keepSite));
+    %     waveForms=nan(size(mnWav,1),size(mnWav,3));
+    %     for spktTimeIdx=1:size(mnWav,3)
+    %         waveForms(:,spktTimeIdx)=squeeze(mnWav(:,keepSite(spktTimeIdx),spktTimeIdx));
+    %     end
+    
     for elNum=1:electrodes
         try
-            units=clusterInfo.bestSite==elNum;
-            Spikes.Units{elNum,1}=clusterInfo.clusterNum(units);
-            Spikes.SpikeTimes{elNum,1}=clusterInfo.timeStamps(units)*samplingRate;
+            units=cviSpk_site{elNum}; % if data from csv file:  clusterInfo.bestSite==elNum;
+            Spikes.Units{elNum,1}=miClu_log(units,1); %         clusterInfo.clusterNum(units);
+            Spikes.SpikeTimes{elNum,1}=viTime_spk(units) ; %    clusterInfo.timeStamps(units)*samplingRate;
+            Spikes.Waveforms{elNum,1}=squeeze(mnWav(:,1,units));
+            
+            %% proof that the first trace in mnWav's 2nd dimension is always from the center site:
+            %             miSites_clu = P.miSites(:, S_clu.viSite_clu); % which sites correspond to mnWav's 2nd dimension
+            %             rndTimeStamp=922;
+            %             figure; hold on;
+            %             for wfNum=1:9
+            %                 plot(mnWav(:,wfNum,rndTimeStamp));
+            %             end
+            %             plot(mnWav(:,miSites_clu(:,miClu_log(rndTimeStamp,1))==S_clu.viSite_clu(miClu_log(rndTimeStamp,1)),rndTimeStamp),'ko')
+            
+            %% some more exploration
+            %             mode(clusterInfo.clusterNum(units))
+            %             foo=mnWav(:,:,units);
+            %             figure; plot(mean(squeeze(foo(:,1,:)),2))
+            %
+            %             foo=mnWav(:,:,clusterInfo.clusterNum==1);
+            %             subsampleIdx=round(linspace(1,24000,20));
+            %             figure; hold on;
+            %             for timestamps=1:20
+            %                 plot(foo(:,1,subsampleIdx(timestamps)));
+            %             end
+            %             plot(mean(squeeze(mnWav(:,1,:)),2),'k','linewidth',1.5);
+            %
+            %             figure; hold on;
+            %             for avwf=1:9
+            %                 plot(squeeze(mnWav(:,avwf,2)));
+            %             end
+            %             plot(squeeze(mnWav(:,1,2)),'ko');
+            %
+            %             faa=Spikes.Waveforms{elNum,1};
+            %             figure; hold on;
+            %             for timestamps=1:20
+            %                 plot(faa(timestamps,:)');
+            %             end
+            %             plot(mean(squeeze(mnWav(:,1,:)),2),'k','linewidth',1.5);
+            
+            %% alternative spike extraction
             % extract spike waveforms  rawData = memmapfile('example.dat','Format','int16');
-            if isa(rawData,'memmapfile') % reading electrode data from .dat file
-                Spikes.Waveforms{elNum,1}=ExtractChunks(rawData.Data(elNum:electrodes:max(size(rawData.Data))),...
-                    Spikes.SpikeTimes{elNum,1},50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
-            else
-                Spikes.Waveforms{elNum,1}=ExtractChunks(rawData(elNum,:),...
-                    Spikes.SpikeTimes{elNum,1},50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
-            end
-            % scale to resolution
+            %             if isa(rawData,'memmapfile') % reading electrode data from .dat file
+            %                 Spikes.Waveforms{elNum,1}=ExtractChunks(rawData.Data(elNum:electrodes:max(size(rawData.Data))),...
+            %                     Spikes.SpikeTimes{elNum,1},50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
+            %             else
+            %                 Spikes.Waveforms{elNum,1}=ExtractChunks(rawData(elNum,:),...
+            %                     Spikes.SpikeTimes{elNum,1},50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
+            %             end
+            
+            %% scale to resolution
             Spikes.Waveforms{elNum,1}=Spikes.Waveforms{elNum,1}.*bitResolution;
             Spikes.samplingRate(elNum,1)=samplingRate;
         catch

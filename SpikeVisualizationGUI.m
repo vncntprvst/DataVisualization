@@ -1,6 +1,6 @@
 function varargout = SpikeVisualizationGUI(varargin)
 % MATLAB code for SpikeVisualizationGUI.fig
-% Last Modified by GUIDE v2.5 04-Oct-2017 19:17:57
+% Last Modified by GUIDE v2.5 17-Nov-2017 16:03:13
 % version 0.5 (sept 2016), tested in R2014b
 % Vincent Prevosto
 % email: vp35 at duke.edu
@@ -103,8 +103,8 @@ else
     end
 end
 %define figure colormap
-colormapSeed=colormap(lines);
-handles.cmap=[colormapSeed(1:7,:);(colormapSeed+flipud(colormap(copper)))/2];
+colormapSeed=lines;
+handles.cmap=[colormapSeed(1:7,:);(colormapSeed+flipud(colormap(copper)))/2;autumn];
 
 if isfield(handles,'spikeFile') && ~isempty(handles.spikeFile) && sum(strfind(handles.spikeFile,'.dat'))
     GetSortedSpikes_PB_Callback(hObject, handles);
@@ -445,7 +445,7 @@ else
                     cellfun(@(x) transpose(x), handles.Spikes.HandSort.Waveforms(~squeezeIt),'UniformOutput',false);
             end
             % re-order along time scale if needed
-            timeOrder=cellfun(@(times) sum(diff(times)==0),...
+            timeOrder=cellfun(@(times) sum(diff(times)<0),...
                 handles.Spikes.HandSort.SpikeTimes,'UniformOutput',true);
             if sum(timeOrder)
                 [~,timeIndices]=cellfun(@(times) sort(times),...
@@ -619,8 +619,7 @@ else
         %         unitsID=[];
         cla(handles.SortedUnits_Axes);
         cla(handles.MeanSortedUnits_Axes);
-        cla(handles.ISI_Axes_short);
-        cla(handles.ISI_Axes_long);
+        cla(handles.ISI_Axes);
         cla(handles.ACG_Axes);
         cla(handles.XCorr_Axes);
         set(handles.SelectUnit_LB,'string',num2str(0));
@@ -663,8 +662,12 @@ catch % try to load from .dat file
         'size',size(handles.rawData.Data),...
         'numChan',numel(handles.rec_info.exportedChan),...
         'source','dat');
+    try 
     %check in params file if data was filtered, and find threshold value
     fid  = fopen([fullfile(handles.datDir,handles.datFile(1:end-4)) '.params'],'r');
+    catch 
+       fid=-1;
+    end
     if fid~=-1
         params=fread(fid,'*char')';
         if contains(regexp(params,'(?<=filter_done\s+=\s)\w+(?=\s)','match','once'), 'True')
@@ -1134,8 +1137,7 @@ else
     selectedUnits=unitID(selectedUnitsListIdx);
 end
 if isempty(selectedUnits) || sum(selectedUnits)==0
-    cla(handles.ISI_Axes_short);
-    cla(handles.ISI_Axes_long);
+    cla(handles.ISI_Axes);
     return
 end
 % get data values
@@ -1159,26 +1161,15 @@ unitST=spikeTimes(unitsIdx==selectedUnits);
 % compute interspike interval
 if ~isempty(diff(unitST))
     ISI=diff(unitST)/(samplingRate/1000);
-    axes(handles.ISI_Axes_short); hold on;
-    cla(handles.ISI_Axes_short);
-    set(handles.ISI_Axes_short,'Visible','on');
-    ISIhist=histogram(double(ISI),0:max(ISI)+1);  %,'Normalization','probability'
-    ISIhist.FaceColor = handles.cmap(unitID(unitID==selectedUnits),:);
-    ISIhist.EdgeColor = 'k';
+    axes(handles.ISI_Axes); hold on;
+    cla(handles.ISI_Axes,'reset');
+    set(handles.ISI_Axes,'Visible','on');
+    ISIhist=histogram(double(ISI),logspace(0, 4, 50),'DisplayStyle','stairs','LineWidth',1.5);  %,'Normalization','probability'
+%     ISIhist.FaceColor = handles.cmap(unitID(unitID==selectedUnits),:);
+    ISIhist.EdgeColor = handles.cmap(unitID(unitID==selectedUnits),:); %'k';
     xlabel('Interspike Interval (ms)')
-    axis('tight');box off;
-    set(gca,'xlim',[0 40],'XTick',linspace(0,40,5),'XTickLabel',linspace(0,40,5),...
-        'TickDir','out','Color','white','FontSize',10,'FontName','Calibri');
-    hold off
-    axes(handles.ISI_Axes_long); hold on;
-    cla(handles.ISI_Axes_long);
-    set(handles.ISI_Axes_long,'Visible','on');
-    ISIhist=histogram(double(ISI),0:5:max(ISI)+1);  %,'Normalization','probability'
-    ISIhist.FaceColor = handles.cmap(unitID(unitID==selectedUnits),:);
-    ISIhist.EdgeColor = 'k';
-    xlabel('Interspike Interval (ms)')
-    axis('tight');box off;
-    set(gca,'xlim',[0 2100],'XTick',linspace(0,2100,5),'XTickLabel',linspace(0,2100,5),...
+    axis('tight');box off; grid('on'); set(gca,'xscale','log','GridAlpha',0.25,'MinorGridAlpha',1);
+    set(gca,'xlim',[0 10^4],... %'XTick',linspace(0,40,5),'XTickLabel',linspace(0,40,5),...
         'TickDir','out','Color','white','FontSize',10,'FontName','Calibri');
     hold off
 end
@@ -1233,14 +1224,14 @@ binUnits(binUnits>1)=1; %no more than 1 spike per ms
 [ACG,lags]=xcorr(double(binUnits),200,'unbiased'); %'coeff'
 ACG(lags==0)=0;
 axes(handles.ACG_Axes); hold on;
-cla(handles.ACG_Axes);
+cla(handles.ACG_Axes,'reset');
 set(handles.ACG_Axes,'Visible','on');
 ACGh=bar(lags,ACG);
 ACGh.FaceColor = handles.cmap(unitID(unitID==selectedUnits),:);
 ACGh.EdgeColor = 'none';
-axis('tight');box off;
+axis('tight');box off; grid('on');
 xlabel('Autocorrelogram (5 ms bins)')
-set(gca,'xlim',[-50 50],'Color','white','FontSize',10,'FontName','Calibri','TickDir','out');
+set(gca,'xlim',[-20 20],'Color','white','FontSize',10,'FontName','Calibri','TickDir','out');
 hold off
 
 %% Plot cross-correlogram
