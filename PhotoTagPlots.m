@@ -1,8 +1,13 @@
-fileName='SpVi12_1107_WR_MS_LS500mHz2ms6_nopp';
+fileName='SpVi12_1206_WR_LS_500mHz_2ms_2_nopp'
+% 'SpVi12_1107_WR_Texture_LS500mH_24Ch_nopp'
+%'SpVi12_1107_WR_Texture_LS500mH_24Ch_nopp'
+%'SpVi12_133_2Hz2ms_7mW_nopp'
+%'SpVi12_1103_WR_LS_500mHz2ms70m_nopp'
+%'SpVi12_1107_WR_MS_LS500mHz2ms6_nopp';
 %'SpVi12_1107_WR_MS_LS500mHz2ms6_24Ch_nopp'; 
 %'SpVi12_1024_KX_MLStim_26Ch_nopp'; %'039v_0925_2Hz20ms_20mW_28Ch_nopp'; 
 % '039v_0927_2Hz20ms_20mW_28Ch_nopp'; % 'SpVi12_133_2Hz2ms_10mW_nopp';
-channelNum=22;
+channelNum=24;
 % SpVi12_133_2Hz2ms_10mW_nopp_Ch %SpVi12_133_2Hz2ms_10mW_nopp_Ch
 spikeData=load([fileName '_Ch' num2str(channelNum) '.mat'],'waveForms','spikeTimes','unitsIdx','samplingRate','selectedUnits');
 load([fileName '_Ch' num2str(channelNum) '.mat'],'TTLs');
@@ -34,7 +39,7 @@ for clusNum=1:size(spikeData.selectedUnits,1)
     %% create rasters aligned to TTL
     %define parameters
     preAlignWindow=20;
-    postAlignWindow=59;
+    postAlignWindow=259;
     TTLtimes=uint32(TTLs.TTLtimes)/(TTLs.samplingRate/1000);
     raster=nan(numel(TTLs.TTLtimes),preAlignWindow+postAlignWindow+1);
     for trialNum=1:numel(TTLs.TTLtimes)

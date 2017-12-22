@@ -23,9 +23,9 @@ for cellNum=1:length(spikeRasters)
     FRploth=plot(gca,sdf{1},'Color',cmap(cellNum,:),'LineWidth',1.8);%[0.16 0.38 0.27]
     
     zeroLoc=preAlignWindow-3*conv_sigma;
+    axis(gca,'tight');set(gca,'xlim',[0 80]);
     set(gca,'XTick',[zeroLoc-10 zeroLoc zeroLoc+10 zeroLoc+20 zeroLoc+40]); %xTickSteps-(1+3*conv_sigma):xTickSteps:(stop-start-6*conv_sigma));
     set(gca,'XTickLabel',[-10 0 10 20 40]); %-(alignmtt-xTickSteps):xTickSteps:stop-(alignmtt+xTickSteps));
-    axis(gca,'tight');
     set(gca,'Color','white','FontSize',10,'FontName','calibri','TickDir','out');
     xlabel(gca,'Time (ms)'); %,'FontName','Cambria','FontSize',12);
     ylabel(gca,'Firing rate (spikes/s)'); %,'FontName','Cambria','FontSize',12);

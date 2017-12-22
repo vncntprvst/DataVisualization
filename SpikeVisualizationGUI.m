@@ -1,6 +1,7 @@
 function varargout = SpikeVisualizationGUI(varargin)
 % MATLAB code for SpikeVisualizationGUI.fig
 % Last Modified by GUIDE v2.5 17-Nov-2017 16:03:13
+% version 0.7 (nov 2017), tested in R2017b
 % version 0.5 (sept 2016), tested in R2014b
 % Vincent Prevosto
 % email: vp35 at duke.edu
@@ -86,7 +87,7 @@ else
             {dataDirListing.name},'UniformOutput',false)));
         %removing other folders
         dataDirListing=dataDirListing(cellfun('isempty',cellfun(@(x)...
-            regexp('list | all | unwanted | folders | here ',x),...
+            regexp('Behav | Video | Impedance',x),... % list | all | unwanted | folders | here
             {dataDirListing.name},'UniformOutput',false)));
         [~,fDateIdx]=sort([dataDirListing.datenum],'descend');
         recentDataFolder=[exportDir filesep dataDirListing(fDateIdx(1)).name filesep];
@@ -249,11 +250,18 @@ else
                     recInfo=load([fileName{:} '_info.mat']);
                 elseif ~isempty(handles.offlineSort_SpikeFile)
                     exportDirListing=dir(cd);
+                    if sum(~cellfun('isempty',cellfun(@(x) strfind(x,'_info.'),...
+                {exportDirListing.name},'UniformOutput',false)))
                     fileName=exportDirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_info.'),...
                 {exportDirListing.name},'UniformOutput',false))).name;
                     recInfo=load(fileName);
-%                     fileName=regexp(handles.offlineSort_SpikeFile,'.+(?=\.\w+\.\w+$)','match');
-%                     cd ..
+                    else %might be in folder above
+                        exportDirListing=dir('..');
+                        fileName=exportDirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_info.'),...
+                            {exportDirListing.name},'UniformOutput',false))).name;
+                        currDir=cd; cd('..');
+                        recInfo=load(fileName); cd(currDir);
+                    end 
                 end 
             catch
                 [fileInfoName,fileInfoDir,FilterIndex] = uigetfile({'*.mat;*.txt','File Info Formats';...
@@ -295,7 +303,7 @@ else
                 cd(handles.offlineSort_SpikeDir);
                 handles.Spikes.Offline_Sorting=LoadSpikeData(handles.offlineSort_SpikeFile,...
                     handles.rec_info.numRecChan,handles.rec_info.samplingRate);
-            elseif logical(regexp(handles.offlineSort_SpikeFile,'.hdf5')) % Spyking-Circus
+            elseif contains(handles.offlineSort_SpikeFile,'.hdf5') % Spyking-Circus
                 % first load raw traces in memory
                 fileName=regexp(handles.offlineSort_SpikeFile,'.+(?=\.\w+\.\w+$)','match');
                 %                 tb_filename=[tb_filename{1} '.dat'];
@@ -328,7 +336,7 @@ else
                 handles.Spikes.Offline_Sorting=LoadSpikeData(handles.offlineSort_SpikeFile,rawData,...
                     numel(handles.rec_info.exportedChan),handles.rec_info.samplingRate,handles.rec_info.bitResolution); %handles.rawDataInfo.size(1)
                 clear rawData;
-            elseif logical(regexp(handles.offlineSort_SpikeFile,'rez.mat')) % KiloSort
+            elseif contains(handles.offlineSort_SpikeFile,'rez.mat') % KiloSort
                 fileName=exportDirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'.dat'),...
                 {exportDirListing.name},'UniformOutput',false))).name;
                 if iscell(fileName) && length(fileName)>1
@@ -356,7 +364,8 @@ else
                 handles.Spikes.Offline_Sorting=LoadSpikeData(handles.offlineSort_SpikeFile,rawData,...
                     numel(handles.rec_info.exportedChan),handles.rec_info.samplingRate,handles.rec_info.bitResolution); %handles.rawDataInfo.size(1)
                 clear rawData;
-            elseif logical(regexp(handles.offlineSort_SpikeFile,'.csv')) % assuming JRClus
+            elseif contains(handles.offlineSort_SpikeFile,'.csv') || ...
+                    contains(handles.offlineSort_SpikeFile,'_jrc.mat') % assuming JRClust
                 fileName=exportDirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'.dat'),...
                 {exportDirListing.name},'UniformOutput',false))).name;
                 if iscell(fileName) && length(fileName)>1
@@ -378,7 +387,7 @@ else
                 end
                 %then import
                 cd(handles.offlineSort_SpikeDir);
-                                if ~isfield(handles.rec_info,'bitResolution') || isempty(handles.rec_info.bitResolution)
+                if ~isfield(handles.rec_info,'bitResolution') || isempty(handles.rec_info.bitResolution)
                     handles.rec_info.bitResolution=0.25; %default 0.25 uV/bit
                 end
                 handles.Spikes.Offline_Sorting=LoadSpikeData(handles.offlineSort_SpikeFile,...
@@ -511,15 +520,20 @@ else
         end
     end
     %% Set number of electrodes and units,
-    % if opening GUI, select electrode with most units and spikes
+    % when opening GUI, selects cluster with most spikes and 
+    % electrode with most spikes from that cluster
     if strcmp(get(handles.SelectElectrode_LB,'string'),'none')
         if diff(size(handles.rec_info.exportedChan))>0
             handles.rec_info.exportedChan=handles.rec_info.exportedChan';
         end
         set(handles.SelectElectrode_LB,'string',num2str(handles.rec_info.exportedChan));
         if isfield(handles.Spikes,'Online_Sorting') || isfield(handles.Spikes,'Offline_Sorting')
-            numUnits=cellfun(@(x) sum(length(x)*unique(x)), handles.Spikes.HandSort.Units);
-            electrodeNum=find(numUnits==max(numUnits),1);
+%             numUnits=cellfun(@(x) sum(length(x)*unique(x)), handles.Spikes.HandSort.Units);      
+            allUnits=cellfun(@(units) units, handles.Spikes.HandSort.Units,'UniformOutput',false);
+            unitID=mode(cell2mat(allUnits));
+            unitDispersion=cellfun(@(units) sum(units==unitID), handles.Spikes.HandSort.Units);
+%             electrodeNum=find(numUnits==max(numUnits),1);
+            electrodeNum=find(unitDispersion==max(unitDispersion));
             set(handles.SelectElectrode_LB,'value',electrodeNum);
         else
             set(handles.SelectElectrode_LB,'value',1)
@@ -1216,7 +1230,7 @@ unitST=unitST/(samplingRate/1000);
 %bin
 spikeTimeIdx=zeros(1,unitST(end));
 spikeTimeIdx(unitST)=1;
-binSize=5;
+binSize=1;
 numBin=ceil(size(spikeTimeIdx,2)/binSize);
 binUnits = histcounts(double(unitST), linspace(0,size(spikeTimeIdx,2),numBin));
 binUnits(binUnits>1)=1; %no more than 1 spike per ms
@@ -1229,9 +1243,11 @@ set(handles.ACG_Axes,'Visible','on');
 ACGh=bar(lags,ACG);
 ACGh.FaceColor = handles.cmap(unitID(unitID==selectedUnits),:);
 ACGh.EdgeColor = 'none';
-axis('tight');box off; grid('on');
-xlabel('Autocorrelogram (5 ms bins)')
-set(gca,'xlim',[-20 20],'Color','white','FontSize',10,'FontName','Calibri','TickDir','out');
+% axis('tight');
+box off; grid('on'); %set(gca,'yscale','log','GridAlpha',0.25,'MinorGridAlpha',1);
+xlabel('Autocorrelogram (1 ms bins)')
+set(gca,'xlim',[-20 20],... %'ylim',[0 max([max(get(gca,'ylim')) 10^1])]
+    'Color','white','FontSize',10,'FontName','Calibri','TickDir','out');
 hold off
 
 %% Plot cross-correlogram
@@ -2246,17 +2262,17 @@ clusterIncrement=cumsum(cellfun(@(x) length(unique(x)),clusterID)); clusterIncre
 clusterID=cellfun(@(x,y) x+y, clusterID,num2cell(clusterIncrement,4),'UniformOutput',false);
 clusterID=vertcat(clusterID{:}); clusterID=clusterID(sortIdx);
 
-waveForms=NaN(length(spikeTimes),length(electrodeNum),size(handles.Spikes.HandSort.Waveforms{1},1));
-for elNum=1:length(electrodeNum)
-    if isa(handles.rawData,'memmapfile') % reading electrode data from .dat file
-        waveForms(:,elNum,:)=ExtractChunks(handles.rawData.Data(electrodeNum(elNum):...
-            handles.rec_info.numRecChan:max(size(handles.rawData.Data))),...
-            spikeTimes,50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
-    else
-        waveForms(:,elNum,:)=ExtractChunks(handles.rawData(electrodeNum(elNum),:),...
-            spikeTimes,50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
-    end
-end
+% waveForms=NaN(length(spikeTimes),length(electrodeNum),size(handles.Spikes.HandSort.Waveforms{1},1));
+% for elNum=1:length(electrodeNum)
+%     if isa(handles.rawData,'memmapfile') % reading electrode data from .dat file
+%         waveForms(:,elNum,:)=ExtractChunks(handles.rawData.Data(electrodeNum(elNum):...
+%             handles.rec_info.numRecChan:max(size(handles.rawData.Data))),...
+%             spikeTimes,50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
+%     else
+%         waveForms(:,elNum,:)=ExtractChunks(handles.rawData(electrodeNum(elNum),:),...
+%             spikeTimes,50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
+%     end
+% end
 
 features = Create_FeatureSpace(waveForms);
 figure;

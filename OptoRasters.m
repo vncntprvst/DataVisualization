@@ -63,8 +63,8 @@ for cellNum=1:length(spikeRasters)
     % draw alignment bar
     currylim=get(gca,'YLim');
 %     currxlim=get(gca,'XLim');%midl=round(currxlim(2)/20)*10;
-    set(gca,'XTick',preAlignWindow-10:10:preAlignWindow+40);
-    set(gca,'XTickLabel',-10:10:40,'FontSize',10,'FontName','calibri','TickDir','out');
+    set(gca,'XTick',preAlignWindow:50:max(get(gca,'xlim')));
+    set(gca,'XTickLabel',0:50:max(get(gca,'xlim'))-preAlignWindow,'FontSize',10,'FontName','calibri','TickDir','out');
     
     %opto stim patch
     patch([preAlignWindow preAlignWindow preAlignWindow+pulseDur-1 preAlignWindow+pulseDur-1], ...

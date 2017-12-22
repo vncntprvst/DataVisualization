@@ -65,80 +65,70 @@ elseif contains(fName,'.hdf5') % Spyking Circus
         catch
         end
     end
-elseif contains(fName,'.mat') % Kilosort or just Matlab processing
+elseif contains(fName,'rez.mat') || contains(fName,'_KS') %Kilosort
     load(fName);
-    if contains(fName,'rez') || contains(fName,'_KS') %Kilosort
-        spikeTimes = uint64(rez.st3(:,1));
-        spikeTemplates = uint32(rez.st3(:,2));
-        templates=abs(rez.Wraw);
-        templateToEl=zeros(max(unique(spikeTemplates)),1);
-        for templNum=1:max(unique(spikeTemplates))
-            thatTemplate=squeeze(templates(:,:,templNum));
-            [elecRow,~] = ind2sub(size(thatTemplate),find(thatTemplate==max(max(thatTemplate))));
-            if size(elecRow,1)>1
-                if length(unique(elecRow))>1 %weird
-                    %                     then look for next biggest value?
-                    return
-                else
-                    elecRow=unique(elecRow);
-                end
-            end
-            templateToEl(templNum)=elecRow;
-        end
-        for elNum=1:electrodes
-            try
-                %Results, after fitting templates
-                thisElTemplates=find(templateToEl==elNum);
-                units=false(size(spikeTemplates,1),1);
-                for templt=1:size(thisElTemplates,1)
-                    units=units | spikeTemplates==thisElTemplates(templt);
-                end
-                Spikes.Units{elNum,1}=spikeTemplates(units);
-                Spikes.SpikeTimes{elNum,1}=spikeTimes(units);
-                % extract spike waveforms  rawData = memmapfile('example.dat','Format','int16');
-                if isa(rawData,'memmapfile') % reading electrode data from .dat file
-                    Spikes.Waveforms{elNum,1}=ExtractChunks(rawData.Data(elNum:electrodes:max(size(rawData.Data))),...
-                        Spikes.SpikeTimes{elNum,1},50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
-                else
-                    Spikes.Waveforms{elNum,1}=ExtractChunks(rawData(elNum,:),...
-                        Spikes.SpikeTimes{elNum,1},50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
-                end
-                % scale to resolution
-                Spikes.Waveforms{elNum,1}=Spikes.Waveforms{elNum,1}.*bitResolution;
-                Spikes.samplingRate(elNum,1)=samplingRate;
-            catch
+    
+    spikeTimes = uint64(rez.st3(:,1));
+    spikeTemplates = uint32(rez.st3(:,2));
+    templates=abs(rez.Wraw);
+    templateToEl=zeros(max(unique(spikeTemplates)),1);
+    for templNum=1:max(unique(spikeTemplates))
+        thatTemplate=squeeze(templates(:,:,templNum));
+        [elecRow,~] = ind2sub(size(thatTemplate),find(thatTemplate==max(max(thatTemplate))));
+        if size(elecRow,1)>1
+            if length(unique(elecRow))>1 %weird
+                %                     then look for next biggest value?
+                return
+            else
+                elecRow=unique(elecRow);
             end
         end
-        
-    else
-        %Matlab export - all units unsorted by default
-        
-        for elNum=1:numel(electrodes)
-            try
-                Spikes.Units{elNum,1}=zeros(1,numel(find(Spikes.data{electrodes(elNum)})));
-                Spikes.SpikeTimes{elNum,1}=find(Spikes.data{electrodes(elNum)});
+        templateToEl(templNum)=elecRow;
+    end
+    for elNum=1:electrodes
+        try
+            %Results, after fitting templates
+            thisElTemplates=find(templateToEl==elNum);
+            units=false(size(spikeTemplates,1),1);
+            for templt=1:size(thisElTemplates,1)
+                units=units | spikeTemplates==thisElTemplates(templt);
+            end
+            Spikes.Units{elNum,1}=spikeTemplates(units);
+            Spikes.SpikeTimes{elNum,1}=spikeTimes(units);
+            % extract spike waveforms  rawData = memmapfile('example.dat','Format','int16');
+            if isa(rawData,'memmapfile') % reading electrode data from .dat file
+                Spikes.Waveforms{elNum,1}=ExtractChunks(rawData.Data(elNum:electrodes:max(size(rawData.Data))),...
+                    Spikes.SpikeTimes{elNum,1},50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
+            else
                 Spikes.Waveforms{elNum,1}=ExtractChunks(rawData(elNum,:),...
-                    Spikes.SpikeTimes{elNum,1},40,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
-                % 0.25 bit per uV, so divide by 4 - adjust according to
-                % recording system
-                Spikes.Waveforms{elNum,1}=Spikes.Waveforms{elNum,1}./4;
-            catch
+                    Spikes.SpikeTimes{elNum,1},50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
             end
+            % scale to resolution
+            Spikes.Waveforms{elNum,1}=Spikes.Waveforms{elNum,1}.*bitResolution;
+            Spikes.samplingRate(elNum,1)=samplingRate;
+        catch
         end
     end
-elseif contains(fName,'.csv') %from JRClust
+    
+elseif contains(fName,'.csv') || contains(fName,'_jrc.mat') %from JRClust
     
     %% locate the _jrc file
     dirListing=dir;
     S0struct=dirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_jrc.mat'),...
         {dirListing.name},'UniformOutput',false))).name;
     
+    % dimm_spk Dimensions for spike waveforms (stored in_spkwav.bin file)
+    % viTime_spk Spike timing in ADC sample unit
+    % cviSpk_site Cell of spike index (for _spk prefix) per site
+    % miClu_log
+    % P Parameter struct used for automated clustering
+    % S_clu Cluster-specific information
     load(S0struct, 'dimm_spk','viTime_spk','cviSpk_site','miClu_log','P','S_clu')
     
     %% import info from cvs file export
-    clusterInfo = ImportJRClusSortInfo(fName);
+%     clusterInfo = ImportJRClusSortInfo(fName);
     
-    %% if we want to attribute each cluster to a specifc electrode:
+    %% if we want to attribute each cluster to a specific electrode:
     %     allClusters=unique(clusterInfo.clusterNum);
     %     for clusNum=1:length(allClusters)
     %         bestSite=mode(clusterInfo.bestSite(clusterInfo.clusterNum==allClusters(clusNum)));
@@ -177,6 +167,7 @@ elseif contains(fName,'.csv') %from JRClust
     for elNum=1:electrodes
         try
             units=cviSpk_site{elNum}; % if data from csv file:  clusterInfo.bestSite==elNum;
+            units=units(miClu_log(units,1)>=0);
             Spikes.Units{elNum,1}=miClu_log(units,1); %         clusterInfo.clusterNum(units);
             Spikes.SpikeTimes{elNum,1}=viTime_spk(units) ; %    clusterInfo.timeStamps(units)*samplingRate;
             Spikes.Waveforms{elNum,1}=squeeze(mnWav(:,1,units));
@@ -233,4 +224,20 @@ elseif contains(fName,'.csv') %from JRClust
             [Spikes.Units{elNum,1},Spikes.SpikeTimes{elNum,1}]=deal([]);
         end
     end
+elseif contains(fName,'.mat') % just Matlab processing
+    %Matlab export - all units unsorted by default
+    for elNum=1:numel(electrodes)
+        try
+            Spikes.Units{elNum,1}=zeros(1,numel(find(Spikes.data{electrodes(elNum)})));
+            Spikes.SpikeTimes{elNum,1}=find(Spikes.data{electrodes(elNum)});
+            Spikes.Waveforms{elNum,1}=ExtractChunks(rawData(elNum,:),...
+                Spikes.SpikeTimes{elNum,1},40,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
+            % 0.25 bit per uV, so divide by 4 - adjust according to
+            % recording system
+            Spikes.Waveforms{elNum,1}=Spikes.Waveforms{elNum,1}./4;
+        catch
+        end
+    end
+    
+end
 end
