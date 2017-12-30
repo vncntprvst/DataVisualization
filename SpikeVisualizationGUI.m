@@ -231,7 +231,7 @@ else
         set(handles.TB_FileName,'string',[handles.exportDir handles.spikeFile])
         
         %% Load spike data
-        if ~isempty(handles.spikeFile) && ~strcmp(set(handles.Spikes_PrevSorted_Menu,'Checked'),'on')
+        if ~isempty(handles.spikeFile) && ~strcmp(get(handles.Spikes_PrevSorted_Menu,'Checked'),'on')
             spikeData=load(handles.spikeFile);
             if isfield(handles,'Spikes')
                 % This will delete all Spikes data inlcuding any changes to HandSort
