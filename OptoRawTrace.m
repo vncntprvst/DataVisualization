@@ -3,7 +3,7 @@ function OptoRawTrace(recTrace,spikeTimes,msConv,TTLtimes,option,axisHandle)
 if ~exist('axisHandle','var') | isempty(axisHandle)
     figure('Position',[1092 149 708 761]); hold on
 end
-colormap(parula); cmap=colormap;
+cmap=parula;
 %plot raw trace
 plot(recTrace.data,'color','k');
 
@@ -29,10 +29,10 @@ if ~isempty(TTLtimes)
 end
 box off;
 xlabel('Time (ms)');
-set(gca,'Color','white','FontSize',18,'FontName','calibri');
+set(gca,'Color','white','FontSize',18,'FontName','Helvetica');
 
 for cellNum=1:length(spikeTimes)
-    if ~isempty(spikeTimes{cellNum})
+    if ~isempty(spikeTimes{cellNum}) & ~isnan(spikeTimes{cellNum})
         %plot spike id labels
         spkLabelYLoc=ones(1,size(spikeTimes{cellNum},2))*(min(get(gca,'ylim'))/4*3);
         plot(single(spikeTimes{cellNum})-(recTrace.location-recTrace.excerptSize),...

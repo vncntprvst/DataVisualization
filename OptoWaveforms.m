@@ -41,11 +41,11 @@ for cellNum=1:length(keepCell)
     set(gca,'xTick',[0,15,30,45])
     figXlabels=get(gca,'xTickLabel');
     set(gca,'xTickLabel',cellfun(@(xlabl) num2str(str2double(xlabl)/30),...
-        figXlabels,'UniformOutput',false),'FontSize',10,'FontName','calibri','TickDir','out');
+        figXlabels,'UniformOutput',false),'FontSize',10,'FontName','Helvetica','TickDir','out');
     axis('tight');box off;
     xlabel('Time (ms)')
     ylabel('Voltage (\muV)');
-    set(gca,'Color','white','FontSize',18,'FontName','calibri');
+    set(gca,'Color','white','FontSize',18,'FontName','Helvetica');
     legend([onpulseSDFploth,offpulseSDFploth],{'Pulse-evoked spikes','Spontaneous spikes'},'FontSize',12,'location','southeast');
     legend('boxoff')
     

@@ -52,28 +52,29 @@ for cellNum=1:length(spikeRasters)
     if ~exist('axisHandle','var') || isempty(axisHandle)
         figure('Position',[1092 149 708 761])
     end
-    colormap(parula); % cmap=colormap;
-    
-    %% single neuron raster 
-    imagesc(spikeRasters{cellNum}); %
-    
+%     colormap(parula); % cmap=colormap;
+    colormap(flipud(gray));
+    %% single neuron raster
+    imagesc(logical(spikeRasters{cellNum})); %
     % imagesc(MeanChan);
     xlabel('Time (ms)');
     ylabel('Stimulation#','FontSize',12); %'FontWeight','bold'
     % draw alignment bar
     currylim=get(gca,'YLim');
-%     currxlim=get(gca,'XLim');%midl=round(currxlim(2)/20)*10;
-    set(gca,'XTick',preAlignWindow:50:max(get(gca,'xlim')));
-    set(gca,'XTickLabel',0:50:max(get(gca,'xlim'))-preAlignWindow,'FontSize',10,'FontName','calibri','TickDir','out');
+    %     currxlim=get(gca,'XLim');%midl=round(currxlim(2)/20)*10;
+    %     set(gca,'XTick',preAlignWindow:50:max(get(gca,'xlim')));
+    %     set(gca,'XTickLabel',0:50:max(get(gca,'xlim'))-preAlignWindow,'FontSize',10,'FontName','calibri','TickDir','out');
+    set(gca,'XLim',[0.5 80.5],'XTick',0:10:80);
+    set(gca,'XTickLabel',(0:10:80)-preAlignWindow,'FontSize',10,'FontName','calibri','TickDir','out');
     
     %opto stim patch
-    patch([preAlignWindow preAlignWindow preAlignWindow+pulseDur-1 preAlignWindow+pulseDur-1], ...
+    patch([preAlignWindow preAlignWindow preAlignWindow+pulseDur preAlignWindow+pulseDur], ...
         [[0 currylim(2)] fliplr([0 currylim(2)])], ...
         [0 0 0 0],[0.3 0.75 0.93],'EdgeColor','none','FaceAlpha',0.5);
-    set(gca,'Color','white','FontSize',18,'FontName','calibri');
-%     title('Neural response to 10mW stimulation intensity, aligned to stimulation onset');
+    set(gca,'Color','white','FontSize',18,'FontName','Helvetica');
+    %     title('Neural response to 10mW stimulation intensity, aligned to stimulation onset');
     % hcb = colorbar('southoutside');
     % hcb.Label.String = 'z-scored firing rate';
-  
+    
 end
 

@@ -1,4 +1,7 @@
-fileName='SpVi12_1206_WR_LS_500mHz_2ms_2_nopp'
+fileName='SpVi12_1107_WR_Texture_LS500mH_24Ch_nopp' %_Ch6
+channelNum=6; %11 %24;
+%% 'SpVi12_133_2Hz2ms_7mW_nopp'
+%'SpVi12_1206_WR_LS_500mHz_2ms_2_nopp'
 % 'SpVi12_1107_WR_Texture_LS500mH_24Ch_nopp'
 %'SpVi12_1107_WR_Texture_LS500mH_24Ch_nopp'
 %'SpVi12_133_2Hz2ms_7mW_nopp'
@@ -7,11 +10,46 @@ fileName='SpVi12_1206_WR_LS_500mHz_2ms_2_nopp'
 %'SpVi12_1107_WR_MS_LS500mHz2ms6_24Ch_nopp'; 
 %'SpVi12_1024_KX_MLStim_26Ch_nopp'; %'039v_0925_2Hz20ms_20mW_28Ch_nopp'; 
 % '039v_0927_2Hz20ms_20mW_28Ch_nopp'; % 'SpVi12_133_2Hz2ms_10mW_nopp';
-channelNum=24;
 % SpVi12_133_2Hz2ms_10mW_nopp_Ch %SpVi12_133_2Hz2ms_10mW_nopp_Ch
+%% From SpikeVisualizationGUI export
 spikeData=load([fileName '_Ch' num2str(channelNum) '.mat'],'waveForms','spikeTimes','unitsIdx','samplingRate','selectedUnits');
 load([fileName '_Ch' num2str(channelNum) '.mat'],'TTLs');
-load([fileName '_Ch' num2str(channelNum) '.mat'], 'dataExcerpt');
+load([fileName '_Ch' num2str(channelNum) '.mat'], 'traceExcerpt');
+traceData=load([fileName '_Ch' num2str(channelNum) '.mat'], 'allTraces','traceInfo');
+
+%% From JRClust csv export
+% dirListing=dir; dirName=cd;
+% infoFileName=dirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_info.'),...
+%     {dirListing.name},'UniformOutput',false))).name;
+% recInfo=load(fullfile(dirName,infoFileName),'rec_info');recInfo=recInfo.rec_info;
+% 
+% JRclustData=load([fileName '_JR.csv']);
+% spikeData.selectedUnits=[2]; % 3 4];
+% unitIdx=JRclustData(:,2)==2; % | JRclustData(:,2)==3 | JRclustData(:,2)==4;
+% spikeData.unitsIdx=int8(JRclustData(unitIdx,2));
+% spikeData.spikeTimes=uint32(JRclustData(unitIdx,1)*recInfo.samplingRate);
+% 
+% traces = memmapfile(fullfile(dirName,[fileName '.dat']),'Format','int16');
+% waveForms=cell(recInfo.numRecChan,1);
+% for chNum=1:recInfo.numRecChan
+%     waveForms{chNum,1}=ExtractChunks(traces.Data(chNum:recInfo.numRecChan:max(size(traces.Data))),...
+%         JRclustData(JRclustData(JRclustData(:,3)==chNum,2)==spikeData.selectedUnits,1)*recInfo.samplingRate,...
+%         50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
+% end
+% 
+% spikeData.waveForms=int16(cell2mat(waveForms(~cellfun('isempty',waveForms)))');
+% %
+% % spikes=LoadSpikeData([fileName '_JR.csv'],[],recInfo.numRecChan,recInfo.samplingRate,recInfo.bitResolution);
+% % 
+% % spikeData.selectedUnits=2;
+% % units=cellfun(@(chUnits) chUnits(chUnits==spikeData.selectedUnits),spikes.Units,'UniformOutput',false);
+% % spikeTimes=cellfun(@(chUnits,chSpkTimes) chSpkTimes(chUnits==spikeData.selectedUnits),...
+% %         spikes.Units,spikes.SpikeTimes,'UniformOutput',false);
+% % waveForms=cellfun(@(chUnits,chWf) chWf(:,chUnits==spikeData.selectedUnits),spikes.Units,...
+% %         spikes.Waveforms,'UniformOutput',false);
+% % spikeTimes=cell2mat(spikeTimes(~cellfun('isempty',units)));
+% % waveForms=cell2mat(waveForms(~cellfun('isempty',units))');
+% % units=cell2mat(units(~cellfun('isempty',units)));
 
 %% get spike times and convert to binary array
 for clusNum=1:size(spikeData.selectedUnits,1)
@@ -95,12 +133,32 @@ OptoSDF(spikeRasters(cellNum),preAlignWindow,pulseDur,gca)
 subplot(3,3,7:9); hold on
 
 msConv=double(spikeData.samplingRate/1000);
-excerptTTLtimes=double(TTLtimes(TTLtimes>(dataExcerpt.location-dataExcerpt.excerptSize)/msConv &...
-    TTLtimes<(dataExcerpt.location+dataExcerpt.excerptSize)/msConv)-...
-    (dataExcerpt.location-dataExcerpt.excerptSize)/msConv)*msConv;
+excerptTTLtimes=double(TTLtimes(TTLtimes>(traceExcerpt.location-traceExcerpt.excerptSize)/msConv &...
+    TTLtimes<(traceExcerpt.location+traceExcerpt.excerptSize)/msConv)-...
+    (traceExcerpt.location-traceExcerpt.excerptSize)/msConv)*msConv;
 if ~isempty(excerptTTLtimes)
 %     excerptTTLtimes=excerptTTLtimes(end); %if wants to keep only one pulse
+else % check further out in the trace
+    traceExcerpt.location=TTLtimes(1)*msConv;
+    winIdxStart=(traceExcerpt.location-traceExcerpt.excerptSize)*traceData.traceInfo.numChan+1;
+%     mod(winIdxStart,traceData.traceInfo.numChan)
+    winSize=2; %default 1 pulse 
+    winIdxEnd=winIdxStart+(winSize*2*traceExcerpt.excerptSize*traceData.traceInfo.numChan);
+    excerptWindow=winIdxStart:winIdxEnd-1;
+%     size(excerptWindow,2)>(2*traceExcerpt.excerptSize*traceData.traceInfo.numChan) 
+    
+    traceExcerpt.data=traceData.allTraces.Data(excerptWindow);
+    traceExcerpt.data=reshape(traceExcerpt.data,[traceData.traceInfo.numChan traceExcerpt.excerptSize*2*winSize]);
+    
+    preprocOption={'CAR','all'};
+    traceExcerpt.data=PreProcData(traceExcerpt.data,30000,preprocOption);
+%     figure; plot(dataExcerpt(11,:))
+    traceExcerpt.data=traceExcerpt.data(channelNum,:);
+    excerptTTLtimes=double(TTLtimes(TTLtimes>(traceExcerpt.location-traceExcerpt.excerptSize)/msConv &...
+    TTLtimes<(traceExcerpt.location+traceExcerpt.excerptSize*winSize)/msConv)-...
+    (traceExcerpt.location-traceExcerpt.excerptSize)/msConv)*msConv;
+    traceExcerpt.spkTimes{cellNum}=NaN;
 end %plot anyway
-OptoRawTrace(dataExcerpt,dataExcerpt.spkTimes(cellNum),msConv,excerptTTLtimes,'',gca)
+OptoRawTrace(traceExcerpt,traceExcerpt.spkTimes(cellNum),msConv,excerptTTLtimes,'',gca)
 end
 

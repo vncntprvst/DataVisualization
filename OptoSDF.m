@@ -4,7 +4,7 @@ for cellNum=1:length(spikeRasters)
     if ~exist('axisHandle','var') || isempty(axisHandle)
         figure('Position',[1092 149 708 761]); hold on
     end
-    colormap(parula); cmap=colormap;
+    cmap=parula; %colormap(parula);
     
     %% plot sdf
     conv_sigma=1;
@@ -26,7 +26,7 @@ for cellNum=1:length(spikeRasters)
     axis(gca,'tight');set(gca,'xlim',[0 80]);
     set(gca,'XTick',[zeroLoc-10 zeroLoc zeroLoc+10 zeroLoc+20 zeroLoc+40]); %xTickSteps-(1+3*conv_sigma):xTickSteps:(stop-start-6*conv_sigma));
     set(gca,'XTickLabel',[-10 0 10 20 40]); %-(alignmtt-xTickSteps):xTickSteps:stop-(alignmtt+xTickSteps));
-    set(gca,'Color','white','FontSize',10,'FontName','calibri','TickDir','out');
+    set(gca,'Color','white','FontSize',10,'FontName','Helvetica','TickDir','out');
     xlabel(gca,'Time (ms)'); %,'FontName','Cambria','FontSize',12);
     ylabel(gca,'Firing rate (spikes/s)'); %,'FontName','Cambria','FontSize',12);
     
@@ -36,7 +36,7 @@ for cellNum=1:length(spikeRasters)
         preAlignWindow-(3*conv_sigma)+pulseDur-1, preAlignWindow-(3*conv_sigma)+pulseDur-1], ...
         [[0 currylim(2)] fliplr([0 currylim(2)])], ...
         [0 0 0 0],[0.3 0.75 0.93],'EdgeColor','none','FaceAlpha',0.5);
-    set(gca,'Color','white','FontSize',18,'FontName','calibri');
+    set(gca,'Color','white','FontSize',18,'FontName','Helvetica');
     %legend
     legend([FRploth,OptoStimh],{'Average firing rate','Optical stimulation'},'FontSize',12);
     legend('boxoff')

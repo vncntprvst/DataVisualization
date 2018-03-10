@@ -1,4 +1,4 @@
-function Spikes=LoadSpikeData(fName,rawData,electrodes,samplingRate,bitResolution)
+function Spikes=LoadSpikeData(fName,traces,electrodes,samplingRate,bitResolution)
 if logical(regexp(fName,'Ch\d+.')) %from Spike2
     load(fName)
     Spikes.Units{electrodes,1}=nw_401.codes(:,1);
@@ -35,11 +35,11 @@ elseif contains(fName,'.hdf5') % Spyking Circus
             [Spikes.SpikeTimes{elNum,1},timeIdx]=sort(Spikes.SpikeTimes{elNum,1});
             Spikes.Units{elNum,1}=Spikes.Units{elNum,1}(timeIdx);
             % extract spike waveforms
-            if isa(rawData,'memmapfile') % reading electrode data from .dat file
-                Spikes.Waveforms{elNum,1}=ExtractChunks(rawData.Data(elNum:electrodes:max(size(rawData.Data))),...
+            if isa(traces,'memmapfile') % reading electrode data from .dat file
+                Spikes.Waveforms{elNum,1}=ExtractChunks(traces.Data(elNum:electrodes:max(size(traces.Data))),...
                     Spikes.SpikeTimes{elNum,1},50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
             else
-                Spikes.Waveforms{elNum,1}=ExtractChunks(rawData(elNum,:),...
+                Spikes.Waveforms{elNum,1}=ExtractChunks(traces(elNum,:),...
                     Spikes.SpikeTimes{elNum,1},50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
             end
             % scale to resolution
@@ -47,7 +47,7 @@ elseif contains(fName,'.hdf5') % Spyking Circus
             Spikes.samplingRate(elNum,1)=samplingRate;
             
             % plots
-            %             foo=rawData.Data(elNum:electrodes:max(size(rawData.Data)));
+            %             foo=traces.Data(elNum:electrodes:max(size(traces.Data)));
             %             figure; hold on
             %             plot(foo(round(size(foo,1)/2)-samplingRate:round(size(foo,1)/2)+samplingRate));
             %             axis('tight');box off;
@@ -95,12 +95,12 @@ elseif contains(fName,'rez.mat') || contains(fName,'_KS') %Kilosort
             end
             Spikes.Units{elNum,1}=spikeTemplates(units);
             Spikes.SpikeTimes{elNum,1}=spikeTimes(units);
-            % extract spike waveforms  rawData = memmapfile('example.dat','Format','int16');
-            if isa(rawData,'memmapfile') % reading electrode data from .dat file
-                Spikes.Waveforms{elNum,1}=ExtractChunks(rawData.Data(elNum:electrodes:max(size(rawData.Data))),...
+            % extract spike waveforms  traces = memmapfile('example.dat','Format','int16');
+            if isa(traces,'memmapfile') % reading electrode data from .dat file
+                Spikes.Waveforms{elNum,1}=ExtractChunks(traces.Data(elNum:electrodes:max(size(traces.Data))),...
                     Spikes.SpikeTimes{elNum,1},50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
             else
-                Spikes.Waveforms{elNum,1}=ExtractChunks(rawData(elNum,:),...
+                Spikes.Waveforms{elNum,1}=ExtractChunks(traces(elNum,:),...
                     Spikes.SpikeTimes{elNum,1},50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
             end
             % scale to resolution
@@ -208,12 +208,12 @@ elseif contains(fName,'.csv') || contains(fName,'_jrc.mat') %from JRClust
             %             plot(mean(squeeze(mnWav(:,1,:)),2),'k','linewidth',1.5);
             
             %% alternative spike extraction
-            % extract spike waveforms  rawData = memmapfile('example.dat','Format','int16');
-            %             if isa(rawData,'memmapfile') % reading electrode data from .dat file
-            %                 Spikes.Waveforms{elNum,1}=ExtractChunks(rawData.Data(elNum:electrodes:max(size(rawData.Data))),...
+            % extract spike waveforms  traces = memmapfile('example.dat','Format','int16');
+            %             if isa(traces,'memmapfile') % reading electrode data from .dat file
+            %                 Spikes.Waveforms{elNum,1}=ExtractChunks(traces.Data(elNum:electrodes:max(size(traces.Data))),...
             %                     Spikes.SpikeTimes{elNum,1},50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
             %             else
-            %                 Spikes.Waveforms{elNum,1}=ExtractChunks(rawData(elNum,:),...
+            %                 Spikes.Waveforms{elNum,1}=ExtractChunks(traces(elNum,:),...
             %                     Spikes.SpikeTimes{elNum,1},50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
             %             end
             
@@ -230,7 +230,7 @@ elseif contains(fName,'.mat') % just Matlab processing
         try
             Spikes.Units{elNum,1}=zeros(1,numel(find(Spikes.data{electrodes(elNum)})));
             Spikes.SpikeTimes{elNum,1}=find(Spikes.data{electrodes(elNum)});
-            Spikes.Waveforms{elNum,1}=ExtractChunks(rawData(elNum,:),...
+            Spikes.Waveforms{elNum,1}=ExtractChunks(traces(elNum,:),...
                 Spikes.SpikeTimes{elNum,1},40,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
             % 0.25 bit per uV, so divide by 4 - adjust according to
             % recording system
