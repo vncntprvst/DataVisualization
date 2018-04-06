@@ -1,5 +1,5 @@
-function varargout = SpikeVisualizationGUI(varargin)
-% MATLAB code for SpikeVisualizationGUI.fig
+function varargout = SpikeVisualizationGUI_byElectrode(varargin)
+% MATLAB code for SpikeVisualizationGUI_byElectrode.fig
 % Last Modified by GUIDE v2.5 17-Nov-2017 16:03:13
 % version 0.7 (nov 2017), tested in R2017b
 % version 0.5 (sept 2016), tested in R2014b
@@ -10,8 +10,8 @@ function varargout = SpikeVisualizationGUI(varargin)
 gui_Singleton = 1;
 gui_State = struct('gui_Name',       mfilename, ...
     'gui_Singleton',  gui_Singleton, ...
-    'gui_OpeningFcn', @SpikeVisualizationGUI_OpeningFcn, ...
-    'gui_OutputFcn',  @SpikeVisualizationGUI_OutputFcn, ...
+    'gui_OpeningFcn', @SpikeVisualizationGUI_byElectrode_OpeningFcn, ...
+    'gui_OutputFcn',  @SpikeVisualizationGUI_byElectrode_OutputFcn, ...
     'gui_LayoutFcn',  [] , ...
     'gui_Callback',   []);
 if nargin && ischar(varargin{1})
@@ -25,10 +25,10 @@ else
 end
 % End initialization code - DO NOT EDIT
 
-%% --- Executes just before SpikeVisualizationGUI is made visible.
-function SpikeVisualizationGUI_OpeningFcn(hObject, ~, handles, varargin)
+%% --- Executes just before SpikeVisualizationGUI_byElectrode is made visible.
+function SpikeVisualizationGUI_byElectrode_OpeningFcn(hObject, ~, handles, varargin)
 
-% Choose default command line output for SpikeVisualizationGUI
+% Choose default command line output for SpikeVisualizationGUI_byElectrode
 handles.output = hObject;
 
 if ~isempty(varargin)
@@ -520,29 +520,26 @@ else
         end
     end
     %% Set number of electrodes and units,
+    % when opening GUI, selects cluster with most spikes and 
+    % electrode with most spikes from that cluster
     if strcmp(get(handles.SelectElectrode_LB,'string'),'none')
-        % when opening GUI, selects cluster with most spikes and
-        % channel with most spikes from that cluster
-        allUnits=single(vertcat(handles.Spikes.HandSort.Units{:}));
-        [unitOccurence,uniqueUnitIDs]=hist(allUnits,unique(allUnits)); unitOccurence=unitOccurence(uniqueUnitIDs>0);
-        uniqueUnitIDs=uniqueUnitIDs(uniqueUnitIDs>0);
-        selectedUnit=int8(uniqueUnitIDs(unitOccurence==max(unitOccurence),1));
-        % find all occurences of this unit across channels
-        channelIdx=cellfun(@(x) logical(sum(ismember(x,selectedUnit))), handles.Spikes.HandSort.Units);
-        occurencePerChannel=cellfun(@(x) sum(ismember(x,selectedUnit)), handles.Spikes.HandSort.Units);
-        bestChannel=find(occurencePerChannel==max(occurencePerChannel),1);   
         if diff(size(handles.rec_info.exportedChan))>0
             handles.rec_info.exportedChan=handles.rec_info.exportedChan';
         end
-        set(handles.SelectElectrode_LB,'string',num2str(handles.rec_info.exportedChan(channelIdx)));
-        channelNum=find(bestChannel==handles.rec_info.exportedChan(channelIdx));
+        set(handles.SelectElectrode_LB,'string',num2str(handles.rec_info.exportedChan));
         if isfield(handles.Spikes,'Online_Sorting') || isfield(handles.Spikes,'Offline_Sorting')
-            set(handles.SelectElectrode_LB,'value',channelNum);
+%             numUnits=cellfun(@(x) sum(length(x)*unique(x)), handles.Spikes.HandSort.Units);      
+            allUnits=cellfun(@(units) units, handles.Spikes.HandSort.Units,'UniformOutput',false);
+            unitID=mode(cell2mat(allUnits));
+            unitDispersion=cellfun(@(units) sum(units==unitID), handles.Spikes.HandSort.Units);
+%             electrodeNum=find(numUnits==max(numUnits),1);
+            electrodeNum=find(unitDispersion==max(unitDispersion));
+            set(handles.SelectElectrode_LB,'value',electrodeNum);
         else
             set(handles.SelectElectrode_LB,'value',1)
         end
     else
-        channelNum=get(handles.SelectElectrode_LB,'value');
+        electrodeNum=get(handles.SelectElectrode_LB,'value');
     end
     
     %% color electrode by shanks
@@ -563,25 +560,23 @@ else
             mapping=load([handles.userinfo.probemap filesep handles.rec_info.probeID '.mat']);
             handles.rec_info.differentShanks=logical(bwlabel(mod([mapping.(handles.rec_info.probeID).Shank]+1,2)));
         else
-            shanksID=[handles.rec_info.probeLayout(~cellfun('isempty',...
-                {handles.rec_info.probeLayout.Electrode})).Shank];
-            handles.rec_info.differentShanks=logical(bwlabel(mod(shanksID+1,2)));    
+            handles.rec_info.differentShanks=logical(bwlabel(mod([handles.rec_info.probeLayout.Shank]+1,2)));    
         end
-        channelNum=ReturnElectrodes(handles.SelectElectrode_LB);   
-        colorChannels=cell(length(channelNum),1);
-        for elNum=1:length(channelNum) % ASSUMING ALL EXPORTED CHANNELS ARE SORTED !
-            if handles.rec_info.differentShanks(channelNum(elNum))>0
+        electrodeList= cellstr(get(handles.SelectElectrode_LB,'String'))';
+        colorChannels=cell(length(electrodeList),1);
+        for elNum=1:length(electrodeList) % ASSUMING ALL EXPORTED CHANNELS ARE SORTED !
+            if handles.rec_info.differentShanks(elNum)>0
                 colorChannels(elNum)=cellfun(@(thatChannel) sprintf(['<HTML><BODY bgcolor="%s">'...
                     '<FONT color="%s">%s</FONT></BODY></HTML>'],... %size="+1"
-                    'black','white', thatChannel),{num2str(channelNum(elNum))},'UniformOutput',false);
+                    'black','white', thatChannel),electrodeList(elNum),'UniformOutput',false);
             else
                 colorChannels(elNum)=cellfun(@(thatChannel) sprintf(['<HTML><BODY bgcolor="%s">'...
                     '<FONT color="%s">%s</FONT></BODY></HTML>'],... %size="+1"
-                    'white','black', thatChannel),{num2str(channelNum(elNum))},'UniformOutput',false);
+                    'white','black', thatChannel),electrodeList(elNum),'UniformOutput',false);
             end
         end
         set(handles.SelectElectrode_LB, 'String', colorChannels);
-        set(handles.SelectElectrode_LB ,'ListboxTop',max([1 numel(channelNum)-3]));
+        set(handles.SelectElectrode_LB ,'ListboxTop',max([1 electrodeNum-3]));
     end
     
     % namestr = cellstr(get(hObject, 'String'));
@@ -591,10 +586,14 @@ else
     % set(hObject, 'String', namestr);
     
     %% initialize variables
-    unitsIdx=vertcat(handles.Spikes.HandSort.Units{:}); %handles.Spikes.HandSort.Units{channelNum};
-    waveForms=horzcat(handles.Spikes.HandSort.Waveforms{:}); %handles.Spikes.HandSort.Waveforms{channelNum};
+    unitsIdx=handles.Spikes.HandSort.Units{electrodeNum};
+    waveForms=handles.Spikes.HandSort.Waveforms{electrodeNum};
+    %     if numel(size(waveForms))>2
+    %         waveForms=squeeze(waveForms);
+    %     end
+    
     if ~isempty(unitsIdx)
-        % how many units on that Channel?
+        % how many units on that electrode?
         unitsID=unique(unitsIdx); %number of clustered units
         set(handles.SelectUnit_LB,'string',num2str(unitsID));
         handles=ClassificationColor(handles);
@@ -613,7 +612,7 @@ else
             legend({'Artifact','Mean waveforms'});
             title('Potential artifacts removed, mean sigma > 6');
         else
-            handles.Spikes.HandSort.Units{channelNum(get(handles.SelectElectrode_LB,'value'))}(WFmeanZ>6)=-9;%artifacts
+            handles.Spikes.HandSort.Units{electrodeNum}(WFmeanZ>6)=-9;%artifacts
         end
         
         % here's how this can work:
@@ -709,14 +708,14 @@ end
 % plot "raw" (filtered) trace
 DisplayTraces(handles);
 % plot spike rasters
-DisplayMarkers(handles);
+DisplayRasters(handles);
 
 %% Plot unsorted spikes
 function handles=Plot_Unsorted_WF(handles)
-channelNum=get(handles.SelectElectrode_LB,'value');
-waveForms=handles.Spikes.HandSort.Waveforms{channelNum};
-unitsIdx=handles.Spikes.HandSort.Units{channelNum};
-samplingRate=handles.Spikes.HandSort.samplingRate(channelNum,1);
+electrodeNum=get(handles.SelectElectrode_LB,'value');
+waveForms=handles.Spikes.HandSort.Waveforms{electrodeNum};
+unitsIdx=handles.Spikes.HandSort.Units{electrodeNum};
+samplingRate=handles.Spikes.HandSort.samplingRate(electrodeNum,1);
 %% Plot unsorted spikes
 numWFtoPlot=str2double(get(handles.ShowHowManyUWF_ET,'string'));
 if sum(unitsIdx==0)>numWFtoPlot %then only plot subset of waveforms
@@ -758,30 +757,55 @@ set(gca,'Color','white','FontSize',10,'FontName','Calibri');
 
 %% Plot clusters
 function handles=Plot_Sorted_WF(handles)
-% get units's data
-[selectedUnits,selectedUnitsListIdx,unitsIDs,~,waveForms,samplingRate]=GetUnitData(handles);
+electrodeNum=get(handles.SelectElectrode_LB,'value');
+waveForms=handles.Spikes.HandSort.Waveforms{electrodeNum};
+unitsIdx=handles.Spikes.HandSort.Units{electrodeNum};
+samplingRate=handles.Spikes.HandSort.samplingRate(electrodeNum,1);
 % selected unit ids
 axes(handles.SortedUnits_Axes); hold on;%colormap lines; cmap=colormap;
 cla(handles.SortedUnits_Axes);
 set(handles.SortedUnits_Axes,'Visible','on');
-
+if get(handles.ShowAllUnits_RB,'value') %all units
+    unitID=ReturnUnits(handles.SelectUnit_LB);
+    selectedUnitsListIdx=find(unitID>0);
+    selectedUnits=unitID(selectedUnitsListIdx);
+else %or selected units
+    unitID=ReturnUnits(handles.SelectUnit_LB);
+    if unitID==0
+        return;
+    end
+    selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
+    if isempty(selectedUnitsListIdx) & ~isempty(unitID)
+        set(handles.SelectUnit_LB,'value',1);
+        selectedUnitsListIdx=1;
+    end
+    if sum(~ismember(unique(unitsIdx(unitsIdx>=0)),unitID))>0
+        unitID=unique(unitsIdx);
+    end
+    if isempty(selectedUnitsListIdx) || selectedUnitsListIdx(end)>length(unitID)
+        selectedUnitsListIdx=length(unitID);
+    end
+    selectedUnits=unitID(selectedUnitsListIdx);
+    selectedUnitsListIdx=selectedUnitsListIdx(selectedUnits>0);
+    selectedUnits=selectedUnits(selectedUnits>0);
+end
 numWFtoPlot=str2double(get(handles.ShowHowManyWF_ET,'string'));
 numUnits=nan(1,length(selectedUnits));
 for unitP=1:length(selectedUnits)
-    numUnits(unitP)=sum(unitsIDs==selectedUnits(unitP));
+    numUnits(unitP)=sum(unitsIdx==selectedUnits(unitP));
     %if there are too many waveforms to plot
-    if sum(unitsIDs==selectedUnits(unitP))>numWFtoPlot %then only plot subset of waveforms
-        subset=find(unitsIDs==selectedUnits(unitP));
+    if sum(unitsIdx==selectedUnits(unitP))>numWFtoPlot %then only plot subset of waveforms
+        subset=find(unitsIdx==selectedUnits(unitP));
         handles.subset{selectedUnitsListIdx(unitP)}=subset(1:round(numUnits(unitP)/numWFtoPlot):end);
     else
-        handles.subset{selectedUnitsListIdx(unitP)}=find(unitsIDs==selectedUnits(unitP));
+        handles.subset{selectedUnitsListIdx(unitP)}=find(unitsIdx==selectedUnits(unitP));
     end
     %make sure waveforms can be plotted
-    if find(size(waveForms)==length(unitsIDs))==1
+    if find(size(waveForms)==length(unitsIdx))==1
         waveForms=waveForms'; %figure; hold on; plot(waveForms(:,1:10))
     end
     plot(waveForms(:,handles.subset{selectedUnitsListIdx(unitP)}),...
-        'linewidth',1,'Color',[handles.cmap(selectedUnits(unitP),:),0.4],...
+        'linewidth',1,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
         'Tag',num2str(selectedUnits(unitP)));
     %Change waveform tags from cluster number to unit ID
     lineH=flipud(findobj(gca,'Type', 'line'));
@@ -812,10 +836,9 @@ if exist('lineH','var')
     set(legH,'Box','Off','FontSize',7,'LineWidth',0.2,'Position',...
         [0.54 legH.Position(2)+legH.Position(3)-0.01 0 0]);
 end
-set(gca,'Ylim',[min(min(waveForms)) max(max(waveForms))],'XTick',linspace(0,...
-    size(waveForms(:,handles.subset{selectedUnitsListIdx(unitP)}),1),5),...
-    'XTickLabel',round(linspace(-round(size(waveForms,1)/2),...
-    round(size(waveForms,1)/2),5)/(double(samplingRate)/1000),2),...
+set(gca,'Ylim',[min(min(waveForms)) max(max(waveForms))],'XTick',linspace(0,size(waveForms(:,handles.subset{selectedUnitsListIdx(unitP)}),1),5),...
+    'XTickLabel',round(linspace(-round(size(waveForms(:,handles.subset{selectedUnitsListIdx(unitP)}),1)/2),...
+    round(size(waveForms(:,handles.subset{selectedUnitsListIdx(unitP)}),1)/2),5)/(double(samplingRate)/1000),2),...
     'TickDir','out');
 axis('tight');box off;
 xlabel('Time (ms)');
@@ -825,16 +848,28 @@ hold off
 
 %% Plot mean waveforms
 function Plot_Mean_WF(handles)
-% get units's data
-[selectedUnits,selectedUnitsListIdx,unitsIDs,~,waveForms,samplingRate]=GetUnitData(handles);
-% channelNum=get(handles.SelectElectrode_LB,'value');
-% waveForms=handles.Spikes.HandSort.Waveforms{channelNum};
-% unitsIdx=handles.Spikes.HandSort.Units{channelNum};
-% uniqueUnitIDs=unique(unitsIDs);
+electrodeNum=get(handles.SelectElectrode_LB,'value');
+waveForms=handles.Spikes.HandSort.Waveforms{electrodeNum};
+unitsIdx=handles.Spikes.HandSort.Units{electrodeNum};
+samplingRate=handles.Spikes.HandSort.samplingRate(electrodeNum,1);
 axes(handles.MeanSortedUnits_Axes); hold on;%colormap lines;
 cla(handles.MeanSortedUnits_Axes);
 set(handles.MeanSortedUnits_Axes,'Visible','on');
-
+if get(handles.ShowAllUnits_RB,'value')
+    unitID=ReturnUnits(handles.SelectUnit_LB);
+    selectedUnitsListIdx=find(unitID>0);
+    selectedUnits=unitID(selectedUnitsListIdx);
+else
+    unitID=ReturnUnits(handles.SelectUnit_LB);
+    if unitID==0
+        return;
+    end
+    selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
+    if isempty(selectedUnitsListIdx) || selectedUnitsListIdx(end)>length(unitID)
+        selectedUnitsListIdx=length(unitID);
+    end
+    selectedUnits=unitID(selectedUnitsListIdx);
+end
 numWFtoPlot=str2double(get(handles.ShowHowManyWF_ET,'string'));
 for unitP=1:length(selectedUnits)
     if selectedUnits(unitP)==0
@@ -842,21 +877,21 @@ for unitP=1:length(selectedUnits)
     end
     %if subset is not defined
     if size(handles.subset,2)<selectedUnitsListIdx(unitP) || isempty(handles.subset{selectedUnitsListIdx(unitP)})
-        if sum(unitsIDs==selectedUnits(unitP))>numWFtoPlot %then only plot subset of waveforms
-            subset=find(unitsIDs==selectedUnits(unitP));
-            handles.subset{selectedUnitsListIdx(unitP)}=subset(1:round(sum(unitsIDs==selectedUnits(unitP))/numWFtoPlot):end);
+        if sum(unitsIdx==selectedUnits(unitP))>numWFtoPlot %then only plot subset of waveforms
+            subset=find(unitsIdx==selectedUnits(unitP));
+            handles.subset{selectedUnitsListIdx(unitP)}=subset(1:round(sum(unitsIdx==selectedUnits(unitP))/numWFtoPlot):end);
         else
-            handles.subset{selectedUnitsListIdx(unitP)}=find(unitsIDs==selectedUnits(unitP));
+            handles.subset{selectedUnitsListIdx(unitP)}=find(unitsIdx==selectedUnits(unitP));
         end
     end
-    selectWF=single(waveForms(:,unitsIDs==selectedUnits(unitP))');
+    selectWF=single(waveForms(:,unitsIdx==selectedUnits(unitP))');
     if ~isnan(mean(selectWF))
-        lineh(unitP)=plot(mean(selectWF),'linewidth',2,'Color',[handles.cmap(selectedUnits(unitP),:),0.7]);
+        lineh(unitP)=plot(mean(selectWF),'linewidth',2,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.7]);
         wfSEM=std(selectWF)/ sqrt(size(selectWF,2)); %standard error of the mean
         wfSEM = wfSEM * 1.96; % 95% of the data will fall within 1.96 standard deviations of a normal distribution
         patch([1:length(wfSEM),fliplr(1:length(wfSEM))],...
             [mean(selectWF)-wfSEM,fliplr(mean(selectWF)+wfSEM)],...
-            handles.cmap(selectedUnits(unitP),:),'EdgeColor','none','FaceAlpha',0.2);
+            handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),'EdgeColor','none','FaceAlpha',0.2);
         %duplicate mean unit waveform over unsorted plot
         %             plot(handles.UnsortedUnits_Axes,mean(selectWF),'linewidth',2,'Color',handles.cmap(unitP,:));
         if unitP==1
@@ -864,13 +899,13 @@ for unitP=1:length(selectedUnits)
         end
         patch([1:length(wfSEM),fliplr(1:length(wfSEM))],...
             [mean(selectWF)-wfSEM,fliplr(mean(selectWF)+wfSEM)],...
-            handles.cmap(selectedUnits(unitP),:),'EdgeColor','none','FaceAlpha',0.5,'Parent', handles.UnsortedUnits_Axes);
+            handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),'EdgeColor','none','FaceAlpha',0.5,'Parent', handles.UnsortedUnits_Axes);
         set(handles.UnsortedUnits_Axes,'Color','white','FontSize',10,'FontName','Calibri');
     end
 end
 set(gca,'XTick',linspace(0,size(waveForms(:,handles.subset{selectedUnitsListIdx(unitP)}),1),5),...
-    'XTickLabel',round(linspace(-round(size(waveForms,1)/2),...
-    round(size(waveForms,1)/2),5)/(double(samplingRate)/1000),2),'TickDir','out');
+    'XTickLabel',round(linspace(-round(size(waveForms(:,handles.subset{selectedUnitsListIdx(unitP)}),1)/2),...
+    round(size(waveForms(:,handles.subset{selectedUnitsListIdx(unitP)}),1)/2),5)/(double(samplingRate)/1000),2),'TickDir','out');
 % ordinateLabels=str2num(get(gca,'YTickLabel'))/4;
 % set(gca,'YTickLabel',num2str(ordinateLabels));
 if exist('selectWF','var')
@@ -885,9 +920,7 @@ hold off
 
 %% Plot traces
 function dataExcerpt=DisplayTraces(handles)
-channelIndex=get(handles.SelectElectrode_LB,'value');
-channelNum=ReturnElectrodes(handles.SelectElectrode_LB);
-channelNum=channelNum(channelIndex);
+electrodeNum=get(handles.SelectElectrode_LB,'value');
 if isa(handles.traces,'memmapfile')
     %     exwdw=[((30000*106)-15000)*28:((30000*106)+15000)*28-1];
     % % dataExcerpt=rawData.Data(exwdw);
@@ -902,7 +935,7 @@ if isa(handles.traces,'memmapfile')
         winIdxStart=winIdxStart-...
             mod(winIdxStart,numel(handles.rec_info.exportedChan))-...
             numel(handles.rec_info.exportedChan)+1;    % set index loc to first electrode
-        %             (numel(handles.rec_info.exportedChan) - channelNum);     % set index loc to selected electrode
+        %             (numel(handles.rec_info.exportedChan) - electrodeNum);     % set index loc to selected electrode
     end
     winIdxEnd=winIdxStart+...
         (2*handles.tracesInfo.excerptSize*numel(handles.rec_info.exportedChan));
@@ -927,7 +960,7 @@ if handles.tracesInfo.preproc==0 % raw data is presumed bandpassed filtered at t
     preprocOption={'CAR','all'};
     dataExcerpt=PreProcData(dataExcerpt,handles.rec_info.samplingRate,preprocOption);
 end
-dataExcerpt=int32(dataExcerpt(channelNum,:));
+dataExcerpt=int32(dataExcerpt(electrodeNum,:));
 axes(handles.TimeRaster_Axes);
 cla(handles.TimeRaster_Axes);
 set(handles.TimeRaster_Axes,'Visible','on');
@@ -956,21 +989,19 @@ set(handles.TimeRaster_Axes,'Color','white','FontSize',12,'FontName','calibri');
 set(handles.TW_slider,'value',handles.tracesInfo.excerptLocation);
 
 %% Plot spike unit markers
-function spkTimes=DisplayMarkers(handles)
+function spkTimes=DisplayRasters(handles)
 % display color-coded markers for each identified spike
-channelIndex=get(handles.SelectElectrode_LB,'value');
-channelNum=ReturnElectrodes(handles.SelectElectrode_LB);
-channelNum=channelNum(channelIndex);
+electrodeNum=get(handles.SelectElectrode_LB,'value');
 if contains(get(handles.DisplayNtrodeMarkers_MenuItem,'Checked'),'on')
     % get channel values from same Ntrode
     shankNum=cumsum(logical([0 diff(handles.rec_info.differentShanks(1:handles.rec_info.numRecChan))]));
-    channelNum=find(shankNum==shankNum(channelNum));
+    electrodeNum=find(shankNum==shankNum(electrodeNum));
 end
 axes(handles.TimeRaster_Axes); hold on
-for elNum=1:length(channelNum)
+for elNum=1:length(electrodeNum)
     % get which unit to plot
-    if get(handles.ShowAllUnits_RB,'value') || length(channelNum)>1
-        unitID=unique(handles.Spikes.HandSort.Units{channelNum(elNum), 1});%  unitID=ReturnUnits(handles.SelectUnit_LB);
+    if get(handles.ShowAllUnits_RB,'value') || length(electrodeNum)>1
+        unitID=unique(handles.Spikes.HandSort.Units{electrodeNum(elNum), 1});%  unitID=ReturnUnits(handles.SelectUnit_LB);
         selectedUnitsListIdx=find(unitID>=0);
         selectedUnits=unitID(selectedUnitsListIdx);
     else
@@ -982,15 +1013,15 @@ for elNum=1:length(channelNum)
     if isfield(handles.Spikes,'Online_Sorting') % plot above trace
         if ~isempty(handles.Spikes.Online_Sorting.SpikeTimes)
             for unitP=1:size(selectedUnits,1)
-                spkTimes{unitP}=handles.Spikes.Online_Sorting.SpikeTimes{channelNum(elNum)}(...
-                    (handles.Spikes.Online_Sorting.SpikeTimes{channelNum(elNum)}>=...
+                spkTimes{unitP}=handles.Spikes.Online_Sorting.SpikeTimes{electrodeNum(elNum)}(...
+                    (handles.Spikes.Online_Sorting.SpikeTimes{electrodeNum(elNum)}>=...
                     handles.tracesInfo.excerptLocation-handles.tracesInfo.excerptSize) &...
-                    (handles.Spikes.Online_Sorting.SpikeTimes{channelNum(elNum)}<...
+                    (handles.Spikes.Online_Sorting.SpikeTimes{electrodeNum(elNum)}<...
                     handles.tracesInfo.excerptLocation+handles.tracesInfo.excerptSize) &...
-                    handles.Spikes.Online_Sorting.Units{channelNum(elNum)}==unitID(selectedUnitsListIdx(unitP)));
+                    handles.Spikes.Online_Sorting.Units{electrodeNum(elNum)}==unitID(selectedUnitsListIdx(unitP)));
                 if ~isempty(spkTimes{unitP})
                     rasterHeight=ones(1,size(spkTimes{unitP},2))*max(get(gca,'ylim'))/4*3;
-                    wfWidthComp=round(size(handles.Spikes.Online_Sorting.Waveforms{channelNum(elNum)},1)); %will substract wf width to raster times
+                    wfWidthComp=round(size(handles.Spikes.Online_Sorting.Waveforms{electrodeNum(elNum)},1)); %will substract wf width to raster times
                     plot(spkTimes{unitP}-(handles.tracesInfo.excerptLocation-handles.tracesInfo.excerptSize)-wfWidthComp,...
                         rasterHeight,'Color',[handles.cmap(unitID(selectedUnitsListIdx(unitP)),:),0.4],...
                         'linestyle','none','Marker','v');
@@ -1000,12 +1031,12 @@ for elNum=1:length(channelNum)
     end
     if isfield(handles.Spikes,'Offline_Sorting') % plot below trace
         for unitP=1:size(selectedUnits,1)
-            spkTimes{unitP}=handles.Spikes.Offline_Sorting.SpikeTimes{channelNum(elNum)}(...
-                (handles.Spikes.Offline_Sorting.SpikeTimes{channelNum(elNum)}>=...
+            spkTimes{unitP}=handles.Spikes.Offline_Sorting.SpikeTimes{electrodeNum(elNum)}(...
+                (handles.Spikes.Offline_Sorting.SpikeTimes{electrodeNum(elNum)}>=...
                 handles.tracesInfo.excerptLocation-handles.tracesInfo.excerptSize) &...
-                (handles.Spikes.Offline_Sorting.SpikeTimes{channelNum(elNum)}<...
+                (handles.Spikes.Offline_Sorting.SpikeTimes{electrodeNum(elNum)}<...
                 handles.tracesInfo.excerptLocation+handles.tracesInfo.excerptSize) &...
-                handles.Spikes.Offline_Sorting.Units{channelNum(elNum)}==unitID(selectedUnitsListIdx(unitP)));
+                handles.Spikes.Offline_Sorting.Units{electrodeNum(elNum)}==unitID(selectedUnitsListIdx(unitP)));
             if ~isempty(spkTimes{unitP})
                 rasterHeight=ones(1,size(spkTimes{unitP},2))*(min(get(gca,'ylim'))/4*3);
                 if unitID(selectedUnitsListIdx(unitP))==0 %"garbage spikes"
@@ -1022,12 +1053,12 @@ for elNum=1:length(channelNum)
     end
     if strcmp(get(handles.Spikes_CurrentVersion_Menu,'Checked'),'on') % also plot below trace, but circles
         for unitP=1:size(selectedUnits,1)
-            spkTimes{unitP}=handles.Spikes.HandSort.SpikeTimes{channelNum(elNum)}(...
-                (handles.Spikes.HandSort.SpikeTimes{channelNum(elNum)}>=...
+            spkTimes{unitP}=handles.Spikes.HandSort.SpikeTimes{electrodeNum(elNum)}(...
+                (handles.Spikes.HandSort.SpikeTimes{electrodeNum(elNum)}>=...
                 handles.tracesInfo.excerptLocation-handles.tracesInfo.excerptSize) &...
-                (handles.Spikes.HandSort.SpikeTimes{channelNum(elNum)}<...
+                (handles.Spikes.HandSort.SpikeTimes{electrodeNum(elNum)}<...
                 handles.tracesInfo.excerptLocation+handles.tracesInfo.excerptSize) &...
-                handles.Spikes.HandSort.Units{channelNum(elNum)}==unitID(selectedUnitsListIdx(unitP)));
+                handles.Spikes.HandSort.Units{electrodeNum(elNum)}==unitID(selectedUnitsListIdx(unitP)));
             if ~isempty(spkTimes{unitP})
                 rasterHeight=ones(1,size(spkTimes{unitP},2))*(min(get(gca,'ylim'))/4*3);
                 if unitID(selectedUnitsListIdx(unitP))==0 %"garbage spikes"
@@ -1057,7 +1088,7 @@ end
 % plot "raw" (filtered) trace
 DisplayTraces(handles);
 % plot spike rasters
-DisplayMarkers(handles);
+DisplayRasters(handles);
 % update handles
 guidata(hObject, handles);
 
@@ -1074,7 +1105,7 @@ end
 % plot "raw" (filtered) trace
 DisplayTraces(handles);
 % plot spike rasters
-DisplayMarkers(handles);
+DisplayRasters(handles);
 %  Update handles structure
 guidata(hObject, handles);
 
@@ -1087,7 +1118,7 @@ end
 % plot "raw" (filtered) trace
 DisplayTraces(handles);
 % plot spike rasters
-DisplayMarkers(handles);
+DisplayRasters(handles);
 %  Update handles structure
 guidata(hObject, handles);
 
@@ -1101,30 +1132,46 @@ end
 % plot "raw" (filtered) trace
 DisplayTraces(handles);
 % plot spike rasters
-DisplayMarkers(handles);
+DisplayRasters(handles);
 %  Update handles structure
 guidata(hObject, handles);
 
 %% Plot ISI
 function Plot_ISI(handles)
+
 % get which unit to plot
-[selectedUnits,~,unitsIDs,spikeTimes,~,samplingRate]=GetUnitData(handles);
+if get(handles.ShowAllUnits_RB,'value')
+    unitID=ReturnUnits(handles.SelectUnit_LB);
+    selectedUnitsListIdx=find(unitID>0);
+    selectedUnits=unitID(selectedUnitsListIdx);
+    % keep the first one
+else
+    unitID=ReturnUnits(handles.SelectUnit_LB);
+    selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
+    selectedUnits=unitID(selectedUnitsListIdx);
+end
 if isempty(selectedUnits) || sum(selectedUnits)==0
     cla(handles.ISI_Axes);
     return
 end
+% get data values
+electrodeNum=get(handles.SelectElectrode_LB,'value');
+spikeTimes=handles.Spikes.HandSort.SpikeTimes{electrodeNum,1};
+unitsIdx=handles.Spikes.HandSort.Units{electrodeNum};
+samplingRate=handles.Spikes.HandSort.samplingRate(electrodeNum,1);
+
 %keep the most numerous if more than one
-if diff(size(selectedUnits))<0
+if sum(size(selectedUnits))>1
     keepU=1;
     for uidx=1:size(selectedUnits,1)
-        if sum(unitsIDs==selectedUnits(uidx))>sum(unitsIDs==selectedUnits(keepU))
+        if sum(unitsIdx==selectedUnits(uidx))>sum(unitsIdx==selectedUnits(keepU))
             keepU=uidx;
         end
     end
     selectedUnits=selectedUnits(keepU);
 end
 %spike times for that unit
-unitST=spikeTimes(unitsIDs==selectedUnits);
+unitST=spikeTimes(unitsIdx==selectedUnits);
 % compute interspike interval
 if ~isempty(diff(unitST))
     ISI=diff(unitST)/(samplingRate/1000);
@@ -1133,7 +1180,7 @@ if ~isempty(diff(unitST))
     set(handles.ISI_Axes,'Visible','on');
     ISIhist=histogram(double(ISI),logspace(0, 4, 50),'DisplayStyle','stairs','LineWidth',1.5);  %,'Normalization','probability'
 %     ISIhist.FaceColor = handles.cmap(unitID(unitID==selectedUnits),:);
-    ISIhist.EdgeColor = handles.cmap(selectedUnits,:); %'k';
+    ISIhist.EdgeColor = handles.cmap(unitID(unitID==selectedUnits),:); %'k';
     xlabel('Interspike Interval (ms)')
     axis('tight');box off; grid('on'); set(gca,'xscale','log','GridAlpha',0.25,'MinorGridAlpha',1);
     set(gca,'xlim',[0 10^4],... %'XTick',linspace(0,40,5),'XTickLabel',linspace(0,40,5),...
@@ -1144,23 +1191,38 @@ end
 %% Plot autocorrelogram
 function Plot_ACG(handles)
 % get which unit to plot
-[selectedUnits,~,unitsIDs,spikeTimes,~,samplingRate]=GetUnitData(handles);
+if get(handles.ShowAllUnits_RB,'value')
+    unitID=ReturnUnits(handles.SelectUnit_LB);
+    selectedUnitsListIdx=find(unitID>0);
+    selectedUnits=unitID(selectedUnitsListIdx);
+    % keep the first one
+else
+    unitID=ReturnUnits(handles.SelectUnit_LB);
+    selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
+    selectedUnits=unitID(selectedUnitsListIdx);
+end
 if isempty(selectedUnits) || sum(selectedUnits)==0
     cla(handles.ACG_Axes);
     return
 end
+
+electrodeNum=get(handles.SelectElectrode_LB,'value');
+spikeTimes=handles.Spikes.HandSort.SpikeTimes{electrodeNum,1};
+unitsIdx=handles.Spikes.HandSort.Units{electrodeNum};
+samplingRate=handles.Spikes.HandSort.samplingRate(electrodeNum,1);
+
 %keep the most numerous if more than one
-if diff(size(selectedUnits))<0
+if sum(size(selectedUnits))>1
     keepU=1;
     for uidx=1:size(selectedUnits,1)
-        if sum(unitsIDs==selectedUnits(uidx))>sum(unitsIDs==selectedUnits(keepU))
+        if sum(unitsIdx==selectedUnits(uidx))>sum(unitsIdx==selectedUnits(keepU))
             keepU=uidx;
         end
     end
     selectedUnits=selectedUnits(keepU);
 end
 %get unit spike times
-unitST=spikeTimes(unitsIDs==selectedUnits);
+unitST=spikeTimes(unitsIdx==selectedUnits);
 % change to ms timescale
 unitST=unitST/(samplingRate/1000);
 %get ISI
@@ -1179,7 +1241,7 @@ axes(handles.ACG_Axes); hold on;
 cla(handles.ACG_Axes,'reset');
 set(handles.ACG_Axes,'Visible','on');
 ACGh=bar(lags,ACG);
-ACGh.FaceColor = handles.cmap(selectedUnits,:);
+ACGh.FaceColor = handles.cmap(unitID(unitID==selectedUnits),:);
 ACGh.EdgeColor = 'none';
 % axis('tight');
 box off; grid('on'); %set(gca,'yscale','log','GridAlpha',0.25,'MinorGridAlpha',1);
@@ -1191,14 +1253,32 @@ hold off
 %% Plot cross-correlogram
 function Plot_XCG(handles)
 % get which unit to plot
-[selectedUnits,~,unitsIDs,spikeTimes,~,samplingRate]=GetUnitData(handles);
-if isempty(selectedUnits) || length(selectedUnits)~=2
+if get(handles.ShowAllUnits_RB,'value')
+    cla(handles.XCorr_Axes);
+    return
+else
+    unitID=ReturnUnits(handles.SelectUnit_LB);
+    selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
+    selectedUnits=unitID(selectedUnitsListIdx);
+end
+if isempty(selectedUnits) || sum(selectedUnits)==0
+    cla(handles.XCorr_Axes);
+    return
+end
+
+electrodeNum=get(handles.SelectElectrode_LB,'value');
+spikeTimes=handles.Spikes.HandSort.SpikeTimes{electrodeNum,1};
+unitsIdx=handles.Spikes.HandSort.Units{electrodeNum};
+samplingRate=handles.Spikes.HandSort.samplingRate(electrodeNum,1);
+
+%keep the most numerous if more than one
+if length(selectedUnits)~=2
     cla(handles.XCorr_Axes);
     return
 end
 %get units spike times
-unitST{1}=spikeTimes(unitsIDs==selectedUnits(1));
-unitST{2}=spikeTimes(unitsIDs==selectedUnits(2));
+unitST{1}=spikeTimes(unitsIdx==selectedUnits(1));
+unitST{2}=spikeTimes(unitsIdx==selectedUnits(2));
 % change to ms timescale
 unitST{1}=unitST{1}/(samplingRate/1000);
 unitST{2}=unitST{2}/(samplingRate/1000);
@@ -1222,8 +1302,8 @@ axes(handles.XCorr_Axes); hold on;
 cla(handles.XCorr_Axes);
 set(handles.XCorr_Axes,'Visible','on');
 XCGh=bar(lags,XCG);
-XCGh.FaceColor = (handles.cmap(selectedUnits(1),:)+...
-    handles.cmap(selectedUnits(2),:))/2;
+XCGh.FaceColor = (handles.cmap(unitID(unitID==selectedUnits(1)),:)+...
+    handles.cmap(unitID(unitID==selectedUnits(2)),:))/2;
 XCGh.EdgeColor = 'none';
 axis('tight');box off;
 xlabel('CrossCorrelogram (5 ms bins)')
@@ -1232,8 +1312,8 @@ hold off
 
 % function  Plot_Raster_TW(handles)
 % %% plot rasters
-% channelNum=get(handles.SelectElectrode_LB,'value');
-% spikeTimes=handles.Spikes.HandSort.SpikeTimes{channelNum,2};
+% electrodeNum=get(handles.SelectElectrode_LB,'value');
+% spikeTimes=handles.Spikes.HandSort.SpikeTimes{electrodeNum,2};
 
 % plot 10 sec or numWFtoPlot waveforms max
 
@@ -1242,13 +1322,13 @@ function UnsortedUnits_Axes_ButtonDownFcn(hObject, ~, handles)
 % left click to start selection line
 % right click to end it
 
-channelNum=get(handles.SelectElectrode_LB,'value');
+electrodeNum=get(handles.SelectElectrode_LB,'value');
 
 %% initialize variables
-unitsIdx=find(handles.Spikes.HandSort.Units{channelNum}==0);
-% waveForms=handles.Spikes.HandSort.Waveforms{channelNum};
-% spikeTimes=handles.Spikes.HandSort.SpikeTimes{channelNum,2};
-% samplingRate=handles.Spikes.HandSort.samplingRate(channelNum,1);
+unitsIdx=find(handles.Spikes.HandSort.Units{electrodeNum}==0);
+% waveForms=handles.Spikes.HandSort.Waveforms{electrodeNum};
+% spikeTimes=handles.Spikes.HandSort.SpikeTimes{electrodeNum,2};
+% samplingRate=handles.Spikes.HandSort.samplingRate(electrodeNum,1);
 
 lineH=findobj(gca,'Type', 'line');
 
@@ -1286,11 +1366,11 @@ end
 
 clusterClasses=InteractiveClassification(waveForms,clusterClasses,0); % viewClasses=0
 % find similar waveforms that were not plotted
-% if numel(find(handles.Spikes.HandSort.Units{channelNum}==0))>numel(clusterClasses) &...
+% if numel(find(handles.Spikes.HandSort.Units{electrodeNum}==0))>numel(clusterClasses) &...
 %         sum(logical(clusterClasses))
-%     meanSelectedWF=mean(handles.Spikes.HandSort.Waveforms{channelNum}(:,...
+%     meanSelectedWF=mean(handles.Spikes.HandSort.Waveforms{electrodeNum}(:,...
 %         unitsIdx(logical(clusterClasses))),2);
-%     allWF=handles.Spikes.HandSort.Waveforms{channelNum}(:,unitsIdx);
+%     allWF=handles.Spikes.HandSort.Waveforms{electrodeNum}(:,unitsIdx);
 %     for wfNum=1:size(allWF,2)
 %         ccVal(wfNum)=median(xcorr(double(allWF(:,wfNum)'),...
 %             double(meanSelectedWF')),2);
@@ -1299,9 +1379,9 @@ clusterClasses=InteractiveClassification(waveForms,clusterClasses,0); % viewClas
 %     plot(allWF(:,unitsIdx(logical(clusterClasses)))')
 % end
 
-handles.Spikes.HandSort.Units{channelNum}(unitsIdx(logical(clusterClasses)))=...
+handles.Spikes.HandSort.Units{electrodeNum}(unitsIdx(logical(clusterClasses)))=...
     clusterClasses(logical(clusterClasses));
-unitsID=unique(handles.Spikes.HandSort.Units{channelNum});
+unitsID=unique(handles.Spikes.HandSort.Units{electrodeNum});
 %Check if unit selection still works
 unitSelection=get(handles.SelectUnit_LB,'Value');
 try
@@ -1334,14 +1414,14 @@ guidata(hObject, handles);
 
 %% --- Executes on mouse press over sorted units axes
 function SortedUnits_Axes_ButtonDownFcn(hObject, ~, handles)
-channelNum=get(handles.SelectElectrode_LB,'value');
+electrodeNum=get(handles.SelectElectrode_LB,'value');
 
 %% initialize variables
 unitID=ReturnUnits(handles.SelectUnit_LB);
 % for uIdxNum=1:length(unitsID)
-%     unitsIdx{uIdxNum}=find(handles.Spikes.HandSort.Units{channelNum}==unitsID(uIdxNum));
+%     unitsIdx{uIdxNum}=find(handles.Spikes.HandSort.Units{electrodeNum}==unitsID(uIdxNum));
 % end
-unitsIdx=handles.Spikes.HandSort.Units{channelNum};
+unitsIdx=handles.Spikes.HandSort.Units{electrodeNum};
 
 lineH=findobj(gca,'Type', 'line');
 visibleLines=cellfun(@(x) strcmp(x,'on'), {lineH.Visible});
@@ -1366,11 +1446,11 @@ else
 end
 
 [clusterClasses,lineSelecIdx]=InteractiveClassification(waveForms,clusterClasses,viewClasses); % viewClasses=0
-% foo=handles.Spikes.HandSort.Waveforms{channelNum}; foo=foo';
+% foo=handles.Spikes.HandSort.Waveforms{electrodeNum}; foo=foo';
 % figure;plot(foo(unitsIdx(logical(clusterClasses)),:)');hold on
 % plot(lineH(flip(logical(clusterClasses))).YData)
 %
-% waveForms=handles.Spikes.HandSort.Waveforms{channelNum};
+% waveForms=handles.Spikes.HandSort.Waveforms{electrodeNum};
 % figure; plot(waveForms(:,linesTags(lineSelecIdx)))
 if lineSelecIdx==0
     return
@@ -1378,9 +1458,9 @@ else
     set(handles.Spikes_OriginalVersion_Menu,'Checked','off');
     set(handles.Spikes_CurrentVersion_Menu,'Checked','on');
 end
-handles.Spikes.HandSort.Units{channelNum}(linesTags(lineSelecIdx))=...
+handles.Spikes.HandSort.Units{electrodeNum}(linesTags(lineSelecIdx))=...
     clusterClasses(lineSelecIdx);
-unitsID=unique(handles.Spikes.HandSort.Units{channelNum});
+unitsID=unique(handles.Spikes.HandSort.Units{electrodeNum});
 %Check if unit selection still works
 unitSelection=get(handles.SelectUnit_LB,'Value');
 try
@@ -1411,10 +1491,10 @@ guidata(hObject, handles);
 %% --- Executes on mouse press over mean sorted units axes.
 function MeanSortedUnits_Axes_ButtonDownFcn(hObject, ~, handles)
 unitID=ReturnUnits(handles.SelectUnit_LB);
-channelNum=get(handles.SelectElectrode_LB,'value');
+electrodeNum=get(handles.SelectElectrode_LB,'value');
 
 %% initialize variables
-unitsIdx=handles.Spikes.HandSort.Units{channelNum};
+unitsIdx=handles.Spikes.HandSort.Units{electrodeNum};
 
 lineH=findobj(gca,'Type', 'line');
 visibleLines=cellfun(@(x) strcmp(x,'on'), {lineH.Visible});
@@ -1430,11 +1510,11 @@ waveForms=waveForms';%one waveform per row
 % plot(waveForms(3,:)','b')
 
 [newClasses,lineSelecIdx,groupReclass]=InteractiveClassification(waveForms,clusterClasses,viewClasses); % viewClasses=0
-% foo=handles.Spikes.HandSort.Waveforms{channelNum}; foo=foo';
+% foo=handles.Spikes.HandSort.Waveforms{electrodeNum}; foo=foo';
 % figure;plot(foo(unitsIdx(logical(clusterClasses)),:)');hold on
 % plot(lineH(flip(logical(clusterClasses))).YData)
 %
-% waveForms=handles.Spikes.HandSort.Waveforms{channelNum};
+% waveForms=handles.Spikes.HandSort.Waveforms{electrodeNum};
 % figure; plot(waveForms(:,linesTags(lineSelecIdx)))
 
 if lineSelecIdx==0
@@ -1446,7 +1526,7 @@ end
 
 changeUnits=clusterClasses(clusterClasses~=unique(newClasses(lineSelecIdx)) & lineSelecIdx');
 for chgu=1:length(changeUnits)
-    handles.Spikes.HandSort.Units{channelNum}(unitsIdx==changeUnits(chgu))=...
+    handles.Spikes.HandSort.Units{electrodeNum}(unitsIdx==changeUnits(chgu))=...
         unique(newClasses(lineSelecIdx));
 end
 
@@ -1456,7 +1536,7 @@ if groupReclass==1 && sum(lineSelecIdx)==1
     WFpeak=find(abs(selectedWF)==max(abs(selectedWF)),1);
     wfRange=WFpeak-9:WFpeak+8;
     selectedWF=selectedWF(wfRange);
-    allWf=handles.Spikes.HandSort.Waveforms{channelNum}; allWf=double(allWf(wfRange,:)');
+    allWf=handles.Spikes.HandSort.Waveforms{electrodeNum}; allWf=double(allWf(wfRange,:)');
     
     % figure; hold on
     % plot(selectedWF);
@@ -1506,11 +1586,11 @@ if groupReclass==1 && sum(lineSelecIdx)==1
     similWF=similIdx(clusIdx==find(Centroids(:,2)==max(Centroids(:,2))));
     % figure; plot(mean(allWf(similWF,:)))
     
-    handles.Spikes.HandSort.Units{channelNum}(similWF)=...
+    handles.Spikes.HandSort.Units{electrodeNum}(similWF)=...
         unique(newClasses(lineSelecIdx));
 end
 
-unitsID=unique(handles.Spikes.HandSort.Units{channelNum});
+unitsID=unique(handles.Spikes.HandSort.Units{electrodeNum});
 %Check if unit selection still works
 unitSelection=get(handles.SelectUnit_LB,'Value');
 if get(handles.ShowAllUnits_RB,'value')
@@ -1545,7 +1625,7 @@ if strcmp(get(gcf,'SelectionType'),'normal')
     % plot "raw" (filtered) trace
     DisplayTraces(handles);
     % plot spike rasters
-    DisplayMarkers(handles);
+    DisplayRasters(handles);
     % Update handles structure
     guidata(hObject, handles);
 end
@@ -1563,25 +1643,8 @@ end
 function SelectUnit_LB_Callback(hObject, ~, handles)
 set(handles.ShowAllUnits_RB,'value',0)
 if strcmp(get(gcf,'SelectionType'),'normal')
-    [~,~,~,~,~,~,~,channelIdx,bestChannel]=GetUnitData(handles);
-    channelList=find(channelIdx);
-    channelNum=find(bestChannel==channelList);
-    set(handles.SelectElectrode_LB,'string',num2str(channelList),'value',channelNum);
-    channelList=cellstr(get(handles.SelectElectrode_LB,'String'))';
-    colorChannels=cell(length(channelList),1);
-    for elNum=1:length(channelList)
-        if handles.rec_info.differentShanks(str2double(channelList(elNum)))>0
-            colorChannels(elNum)=cellfun(@(thatChannel) sprintf(['<HTML><BODY bgcolor="%s">'...
-                '<FONT color="%s">%s</FONT></BODY></HTML>'],... %size="+1"
-                'black','white', thatChannel),channelList(elNum),'UniformOutput',false);
-        else
-            colorChannels(elNum)=cellfun(@(thatChannel) sprintf(['<HTML><BODY bgcolor="%s">'...
-                '<FONT color="%s">%s</FONT></BODY></HTML>'],... %size="+1"
-                'white','black', thatChannel),channelList(elNum),'UniformOutput',false);
-        end
-    end
-    set(handles.SelectElectrode_LB, 'String', colorChannels);
-    set(handles.SelectElectrode_LB ,'ListboxTop',max([1 numel(channelNum)-3]));
+    %     = cellstr(get(hObject,'String'))
+    %        contents{get(hObject,'Value')}
     if get(handles.ShowWF_CB,'value')
         handles=Plot_Sorted_WF(handles);
     else
@@ -1592,7 +1655,7 @@ if strcmp(get(gcf,'SelectionType'),'normal')
     Plot_ACG(handles);
     Plot_XCG(handles);
     DisplayTraces(handles);
-    DisplayMarkers(handles);
+    DisplayRasters(handles);
     
     % elseif strcmp(get(gcf,'SelectionType'),'open') % double click
     % else
@@ -1641,7 +1704,7 @@ handles.RefineSort_PB.ForegroundColor=[0.2 0.5 0.7];
 handles.RefineSort_PB.ForegroundColor=[0.3490 0.2000 0.3294];
 
 %% --- Outputs from this function are returned to the command line.
-function varargout = SpikeVisualizationGUI_OutputFcn(hObject, ~, handles)
+function varargout = SpikeVisualizationGUI_byElectrode_OutputFcn(hObject, ~, handles)
 
 % Get default command line output from handles structure
 varargout{1} = handles.output;
@@ -1764,15 +1827,15 @@ if ~isfield(handles,'exportDir')
 end
 if isfield(handles,'fname')
     outputName=[handles.exportDir handles.fname '_spikesResorted'];
-elseif isfield(handles,'spikeFile') && ~isempty(handles.spikeFile) 
+elseif isfield(handles,'spikeFile')
     outputName=[handles.exportDir cell2mat(regexp(handles.spikeFile,'.+(?=_spikes)','match'))...
             '_spikesResorted'];
 elseif isfield(handles,'offlineSort_SpikeFile') && ~isempty(handles.offlineSort_SpikeFile) 
     exportDirListing=dir(handles.exportDir);
     infoFile=exportDirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_info.'),...
         {exportDirListing.name},'UniformOutput',false))).name;
-    outputName=fullfile(handles.datDir,[cell2mat(regexp(infoFile,'.+(?=_info)','match'))...
-        '_spikesResorted']);
+    outputName=[handles.datDir  cell2mat(regexp(infoFile,'.+(?=_info)','match'))...
+        '_spikesResorted'];
 elseif isfield(handles,'datFile')
     outputName=[handles.exportDir handles.datFile(1:end-4)  ...
         '_spikesResorted.mat'];
@@ -1808,15 +1871,30 @@ end
 
 % --- Executes on button press in ExportData_PB.
 function ExportData_PB_Callback(hObject, eventdata, handles)
-channelNum=get(handles.SelectElectrode_LB,'value');
-channelList=ReturnElectrodes(handles.SelectElectrode_LB);
-channelLabel=channelList(channelNum);
-
-[selectedUnits,~,unitsIdx,spikeTimes,waveForms,samplingRate,~,channelIdx]=GetUnitData(handles);
-
-allTraces=handles.traces; %allTraces.numChan=handles.tracesInfo.numChan;
+electrodeNum=get(handles.SelectElectrode_LB,'value');
+electrodeList=ReturnElectrodes(handles.SelectElectrode_LB);
+electrodeLabel=electrodeList(electrodeNum);
+waveForms=handles.Spikes.HandSort.Waveforms{electrodeNum};
+spikeTimes=handles.Spikes.HandSort.SpikeTimes{electrodeNum,:};
+unitsIdx=handles.Spikes.HandSort.Units{electrodeNum};
+samplingRate=handles.Spikes.HandSort.samplingRate(electrodeNum,1);
+allTraces=handles.traces; %allTraces.numChan=handles.tracesInfo.numChan;  
 traceInfo=handles.tracesInfo;
-classification=handles.classification;
+
+if get(handles.ShowAllUnits_RB,'value')
+    unitID=ReturnUnits(handles.SelectUnit_LB);
+    selectedUnits=unitID(unitID>0);
+else
+    unitID=ReturnUnits(handles.SelectUnit_LB);
+    if unitID==0
+        return;
+    end
+    selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
+    if isempty(selectedUnitsListIdx) || selectedUnitsListIdx(end)>length(unitID)
+        selectedUnitsListIdx=length(unitID);
+    end
+    selectedUnits=unitID(selectedUnitsListIdx);
+end
 % get 'raw data' excerpt
 traceExcerpt.data=DisplayTraces(handles);
 traceExcerpt.xTicks=linspace(0,handles.rec_info.samplingRate*2,4);
@@ -1826,22 +1904,19 @@ traceExcerpt.xTicklabels=linspace(round(handles.tracesInfo.excerptLocation-...
     /handles.rec_info.samplingRate,4);
 traceExcerpt.location=handles.tracesInfo.excerptLocation;
 traceExcerpt.excerptSize=handles.tracesInfo.excerptSize;
-traceExcerpt.spkTimes=DisplayMarkers(handles);
+traceExcerpt.spkTimes=DisplayRasters(handles);
 
 cd(handles.exportDir);
 if isfield(handles,'Trials')
     TTLs=handles.Trials;
+    save([handles.datFile(1:end-4) '_Ch' num2str(electrodeLabel) '.mat'],...
+        'waveForms','spikeTimes','unitsIdx','samplingRate','selectedUnits',...
+        'TTLs','traceExcerpt','allTraces','traceInfo');
 else
-    TTLs=[]
+    save([handles.datFile(1:end-4) '_Ch' num2str(electrodeLabel) '.mat'],...
+        'waveForms','spikeTimes','unitsIdx','samplingRate','selectedUnits',...
+        'traceExcerpt');
 end
-channelList=channelList(channelIdx);
-if numel(channelList)>1
-    fName=[handles.datFile(1:end-4) '_SelectedData_MultiChannel.mat'];
-else
-    fName=[handles.datFile(1:end-4) '_SelectedData_Ch' num2str(channelLabel) '.mat'];
-end
-save(fName,'waveForms','spikeTimes','unitsIdx','samplingRate','channelList',...
-    'selectedUnits','TTLs','traceExcerpt','allTraces','traceInfo','classification');
 
 % --- Executes on button press in LoadTTL_PB.
 function LoadTTL_PB_Callback(hObject, eventdata, handles)
@@ -1868,9 +1943,8 @@ function ExportFigs_PB_Callback(hObject, eventdata, handles)
 
 % --- Executes on button press in ClassifySU_PB.
 function ClassifySU_PB_Callback(hObject, eventdata, handles)
+
 channelNum=get(handles.SelectElectrode_LB,'value');
-channelList=ReturnElectrodes(handles.SelectElectrode_LB);
-channelLabel=channelList(channelNum);
 
 if get(handles.ShowAllUnits_RB,'value')
     helpdlg('All Clusters are selected. Please select a specific Cluster','SU classification');
@@ -1889,12 +1963,12 @@ end
 
 for unit=1:length(selectedUnits)
     %find previous records
-    sortID=handles.classification.SortID(handles.classification.Channel==channelLabel &...
+    sortID=handles.classification.SortID(handles.classification.Channel==channelNum &...
         handles.classification.UnitNumber==selectedUnits(unit));
     if isempty(sortID)
         sortID=size(handles.classification,1)+1;
     end
-    handles.classification(sortID,:)={sortID,channelLabel,selectedUnits(unit),'SU',''};
+    handles.classification(sortID,:)={sortID,channelNum,selectedUnits(unit),'SU',''};
 end
 handles=ClassificationColor(handles);
 guidata(hObject, handles);
@@ -1902,8 +1976,6 @@ guidata(hObject, handles);
 % --- Executes on button press in ClassifyMU_PB.
 function ClassifyMU_PB_Callback(hObject, eventdata, handles)
 channelNum=get(handles.SelectElectrode_LB,'value');
-channelList=ReturnElectrodes(handles.SelectElectrode_LB);
-channelLabel=channelList(channelNum);
 
 if get(handles.ShowAllUnits_RB,'value')
     helpdlg('All Clusters are selected. Please select a specific Cluster','MU classification');
@@ -1922,12 +1994,12 @@ end
 
 for unit=1:length(selectedUnits)
     %find previous records
-    sortID=handles.classification.SortID(handles.classification.Channel==channelLabel &...
+    sortID=handles.classification.SortID(handles.classification.Channel==channelNum &...
         handles.classification.UnitNumber==selectedUnits(unit));
     if isempty(sortID)
         sortID=size(handles.classification,1)+1;
     end
-    handles.classification(sortID,:)={sortID,channelLabel,selectedUnits(unit),'MU',''};
+    handles.classification(sortID,:)={sortID,channelNum,selectedUnits(unit),'MU',''};
 end
 handles=ClassificationColor(handles);
 guidata(hObject, handles);
@@ -1935,8 +2007,6 @@ guidata(hObject, handles);
 % --- Executes on button press in ClassifyOther_PB.
 function ClassifyOther_PB_Callback(hObject, eventdata, handles)
 channelNum=get(handles.SelectElectrode_LB,'value');
-channelList=ReturnElectrodes(handles.SelectElectrode_LB);
-channelLabel=channelList(channelNum);
 
 if get(handles.ShowAllUnits_RB,'value')
     helpdlg('All Clusters are selected. Please select a specific Cluster','Other classification');
@@ -1955,12 +2025,12 @@ end
 
 for unit=1:length(selectedUnits)
     %find previous records
-    sortID=handles.classification.SortID(handles.classification.Channel==channelLabel &...
+    sortID=handles.classification.SortID(handles.classification.Channel==channelNum &...
         handles.classification.UnitNumber==selectedUnits(unit));
     if isempty(sortID)
         sortID=size(handles.classification,1)+1;
     end
-    handles.classification(sortID,:)={sortID,channelLabel,selectedUnits(unit),'Other',''};
+    handles.classification(sortID,:)={sortID,channelNum,selectedUnits(unit),'Other',''};
 end
 handles=ClassificationColor(handles);
 guidata(hObject, handles);
@@ -1975,8 +2045,6 @@ defaultans = {''};
 comment = inputdlg(prompt,dlg_title,num_lines,defaultans);
 
 channelNum=get(handles.SelectElectrode_LB,'value');
-channelList=ReturnElectrodes(handles.SelectElectrode_LB);
-channelLabel=channelList(channelNum);
 
 if get(handles.ShowAllUnits_RB,'value')
     helpdlg('All Clusters are selected. Please select a specific Cluster','Notes');
@@ -1995,7 +2063,7 @@ end
 
 for unit=1:length(selectedUnits)
     %find previous records
-    sortID=handles.classification.SortID(handles.classification.Channel==channelLabel &...
+    sortID=handles.classification.SortID(handles.classification.Channel==channelNum &...
         handles.classification.UnitNumber==selectedUnits(unit));
     if isempty(sortID)
         sortID=size(handles.classification,1)+1;
@@ -2003,15 +2071,13 @@ for unit=1:length(selectedUnits)
     else
         currentClass=handles.classification(sortID,:).Classification;
     end
-    handles.classification(sortID,:)={sortID,channelLabel,selectedUnits(unit),currentClass,comment};
+    handles.classification(sortID,:)={sortID,channelNum,selectedUnits(unit),currentClass,comment};
 end
 guidata(hObject, handles);
 
 % --- Executes on button press in PB_DeleteClass.
 function PB_DeleteClass_Callback(hObject, eventdata, handles)
 channelNum=get(handles.SelectElectrode_LB,'value');
-channelList=ReturnElectrodes(handles.SelectElectrode_LB);
-channelLabel=channelList(channelNum);
 
 if get(handles.ShowAllUnits_RB,'value')
     helpdlg('All Clusters are selected. Please select a specific Cluster','Other classification');
@@ -2030,27 +2096,23 @@ end
 
 for unit=1:length(selectedUnits)
     %find previous records
-    sortID=handles.classification.SortID(handles.classification.Channel==channelLabel &...
+    sortID=handles.classification.SortID(handles.classification.Channel==channelNum &...
         handles.classification.UnitNumber==selectedUnits(unit));
     if isempty(sortID)
         sortID=size(handles.classification,1)+1;
     end
-    handles.classification(sortID,:)={sortID,channelLabel,selectedUnits(unit),'',''};
+    handles.classification(sortID,:)={sortID,channelNum,selectedUnits(unit),'',''};
 end
 handles=ClassificationColor(handles);
 guidata(hObject, handles);
 
 function handles=ClassificationColor(handles)
-% channelNum=get(handles.SelectElectrode_LB,'value');
+channelNum=get(handles.SelectElectrode_LB,'value');
 clusterList=ReturnUnits(handles.SelectUnit_LB);
 colorClusters=cell(length(clusterList),1);
 for clusNum=1:length(clusterList)
-    if numel(unique(clusterList))==numel(clusterList) %global cluster IDs
-        clusterNum=find(handles.classification.UnitNumber==clusterList(clusNum));
-    else %each electrode has it's own cluster IDs
-        clusterNum=find(handles.classification.Channel==channelNum & ...
-            handles.classification.UnitNumber==clusterList(clusNum));
-    end
+    clusterNum=find(handles.classification.Channel==channelNum & ...
+        handles.classification.UnitNumber==clusterList(clusNum));
     if isempty(clusterNum)
         colorClusters(clusNum)=cellfun(@(thatCluster) sprintf(['<HTML><BODY bgcolor="%s">'...
             '<FONT color="%s">%s</FONT></BODY></HTML>'],... %size="+1"
@@ -2083,8 +2145,7 @@ function PB_SaveClass_Callback(hObject, eventdata, handles)
 
 if size(handles.classification,1)>0
     handles.classification = sortrows(handles.classification,2);
-    if exist(fullfile(handles.datDir,[regexp(handles.datFile,'.+(?=\.)','match','once')...
-            '_classification.xlsx']),'file')
+    if exist([handles.datDir filesep handles.fname  '_classification.xlsx'],'file')
         overwiteFile = questdlg('Classification file exits. Overwrite?', ...
             '','Yes','No','Yes');
         switch overwiteFile
@@ -2095,9 +2156,7 @@ if size(handles.classification,1)>0
                 return
         end
     end
-    writetable(handles.classification,fullfile(handles.datDir,...
-        [regexp(handles.datFile,'.+(?=\.)','match','once')...
-            '_classification.xlsx']));
+    writetable(handles.classification,[handles.datDir filesep handles.fname  '_classification.xlsx']);
 end
 
 % --------------------------------------------------------------------
@@ -2156,7 +2215,7 @@ handles=LoadSpikes(handles);
 % plot "raw" (filtered) trace
 DisplayTraces(handles);
 % plot spike rasters
-DisplayMarkers(handles);
+DisplayRasters(handles);
 % Update handles structure
 guidata(hObject, handles);
 
@@ -2191,28 +2250,28 @@ guidata(hObject, handles);
 
 % --- Executes on button press in PCA_PB.
 function PCA_PB_Callback(hObject, eventdata, handles)
-channelNum=get(handles.SelectElectrode_LB,'value');
+electrodeNum=get(handles.SelectElectrode_LB,'value');
 
 if contains(get(handles.DisplayNtrodeMarkers_MenuItem,'Checked'),'on')
     % get channel values from same Ntrode
     shankNum=cumsum(logical([0 diff(handles.rec_info.differentShanks(1:handles.rec_info.numRecChan))]));
-    channelNum=find(shankNum==shankNum(channelNum));
+    electrodeNum=find(shankNum==shankNum(electrodeNum));
 end
 
-[spikeTimes,sortIdx]=sort(vertcat(handles.Spikes.HandSort.SpikeTimes{channelNum,1}));
-clusterID={handles.Spikes.HandSort.Units{channelNum,1}};
+[spikeTimes,sortIdx]=sort(vertcat(handles.Spikes.HandSort.SpikeTimes{electrodeNum,1}));
+clusterID={handles.Spikes.HandSort.Units{electrodeNum,1}};
 clusterIncrement=cumsum(cellfun(@(x) length(unique(x)),clusterID)); clusterIncrement=clusterIncrement-min(clusterIncrement);
 clusterID=cellfun(@(x,y) x+y, clusterID,num2cell(clusterIncrement,4),'UniformOutput',false);
 clusterID=vertcat(clusterID{:}); clusterID=clusterID(sortIdx);
 
-% waveForms=NaN(length(spikeTimes),length(channelNum),size(handles.Spikes.HandSort.Waveforms{1},1));
-% for elNum=1:length(channelNum)
+% waveForms=NaN(length(spikeTimes),length(electrodeNum),size(handles.Spikes.HandSort.Waveforms{1},1));
+% for elNum=1:length(electrodeNum)
 %     if isa(handles.traces,'memmapfile') % reading electrode data from .dat file
-%         waveForms(:,elNum,:)=ExtractChunks(handles.traces.Data(channelNum(elNum):...
+%         waveForms(:,elNum,:)=ExtractChunks(handles.traces.Data(electrodeNum(elNum):...
 %             handles.rec_info.numRecChan:max(size(handles.traces.Data))),...
 %             spikeTimes,50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
 %     else
-%         waveForms(:,elNum,:)=ExtractChunks(handles.traces(channelNum(elNum),:),...
+%         waveForms(:,elNum,:)=ExtractChunks(handles.traces(electrodeNum(elNum),:),...
 %             spikeTimes,50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
 %     end
 % end
@@ -2224,9 +2283,9 @@ plot3(features(:,1),features(:,2),features(:,8),'.')
 [CluSep, m] = Cluster_Quality(Fet, clusterID);
 
 
-[SpikeData,Y]=deal(cell(1,length(channelNum)));
-for elNum=1:length(channelNum)
-    SpikeData{elNum}=double(handles.Spikes.HandSort.Waveforms{channelNum(elNum),:});
+[SpikeData,Y]=deal(cell(1,length(electrodeNum)));
+for elNum=1:length(electrodeNum)
+    SpikeData{elNum}=double(handles.Spikes.HandSort.Waveforms{electrodeNum(elNum),:});
     SpikeNum = size(SpikeData{elNum},2);
     SpikeData{elNum} = SpikeData{elNum} - repmat(mean(SpikeData{elNum},2),1,SpikeNum);
     [Y{elNum},Sig,~] = svd(SpikeData{elNum});
@@ -2235,7 +2294,7 @@ end
 % figure; semilogy(sig(sig>1),'kx-') % plot the significant singular values
 % xlabel('index','fontsize',14); ylabel('singular value','fontsize',14)
 figure;
-for elNum=1:length(channelNum)
+for elNum=1:length(electrodeNum)
     subplot(2,2,elNum)
 plot3(SpikeData{elNum}'*Y{elNum}(:,1),SpikeData{elNum}'*Y{elNum}(:,2),SpikeData{elNum}'*Y{elNum}(:,3),'.')
 end
@@ -2255,42 +2314,3 @@ try
 catch
     units=cellfun(@(x) str2double(regexp(x,'(?<=>)\s*\d+(?=</FONT>)','match')),unitString,'UniformOutput',true);
 end
-
-function [selectedUnits,selectedUnitsListIdx,unitsIDs,spikeTimes,waveForms,samplingRate,unitsIdx,channelIdx,bestChannel]=GetUnitData(handles)
-% find which units are selected 
-if get(handles.ShowAllUnits_RB,'value') %all units
-    unitID=ReturnUnits(handles.SelectUnit_LB);
-    selectedUnitsListIdx=find(unitID>0);
-    selectedUnits=unitID(selectedUnitsListIdx);
-else %or selected units
-    unitID=ReturnUnits(handles.SelectUnit_LB);
-    if unitID==0
-        return;
-    end
-    selectedUnitsListIdx=get(handles.SelectUnit_LB,'value');
-    if isempty(selectedUnitsListIdx) & ~isempty(unitID)
-        set(handles.SelectUnit_LB,'value',1);
-        selectedUnitsListIdx=1;
-    end
-%     if sum(~ismember(unique(unitsIdx(unitsIdx>=0)),unitID))>0 %Not sure when electrode's unit would not be part of listed units
-%         unitID=unique(unitsIdx);
-%     end
-    if isempty(selectedUnitsListIdx) || selectedUnitsListIdx(end)>length(unitID)
-        selectedUnitsListIdx=length(unitID);
-    end
-    selectedUnits=unitID(selectedUnitsListIdx);
-    selectedUnitsListIdx=selectedUnitsListIdx(selectedUnits>0);
-    selectedUnits=selectedUnits(selectedUnits>0);
-end
-% find all occurences of these units across channels
-channelIdx=cellfun(@(x) logical(sum(ismember(x,selectedUnits))), handles.Spikes.HandSort.Units);
-occurencePerChannel=cellfun(@(x) sum(ismember(x,selectedUnits)), handles.Spikes.HandSort.Units);
-bestChannel=find(occurencePerChannel==max(occurencePerChannel),1);
-allUnits=vertcat(handles.Spikes.HandSort.Units{:});
-allSpikeTimes=vertcat(handles.Spikes.HandSort.SpikeTimes{:});
-allWaveforms=horzcat(handles.Spikes.HandSort.Waveforms{:})';
-unitsIdx=ismember(allUnits,selectedUnits);
-unitsIDs=allUnits(unitsIdx,:);
-spikeTimes=allSpikeTimes(unitsIdx,:);
-waveForms=allWaveforms(unitsIdx,:)';
-samplingRate=handles.Spikes.HandSort.samplingRate(bestChannel,1);

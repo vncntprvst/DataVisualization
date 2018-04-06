@@ -1,5 +1,5 @@
-fileName='SpVi12_1107_WR_Texture_LS500mH_24Ch_nopp' %_Ch6
-channelNum=6; %11 %24;
+fileName='SpVi16_0403_WR_4850_LS1Hz2ms100mW_nopp' % _Ch7'% 'SpVi12_1107_WR_Texture_LS500mH_24Ch_nopp' %_Ch6
+channelNum=10; %11 %24; 
 %% 'SpVi12_133_2Hz2ms_7mW_nopp'
 %'SpVi12_1206_WR_LS_500mHz_2ms_2_nopp'
 % 'SpVi12_1107_WR_Texture_LS500mH_24Ch_nopp'
