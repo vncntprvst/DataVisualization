@@ -1834,11 +1834,11 @@ if isfield(handles,'Trials')
 else
     TTLs=[]
 end
-channelList=channelList(channelIdx);
-if numel(channelList)>1
-    fName=[handles.datFile(1:end-4) '_SelectedData_MultiChannel.mat'];
+channelList=channelList(ismember(channelList,find(channelIdx)));
+if numel(selectedUnits)>1
+    fName=[handles.datFile(1:end-4) '_SelectedData_Multi.mat'];
 else
-    fName=[handles.datFile(1:end-4) '_SelectedData_Ch' num2str(channelLabel) '.mat'];
+    fName=[handles.datFile(1:end-4) '_SelectedData_Ch' num2str(channelLabel) 'U' num2str(selectedUnits) '.mat'];
 end
 save(fName,'waveForms','spikeTimes','unitsIdx','samplingRate','channelList',...
     'selectedUnits','TTLs','traceExcerpt','allTraces','traceInfo','classification');

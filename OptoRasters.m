@@ -64,8 +64,8 @@ for cellNum=1:length(spikeRasters)
     %     currxlim=get(gca,'XLim');%midl=round(currxlim(2)/20)*10;
     %     set(gca,'XTick',preAlignWindow:50:max(get(gca,'xlim')));
     %     set(gca,'XTickLabel',0:50:max(get(gca,'xlim'))-preAlignWindow,'FontSize',10,'FontName','calibri','TickDir','out');
-    set(gca,'XLim',[0.5 80.5],'XTick',0:10:80);
-    set(gca,'XTickLabel',(0:10:80)-preAlignWindow,'FontSize',10,'FontName','calibri','TickDir','out');
+    set(gca,'XLim',[0.5 preAlignWindow+60.5],'XTick',0:10:preAlignWindow+60);
+    set(gca,'XTickLabel',(0:10:preAlignWindow+60)-preAlignWindow,'FontSize',10,'FontName','calibri','TickDir','out');
     
     %opto stim patch
     patch([preAlignWindow preAlignWindow preAlignWindow+pulseDur preAlignWindow+pulseDur], ...
