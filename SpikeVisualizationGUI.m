@@ -613,7 +613,9 @@ else
             legend({'Artifact','Mean waveforms'});
             title('Potential artifacts removed, mean sigma > 6');
         else
-            handles.Spikes.HandSort.Units{channelNum(get(handles.SelectElectrode_LB,'value'))}(WFmeanZ>6)=-9;%artifacts
+            channelNum=ReturnElectrodes(handles.SelectElectrode_LB); 
+            handles.Spikes.HandSort.Units{channelNum(get(handles.SelectElectrode_LB,'value'))}...
+                (WFmeanZ>6)=-9;%artifacts
         end
         
         % here's how this can work:
