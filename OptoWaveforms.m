@@ -45,7 +45,7 @@ for cellNum=1:length(keepCell)
     axis('tight');box off;
     xlabel('Time (ms)')
     ylabel('Voltage (\muV)');
-    set(gca,'Color','white','FontSize',18,'FontName','Helvetica');
+    set(gca,'Color','white','FontSize',12,'FontName','Helvetica');
     legend([onpulseSDFploth,offpulseSDFploth],{'Pulse-evoked spikes','Spontaneous spikes'},'FontSize',12,'location','southeast');
     legend('boxoff')
     

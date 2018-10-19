@@ -1,4 +1,4 @@
-function OptoRasters(spikeRasters,preAlignWindow,pulseDur,axisHandle)
+function OptoRasters(spikeRasters,preAlignWindow,pulseDur,IPI,axisHandle)
 
 %% plot raster showing all channels
 % figure('Position',[1050 120 750 790]);
@@ -45,7 +45,6 @@ function OptoRasters(spikeRasters,preAlignWindow,pulseDur,axisHandle)
 % title('Neural response to 80% stimulation intensity, aligned to stimulation onset');
 % hcb = colorbar('southoutside');
 % hcb.Label.String = 'z-scored firing rate';
-
 %% single neuron plots
 for cellNum=1:length(spikeRasters)
     %find(mean(meanChan)==max(mean(meanChan)));
@@ -64,14 +63,15 @@ for cellNum=1:length(spikeRasters)
     %     currxlim=get(gca,'XLim');%midl=round(currxlim(2)/20)*10;
     %     set(gca,'XTick',preAlignWindow:50:max(get(gca,'xlim')));
     %     set(gca,'XTickLabel',0:50:max(get(gca,'xlim'))-preAlignWindow,'FontSize',10,'FontName','calibri','TickDir','out');
-    set(gca,'XLim',[0.5 preAlignWindow+60.5],'XTick',0:10:preAlignWindow+60);
-    set(gca,'XTickLabel',(0:10:preAlignWindow+60)-preAlignWindow,'FontSize',10,'FontName','calibri','TickDir','out');
+%     set(gca,'XLim',[0.5 preAlignWindow+60.5],'XTick',0:10:preAlignWindow+60);
+    set(gca,'XLim',[preAlignWindow-250.5 preAlignWindow+250.5],'XTick',0:100:preAlignWindow+200);
+    set(gca,'XTickLabel',(0:100:preAlignWindow+200)-preAlignWindow,'TickDir','out'); %'FontSize',10,'FontName','calibri'
     
     %opto stim patch
     patch([preAlignWindow preAlignWindow preAlignWindow+pulseDur preAlignWindow+pulseDur], ...
         [[0 currylim(2)] fliplr([0 currylim(2)])], ...
         [0 0 0 0],[0.3 0.75 0.93],'EdgeColor','none','FaceAlpha',0.5);
-    set(gca,'Color','white','FontSize',18,'FontName','Helvetica');
+    set(gca,'Color','white','FontSize',12,'FontName','Helvetica');
     %     title('Neural response to 10mW stimulation intensity, aligned to stimulation onset');
     % hcb = colorbar('southoutside');
     % hcb.Label.String = 'z-scored firing rate';

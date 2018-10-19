@@ -1,19 +1,20 @@
-fileName= 'vIRt16_0403_WR_4975_pole_nopp_SelectedData_Multi'; %
+fileName= 'vIRt20_0704_5119+_CutWhiskers_LS50mW10Hz5ms_nopp_Ch51'
+%'vIRt16_0403_WR_4975_pole_nopp_SelectedData_Multi'; %
 % 'SpVi16_0403_WR_5225_pole_nopp_SelectedData_Multi'; 
 %'SpVi16_0403_WR_5225_MS_nopp_SelectedData_Multi'; 
 %'SpVi16_0403_WR_4850_LS1Hz2ms100mW_nopp_SelectedData_Multi';
 %'SpVi16_0403_WR_4850_LS1Hz2ms100mW_nopp_SelectedData_Ch14U33';
 % fileName='SpVi16_0403_WR_4850_LS1Hz2ms100mW_nopp_SelectedData_Ch3';
-recName='vIRt16_0403_WR_4975_pole'; %'SpVi16_0403_WR_5225_MS'; %'SpVi16_0403_WR_4850_LS1Hz2ms100mW';
+recName='vIRt20_0704_5119_CutWhiskers_LS'; %'vIRt16_0403_WR_4975_pole'; %'SpVi16_0403_WR_5225_MS'; %'SpVi16_0403_WR_4850_LS1Hz2ms100mW';
 %% From SpikeVisualizationGUI export
 spikeData=load([fileName '.mat'],'waveForms','spikeTimes','unitsIdx','samplingRate','selectedUnits');
 load([fileName '.mat'],'TTLs');
 load([fileName '.mat'], 'traceExcerpt');
 traceData=load([fileName '.mat'], 'allTraces','traceInfo');
 
-TTLs.TTLtimes=35000;
-TTLs.start=35000;
-TTLs.end=38000;
+% TTLs.TTLtimes=35000;
+% TTLs.start=35000;
+% TTLs.end=38000;
 
 %% From JRClust csv export
 % dirListing=dir; dirName=cd;
@@ -96,7 +97,7 @@ for clusNum=1:size(spikeData.selectedUnits,1)
 end
 
 pulseDur=mode(TTLs.end-TTLs.start);
-
+IPI=mode(TTLs.interval)+pulseDur;
 %% Population plots
 conv_sigma=1;shiftVal=conv_sigma*3;
 % allSDF=cellfun(@(x) conv_raster(x,conv_sigma,1), spikeRasters,'UniformOutput' , false);
@@ -137,12 +138,12 @@ OptoWaveforms(spikeData,TTLtimes,spikeData.selectedUnits(cellNum),delay,gca)
 
 % rasters
 subplot(3,3,[2,5]);
-OptoRasters(spikeRasters(cellNum),preAlignWindow,pulseDur,gca);
+OptoRasters(spikeRasters(cellNum),preAlignWindow,pulseDur,IPI,gca);
 % title(['Channel ' num2str(channelNum) ', Neuron ' num2str(spikeData.selectedUnits(cellNum))],'FontName','Cambria');
 
 % SDF
 subplot(3,3,[3,6])
-OptoSDF(spikeRasters(cellNum),preAlignWindow,pulseDur,gca)
+OptoSDF(spikeRasters(cellNum),preAlignWindow,pulseDur,IPI,gca)
 
 % % ISI
 % subplot(3,3,4); hold on
