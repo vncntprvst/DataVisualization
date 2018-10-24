@@ -7,7 +7,7 @@ for cellNum=1:length(spikeRasters)
     cmap=parula; %colormap(parula);
     
     %% plot sdf
-    conv_sigma=1; 
+    conv_sigma=30;
     %     xTickSteps=round(preAlignWindow/50)*10;
     [sdf{1}, ~, rastsem{1}]=conv_raster(spikeRasters{cellNum},conv_sigma,1);
     % [sdf{2}, ~, rastsem{2}]=conv_raster(spikeRasters{keepChan},conv_sigma);
@@ -24,26 +24,25 @@ for cellNum=1:length(spikeRasters)
     
     zeroLoc=preAlignWindow-3*conv_sigma;
     axis(gca,'tight');set(gca,'xlim',[preAlignWindow-50 preAlignWindow+150]);
-%     set(gca,'XTick',[zeroLoc-10 zeroLoc zeroLoc+10 zeroLoc+20 zeroLoc+40]); %xTickSteps-(1+3*conv_sigma):xTickSteps:(stop-start-6*conv_sigma));
+    %     set(gca,'XTick',[zeroLoc-10 zeroLoc zeroLoc+10 zeroLoc+20 zeroLoc+40]); %xTickSteps-(1+3*conv_sigma):xTickSteps:(stop-start-6*conv_sigma));
     set(gca,'XTick',[zeroLoc-50:50:zeroLoc+100]); %xTickSteps-(1+3*conv_sigma):xTickSteps:(stop-start-6*conv_sigma));
-%     set(gca,'XTickLabel',[-10 0 10 20 40]); %-(alignmtt-xTickSteps):xTickSteps:stop-(alignmtt+xTickSteps));
+    %     set(gca,'XTickLabel',[-10 0 10 20 40]); %-(alignmtt-xTickSteps):xTickSteps:stop-(alignmtt+xTickSteps));
     set(gca,'XTickLabel',[-50:50:100]); %-(alignmtt-xTickSteps):xTickSteps:stop-(alignmtt+xTickSteps));
     set(gca,'Color','white','FontSize',10,'FontName','Helvetica','TickDir','out');
     xlabel(gca,'Time (ms)'); %,'FontName','Cambria','FontSize',12);
     ylabel(gca,'Firing rate (spikes/s)'); %,'FontName','Cambria','FontSize',12);
-    
-    % draw opto stim bar
-    currylim=get(gca,'YLim');
-    for pulseNum=1:3
+end
+% draw opto stim bar
+currylim=get(gca,'YLim');
+for pulseNum=1:3
     OptoStimh=patch([preAlignWindow-(3*conv_sigma)+(IPI*(pulseNum-1)),...
         preAlignWindow-(3*conv_sigma)+(IPI*(pulseNum-1)),...
         preAlignWindow-(3*conv_sigma)+pulseDur-1+(IPI*(pulseNum-1)),...
         preAlignWindow-(3*conv_sigma)+pulseDur-1+(IPI*(pulseNum-1))], ...
         [[0 currylim(2)] fliplr([0 currylim(2)])], ...
         [0 0 0 0],[0.3 0.75 0.93],'EdgeColor','none','FaceAlpha',0.5);
-    end
-    set(gca,'Color','white','FontSize',12,'FontName','Helvetica');
-    %legend
-    legend([FRploth,OptoStimh],{'Average firing rate','Optical stimulation'},'FontSize',12);
-    legend('boxoff')
 end
+set(gca,'Color','white','FontSize',12,'FontName','Helvetica');
+%legend
+legend([FRploth,OptoStimh],{'Average firing rate','Optical stimulation'},'FontSize',12);
+legend('boxoff')

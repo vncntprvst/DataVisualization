@@ -1,5 +1,6 @@
-fileName='SpVi16_0403_WR_4850_LS1Hz2ms100mW_nopp' % _Ch7'% 'SpVi12_1107_WR_Texture_LS500mH_24Ch_nopp' %_Ch6
-channelNum=10; %11 %24; 
+fileName='vIRt21_2018_10_05_17_12_09_4700_5ms10Hz10mW_export' %_Ch11
+%'SpVi16_0403_WR_4850_LS1Hz2ms100mW_nopp' % _Ch7'% 'SpVi12_1107_WR_Texture_LS500mH_24Ch_nopp' %_Ch6
+channelNum=11; %11 %24; 
 %% 'SpVi12_133_2Hz2ms_7mW_nopp'
 %'SpVi12_1206_WR_LS_500mHz_2ms_2_nopp'
 % 'SpVi12_1107_WR_Texture_LS500mH_24Ch_nopp'
@@ -17,6 +18,14 @@ load([fileName '_Ch' num2str(channelNum) '.mat'],'TTLs');
 load([fileName '_Ch' num2str(channelNum) '.mat'], 'traceExcerpt');
 traceData=load([fileName '_Ch' num2str(channelNum) '.mat'], 'allTraces','traceInfo');
 
+% read TTL dat file 
+%     cd(sessionDir);
+%     TTLFileName=[regexp(recName,'\S+?(?=_export)','match','once') '_TTLs.dat'];
+%     fid = fopen(TTLFileName, 'r');
+%     TTLs = fread(fid,[2,Inf],'int32');
+%     fclose(fid);
+
+    
 %% From JRClust csv export
 % dirListing=dir; dirName=cd;
 % infoFileName=dirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_info.'),...
@@ -78,9 +87,9 @@ for clusNum=1:size(spikeData.selectedUnits,1)
     %define parameters
     preAlignWindow=20;
     postAlignWindow=259;
-    TTLtimes=uint32(TTLs.TTLtimes)/(TTLs.samplingRate/1000);
-    raster=nan(numel(TTLs.TTLtimes),preAlignWindow+postAlignWindow+1);
-    for trialNum=1:numel(TTLs.TTLtimes)
+    TTLtimes=uint32(TTLs.start(:,2)); %TTLs.start(:,1))/double(TTLs.samplingRate{1}/1000);
+    raster=nan(numel(TTLs.start(:,1)),preAlignWindow+postAlignWindow+1);
+    for trialNum=1:numel(TTLs.start(:,1))
         try
             raster(trialNum,:)=spikeArray(...
                 TTLtimes(trialNum)-preAlignWindow:...
@@ -97,7 +106,8 @@ for clusNum=1:size(spikeData.selectedUnits,1)
     %     figure; imagesc(raster)
 end
 
-pulseDur=mode(TTLs.end-TTLs.start);
+pulseDur=min(mode(TTLs.end-TTLs.start));
+IPI=mode(diff(TTLs.start(:,2)))+pulseDur;
 
 %% Figures
 for cellNum=1:size(spikeData.selectedUnits,1)
@@ -114,12 +124,13 @@ OptoWaveforms(spikeData,TTLtimes,spikeData.selectedUnits(cellNum),delay,gca)
 
 % rasters
 subplot(3,3,[2,5]);
-OptoRasters(spikeRasters(cellNum),preAlignWindow,pulseDur,gca);
+% delay=5;
+OptoRasters(spikeRasters(cellNum),preAlignWindow,pulseDur,IPI,gca);
 % title(['Channel ' num2str(channelNum) ', Neuron ' num2str(spikeData.selectedUnits(cellNum))],'FontName','Cambria');
 
 % SDF
 subplot(3,3,[3,6])
-OptoSDF(spikeRasters(cellNum),preAlignWindow,pulseDur,gca)
+OptoSDF(spikeRasters(cellNum),preAlignWindow,pulseDur,IPI,gca)
 
 % % ISI
 % subplot(3,3,4); hold on

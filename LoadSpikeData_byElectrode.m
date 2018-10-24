@@ -1,13 +1,20 @@
-function Spikes=LoadSpikeData(fName,traces,electrodes,samplingRate,bitResolution)
-if logical(regexp(fName,'Ch\d+.')) %from Spike2
-    load(fName)
+function Spikes=LoadSpikeData_byElectrode(argFname,traces,electrodes,samplingRate,bitResolution)
+if logical(regexp(argFname,'Ch\d+.')) %from Spike2
+    load(argFname)
     Spikes.Units{electrodes,1}=nw_401.codes(:,1);
     Spikes.SpikeTimes{electrodes,1}=uint32(nw_401.times*samplingRate);
     Spikes.Waveforms{electrodes,1}=nw_401.values;
     Spikes.samplingRate(electrodes,1)=samplingRate;
-elseif contains(fName,'.hdf5') % Spyking Circus
-    fName=regexp(fName,'\S+?(?=\.\w+\.\w+$)','match','once');
-    templateToEl=h5read([fName '.clusters.hdf5'],'/electrodes'); % this are the *preferred* electrodes for all K templates
+elseif contains(argFname,'.hdf5') % Spyking Circus
+    fName=regexp(argFname,'\S+?(?=\.\w+\.\w+$)','match','once');
+    postFix='';
+    if isempty(fName)
+            fName=regexp(argFname,'\S+?(?=\.\w+\-\w+\.\w+$)','match','once'); %in case loading merged files
+            if ~isempty(fName)
+                postFix='-merged';
+            end
+    end
+    templateToEl=h5read([fName '.clusters' postFix '.hdf5'],'/electrodes'); % this are the *preferred* electrodes for all K templates
     for elNum=1:electrodes
         try
             %Clusters data (including non-clustered spikes)
@@ -18,12 +25,12 @@ elseif contains(fName,'.hdf5') % Spyking Circus
             thisElTemplates=find(templateToEl==elNum-1)-1;
             [spktimes,units]=deal(cell(size(thisElTemplates,1)+1,1));
             for templt=1:size(thisElTemplates,1)
-                spktimes{templt}=h5read([fName '.result.hdf5'],['/spiketimes/temp_' num2str(thisElTemplates(templt))]);
+                spktimes{templt}=h5read([fName '.result' postFix '.hdf5'],['/spiketimes/temp_' num2str(thisElTemplates(templt))]);
                 units{templt}=ones(size(spktimes{templt},1),1)*templt;
             end
             % collect non-fitted ("garbage") spikes, with unit ID 0
             try
-                spktimes{templt+1}=h5read([fName '.result.hdf5'],['/gspikes/elec_' num2str(elNum-1)]);
+                spktimes{templt+1}=h5read([fName '.result' postFix '.hdf5'],['/gspikes/elec_' num2str(elNum-1)]);
                 units{templt+1}=zeros(size(spktimes{templt+1},1),1);
             catch
                 % no "garbage" spikes
@@ -65,7 +72,7 @@ elseif contains(fName,'.hdf5') % Spyking Circus
         catch
         end
     end
-elseif contains(fName,'rez.mat') || contains(fName,'_KS') %Kilosort
+elseif contains(argFname,'rez.mat') || contains(argFname,'_KS') %Kilosort
     load(fName);
     
     spikeTimes = uint64(rez.st3(:,1));
@@ -110,7 +117,7 @@ elseif contains(fName,'rez.mat') || contains(fName,'_KS') %Kilosort
         end
     end
     
-elseif contains(fName,'.csv') || contains(fName,'_jrc.mat') %from JRClust
+elseif contains(argFname,'.csv') || contains(argFname,'_jrc.mat') %from JRClust
     
     %% locate the _jrc file
     dirListing=dir;
@@ -224,7 +231,7 @@ elseif contains(fName,'.csv') || contains(fName,'_jrc.mat') %from JRClust
             [Spikes.Units{elNum,1},Spikes.SpikeTimes{elNum,1}]=deal([]);
         end
     end
-elseif contains(fName,'.mat') % just Matlab processing
+elseif contains(argFname,'.mat') % just Matlab processing
     %Matlab export - all units unsorted by default
     for elNum=1:numel(electrodes)
         try

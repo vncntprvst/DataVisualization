@@ -333,7 +333,7 @@ else
                 if ~isfield(handles.rec_info,'bitResolution') || isempty(handles.rec_info.bitResolution)
                     handles.rec_info.bitResolution=0.25; %default 0.25 bit per uV % 0.195 for Open Ephys
                 end
-                handles.Spikes.Offline_Sorting=LoadSpikeData(handles.offlineSort_SpikeFile,rawData,...
+                handles.Spikes.Offline_Sorting=LoadSpikeData_byElectrode(handles.offlineSort_SpikeFile,rawData,...
                     numel(handles.rec_info.exportedChan),handles.rec_info.samplingRate,handles.rec_info.bitResolution); %handles.tracesInfo.size(1)
                 clear rawData;
             elseif contains(handles.offlineSort_SpikeFile,'rez.mat') % KiloSort
