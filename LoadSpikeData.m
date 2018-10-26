@@ -1,22 +1,28 @@
-function spikes=LoadSpikeData(fName,traces) %electrodes,samplingRate,bitResolution
+function spikes=LoadSpikeData(argin_fName,traces) %electrodes,samplingRate,bitResolution
 % fName='vIRt22_2018_10_16_20_36_04_5600_50ms1Hz10mW_1_1_export.result.hdf5';
 %% from Spike2
-if logical(regexp(fName,'Ch\d+.'))
-    load(fName)
+if logical(regexp(argin_fName,'Ch\d+.'))
+    load(argin_fName)
     Spikes.Units{electrodes,1}=nw_401.codes(:,1);
     Spikes.SpikeTimes{electrodes,1}=uint32(nw_401.times*samplingRate);
     Spikes.Waveforms{electrodes,1}=nw_401.values;
     Spikes.samplingRate(electrodes,1)=samplingRate;
     %% Spyking Circus
-elseif contains(fName,'.hdf5')
-    fName=regexp(fName,'\S+?(?=\.\w+\.\w+$)','match','once');
-    
+elseif contains(argin_fName,'.hdf5')
+    fName=regexp(argin_fName,'\S+?(?=\.\w+\.\w+$)','match','once');
+    postFix='';
+    if isempty(fName)
+            fName=regexp(argin_fName,'\S+?(?=\.\w+\-\w+\.\w+$)','match','once'); %in case loading merged files
+            if ~isempty(fName)
+                postFix='-merged';
+            end
+    end
     % find templates and preferred electrodes
-    templateToEl=h5read([fName '.clusters.hdf5'],'/electrodes'); % this are the *preferred* electrodes for all K templates
+    templateToEl=h5read([fName '.clusters' postFix '.hdf5'],'/electrodes'); % this are the *preferred* electrodes for all K templates
     numTemplates=length(templateToEl); % template has equivalent meaning to cluster
     
     % get spike times, amplitudes
-    resultFile = [fName '.result.hdf5'];
+    resultFile = [fName '.result' postFix '.hdf5'];
     for templateNum=1:numTemplates
         spikeTimes{templateNum,1}=double(h5read(resultFile, ['/spiketimes/temp_' num2str(templateNum-1)]));
         spikeAmplitudes{templateNum,1}=double(h5read(resultFile, ['/amplitudes/temp_' ...
@@ -30,7 +36,7 @@ elseif contains(fName,'.hdf5')
     [spikeTimes{templateNum+1},templatePrefElectrode{templateNum+1}]=deal([]);
     for electrodeNum=unique(templateToEl)'
         try
-            gbSpikeTimes=h5read([fName '.result.hdf5'],['/gspikes/elec_' num2str(electrodeNum)]);
+            gbSpikeTimes=h5read([fName '.result' postFix '.hdf5'],['/gspikes/elec_' num2str(electrodeNum)]);
             spikeTimes{templateNum+1}=[spikeTimes{templateNum+1};gbSpikeTimes];
             templatePrefElectrode{templateNum+1}=[templatePrefElectrode{templateNum+1};...
                 ones(size(gbSpikeTimes,1),1)*double(electrodeNum)];
@@ -55,7 +61,7 @@ elseif contains(fName,'.hdf5')
     %     traces=load(['../' fName '.mat']);
 %     traces = memmapfile(['../' fName '.dat'],'Format','int16');
     % gert number of electrodes
-    clustersData=h5info([fName '.clusters.hdf5']);
+    clustersData=h5info([fName '.clusters' postFix '.hdf5']);
     clustersDatasetsNames={clustersData.Datasets.Name};
     electrodesId=clustersDatasetsNames(cellfun(@(x) contains(x,'data'),...
         clustersDatasetsNames));
@@ -110,7 +116,7 @@ elseif contains(fName,'.hdf5')
 %     figure
     % plot(spikeTimes{templateNum,1}, spikeAmplitudes{templateNum,1}, '.')
 %     plot(spikes.spikeTimes(spikes.unitID==templateNum),spikes.amplitude(spikes.unitID==templateNum), '.')
-elseif contains(fName,'rez.mat') || contains(fName,'_KS') %Kilosort
+elseif contains(argin_fName,'rez.mat') || contains(argin_fName,'_KS') %Kilosort
     %     load(fName);
     %
     %     spikeTimes = uint64(rez.st3(:,1));
@@ -155,7 +161,7 @@ elseif contains(fName,'rez.mat') || contains(fName,'_KS') %Kilosort
     %         end
     %     end
     %
-elseif contains(fName,'.csv') || contains(fName,'_jrc.mat') %from JRClust
+elseif contains(argin_fName,'.csv') || contains(argin_fName,'_jrc.mat') %from JRClust
     %
     %     %% locate the _jrc file
     %     dirListing=dir;
@@ -269,7 +275,7 @@ elseif contains(fName,'.csv') || contains(fName,'_jrc.mat') %from JRClust
     %             [Spikes.Units{elNum,1},Spikes.SpikeTimes{elNum,1}]=deal([]);
     %         end
     %     end
-elseif contains(fName,'.mat') % just Matlab processing
+elseif contains(argin_fName,'.mat') % just Matlab processing
     %     %Matlab export - all units unsorted by default
     %     for elNum=1:numel(electrodes)
     %         try

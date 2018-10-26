@@ -73,7 +73,7 @@ elseif contains(argFname,'.hdf5') % Spyking Circus
         end
     end
 elseif contains(argFname,'rez.mat') || contains(argFname,'_KS') %Kilosort
-    load(fName);
+    load(argFname);
     
     spikeTimes = uint64(rez.st3(:,1));
     spikeTemplates = uint32(rez.st3(:,2));
