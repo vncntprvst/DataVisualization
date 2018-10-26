@@ -1,6 +1,6 @@
 fileName='vIRt22_2018-10-16_18-43-54_5100_50ms1Hz5mW_nopp' %_Ch29
 %'SpVi16_0403_WR_4850_LS1Hz2ms100mW_nopp' % _Ch7'% 'SpVi12_1107_WR_Texture_LS500mH_24Ch_nopp' %_Ch6
-channelNum=29; %11 %24; 
+channelNum=14; %11 %24; 
 %% 'SpVi12_133_2Hz2ms_7mW_nopp'
 %'SpVi12_1206_WR_LS_500mHz_2ms_2_nopp'
 % 'SpVi12_1107_WR_Texture_LS500mH_24Ch_nopp'
@@ -25,7 +25,12 @@ traceData=load([fileName '_Ch' num2str(channelNum) '.mat'], 'allTraces','traceIn
 %     TTLs = fread(fid,[2,Inf],'int32');
 %     fclose(fid);
 
-    
+% TTL times should be sync'ed to recoding start already ...
+TTLs.start(:,1)=TTLs.start(:,1)-double(rec_info.recordingStartTime);
+TTLs.start(:,2)=TTLs.start(:,1)/double(TTLs.samplingRate{1}/1000); 
+TTLs.end(:,1)=TTLs.end(:,1)-double(rec_info.recordingStartTime);
+TTLs.end(:,2)=TTLs.end(:,1)/double(TTLs.samplingRate{1}/1000); 
+
 %% From JRClust csv export
 % dirListing=dir; dirName=cd;
 % infoFileName=dirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_info.'),...
@@ -67,7 +72,8 @@ for clusNum=1:size(spikeData.selectedUnits,1)
     numBin=ceil((max(spikeData.spikeTimes(spikeData.unitsIdx==spikeData.selectedUnits(clusNum)))+1)/...
         (spikeData.samplingRate/1000)/binSize);
     
-    [spikeCount,spikeTime]=histcounts(double(spikeData.spikeTimes(spikeData.unitsIdx==spikeData.selectedUnits(clusNum)))/...
+    [spikeCount,spikeTime]=histcounts(double(spikeData.spikeTimes(...
+        spikeData.unitsIdx==spikeData.selectedUnits(clusNum)))/...
         double(spikeData.samplingRate/1000), numBin);
     
     %     foo=spikeData.spikeTimes(spikeData.unitsIdx==spikeData.selectedUnits(clusNum))/30;
@@ -77,17 +83,17 @@ for clusNum=1:size(spikeData.selectedUnits,1)
     %% spike density function
     spikeArray = zeros(1,ceil(max(spikeTime))+1);
     spikeArray(ceil(spikeTime(1:end-1)))=spikeCount;
-    %     sigma=1;
-    %     convSpikeTime = [zeros(1,sigma*3) fullgauss_filtconv(spikeArray,sigma,0)].*1000;
-    %     hold on
-    % plot([zeros(1,sigma*3) convSpikeTime zeros(1,sigma*3)])
-    %     plot( convSpikeTime(1:6000-sigma*3))
+%         sigma=1;
+%         convSpikeTime = [zeros(1,sigma*3) fullgauss_filtconv(spikeArray,sigma,0)].*1000;
+%         hold on
+%     plot([zeros(1,sigma*3) convSpikeTime zeros(1,sigma*3)])
+%         plot( convSpikeTime(1:6000-sigma*3))
     
     %% create rasters aligned to TTL
     %define parameters
-    preAlignWindow=20;
-    postAlignWindow=259;
-    TTLtimes=uint32(TTLs.start(:,2)); %TTLs.start(:,1))/double(TTLs.samplingRate{1}/1000);
+    preAlignWindow=100;
+    postAlignWindow=359;
+    TTLtimes=uint32(TTLs.start(:,2)); %deal(TTLs.start(:,1)/double(TTLs.samplingRate{1}/1000)); % uint32(TTLs.start(:,2));
     raster=nan(numel(TTLs.start(:,1)),preAlignWindow+postAlignWindow+1);
     for trialNum=1:numel(TTLs.start(:,1))
         try
@@ -111,7 +117,7 @@ IPI=mode(diff(TTLs.start(:,2)))+pulseDur;
 
 %% Figures
 % some issue with ttl times from npy -> see CH29 from 'vIRt22_2018-10-16_18-43-54_5100_50ms1Hz5mW_nopp' KS 
-for cellNum=1:size(spikeData.selectedUnits,1)
+for cellNum=1%:size(spikeData.selectedUnits,1)
 % keep one cell 
 % cellNum=2;
 
@@ -171,6 +177,6 @@ else % check further out in the trace
     (traceExcerpt.location-traceExcerpt.excerptSize)/msConv)*msConv;
     traceExcerpt.spkTimes{cellNum}=NaN;
 end %plot anyway
-OptoRawTrace(traceExcerpt,traceExcerpt.spkTimes(cellNum),msConv,excerptTTLtimes,'',gca)
+OptoRawTrace(traceExcerpt,traceExcerpt.spkTimes(cellNum),msConv,excerptTTLtimes,pulseDur,'center',gca)
 end
 

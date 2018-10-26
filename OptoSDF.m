@@ -7,7 +7,7 @@ for cellNum=1:length(spikeRasters)
     cmap=parula; %colormap(parula);
     
     %% plot sdf
-    conv_sigma=30;
+    conv_sigma=1;
     %     xTickSteps=round(preAlignWindow/50)*10;
     [sdf{1}, ~, rastsem{1}]=conv_raster(spikeRasters{cellNum},conv_sigma,1);
     % [sdf{2}, ~, rastsem{2}]=conv_raster(spikeRasters{keepChan},conv_sigma);
@@ -34,7 +34,7 @@ for cellNum=1:length(spikeRasters)
 end
 % draw opto stim bar
 currylim=get(gca,'YLim');
-for pulseNum=1:3
+for pulseNum=1 %:3
     OptoStimh=patch([preAlignWindow-(3*conv_sigma)+(IPI*(pulseNum-1)),...
         preAlignWindow-(3*conv_sigma)+(IPI*(pulseNum-1)),...
         preAlignWindow-(3*conv_sigma)+pulseDur-1+(IPI*(pulseNum-1)),...

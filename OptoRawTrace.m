@@ -1,4 +1,4 @@
-function OptoRawTrace(recTrace,spikeTimes,msConv,TTLtimes,option,axisHandle)
+function OptoRawTrace(recTrace,spikeTimes,msConv,TTLtimes,pulseDur,option,axisHandle)
 
 if ~exist('axisHandle','var') | isempty(axisHandle)
     figure('Position',[1092 149 708 761]); hold on
@@ -7,17 +7,17 @@ cmap=parula;
 %plot raw trace
 plot(recTrace.data,'color','k');
 
-
 if ~isempty(TTLtimes)
     for TTLNum=1:length(TTLtimes)
         patch([TTLtimes(TTLNum), TTLtimes(TTLNum),...
-            TTLtimes(TTLNum)+2*msConv, TTLtimes(TTLNum)+2*msConv], ...
+            TTLtimes(TTLNum)+pulseDur*msConv, TTLtimes(TTLNum)+pulseDur*msConv], ...
             [get(gca,'ylim') fliplr(get(gca,'ylim'))], ...
             [0 0 0 0],[0.3 0.75 0.93],'EdgeColor','none','FaceAlpha',0.7);
     end
     if strcmp(option,'center') %length(TTLtimes)==1
-        set(gca,'xlim',[TTLtimes(end)-50*msConv TTLtimes(end)+50*msConv])
-        set(gca,'xtick',TTLtimes(end)-50*msConv:10*msConv:TTLtimes(end)+50*msConv,'xticklabel',-50:10:50);
+        set(gca,'xlim',[TTLtimes(end)-50*msConv TTLtimes(end)+200*msConv])
+        set(gca,'xtick',TTLtimes(end)-50*msConv:10*msConv:TTLtimes(end)+200*msConv,...
+            'xticklabel',-50:10:200);
         set(gca,'ytick',[],'yticklabel',[],'TickDir','out');
     else
         %     set(gca,'xtick',recTrace.xTicks,'xticklabel',recTrace.xTicklabels,...
