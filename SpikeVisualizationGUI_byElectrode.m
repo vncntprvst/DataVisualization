@@ -1,6 +1,6 @@
 function varargout = SpikeVisualizationGUI_byElectrode(varargin)
 % MATLAB code for SpikeVisualizationGUI_byElectrode.fig
-% Last Modified by GUIDE v2.5 17-Nov-2017 16:03:13
+% Last Modified by GUIDE v2.5 27-Oct-2018 16:32:28
 % version 0.7 (nov 2017), tested in R2017b
 % version 0.5 (sept 2016), tested in R2014b
 % Vincent Prevosto
@@ -301,7 +301,7 @@ else
 %             cd(handles.exportDir);
             if logical(regexp(handles.offlineSort_SpikeFile,'Ch\d+.')) % Spike2
                 cd(handles.offlineSort_SpikeDir);
-                handles.Spikes.Offline_Sorting=LoadSpikeData(handles.offlineSort_SpikeFile,...
+                handles.Spikes.Offline_Sorting=LoadSpikeData_byElectrode(handles.offlineSort_SpikeFile,...
                     handles.rec_info.numRecChan,handles.rec_info.samplingRate);
             elseif contains(handles.offlineSort_SpikeFile,'.hdf5') % Spyking-Circus
                 % first load raw traces in memory
@@ -333,15 +333,18 @@ else
                 if ~isfield(handles.rec_info,'bitResolution') || isempty(handles.rec_info.bitResolution)
                     handles.rec_info.bitResolution=0.25; %default 0.25 bit per uV
                 end
-                handles.Spikes.Offline_Sorting=LoadSpikeData(handles.offlineSort_SpikeFile,rawData,...
+                handles.Spikes.Offline_Sorting=LoadSpikeData_byElectrode(handles.offlineSort_SpikeFile,rawData,...
                     numel(handles.rec_info.exportedChan),handles.rec_info.samplingRate,handles.rec_info.bitResolution); %handles.tracesInfo.size(1)
                 clear rawData;
             elseif contains(handles.offlineSort_SpikeFile,'rez.mat') % KiloSort
-                fileName=exportDirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'.dat'),...
-                {exportDirListing.name},'UniformOutput',false))).name;
-                if iscell(fileName) && length(fileName)>1
-                    fileName=exportDirListing(~cellfun('isempty',cellfun(@(x) strfind(x,rec_info.exportname),...
-                fileName,'UniformOutput',false))).name;
+                fileName={exportDirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'.dat'),...
+                {exportDirListing.name},'UniformOutput',false))).name};
+                if length(fileName)>1 %iscell(fileName) &&                
+                    fileName=fileName{~cellfun('isempty',cellfun(@(x)...
+                        strfind(x,handles.rec_info.exportname),...
+                fileName,'UniformOutput',false))};
+                else
+                    fileName=fileName{:};
                 end
                 %                 tb_filename=[tb_filename{1} '.dat'];
                 if ~exist(fileName,'file') % then ask where it is
@@ -361,7 +364,7 @@ else
                 if ~isfield(handles.rec_info,'bitResolution') || isempty(handles.rec_info.bitResolution)
                     handles.rec_info.bitResolution=0.25; %default 0.25 uV/bit
                 end
-                handles.Spikes.Offline_Sorting=LoadSpikeData(handles.offlineSort_SpikeFile,rawData,...
+                handles.Spikes.Offline_Sorting=LoadSpikeData_byElectrode(handles.offlineSort_SpikeFile,rawData,...
                     numel(handles.rec_info.exportedChan),handles.rec_info.samplingRate,handles.rec_info.bitResolution); %handles.tracesInfo.size(1)
                 clear rawData;
             elseif contains(handles.offlineSort_SpikeFile,'.csv') || ...
@@ -390,7 +393,7 @@ else
                 if ~isfield(handles.rec_info,'bitResolution') || isempty(handles.rec_info.bitResolution)
                     handles.rec_info.bitResolution=0.25; %default 0.25 uV/bit
                 end
-                handles.Spikes.Offline_Sorting=LoadSpikeData(handles.offlineSort_SpikeFile,...
+                handles.Spikes.Offline_Sorting=LoadSpikeData_byElectrode(handles.offlineSort_SpikeFile,...
                     rawData,numel(handles.rec_info.exportedChan),handles.rec_info.samplingRate,...
                     handles.rec_info.bitResolution); %handles.tracesInfo.size(1)   
                 clear rawData;
@@ -404,7 +407,7 @@ else
                 fileName=regexp(handles.spikeFile,'.+(?=_\w+.\w+$)','match');
                 load([fileName{:} '_raw.mat']);
                 %then import
-                handles.Spikes=LoadSpikeData(handles.spikeFile,...
+                handles.Spikes=LoadSpikeData_byElectrode(handles.spikeFile,...
                     handles.Spikes.Offline_Threshold.electrode,...
                     handles.Spikes.Offline_Threshold.samplingRate(:,1),rawData);
                 clear rawData

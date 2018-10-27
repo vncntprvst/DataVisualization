@@ -1,6 +1,7 @@
-fileName='vIRt22_2018-10-16_18-43-54_5100_50ms1Hz5mW_nopp' %_Ch29
+fileName='vIRt22_2018-10-16_19-11-34_5100_50ms1Hz10mW_nopp' %_Ch29
+% 'vIRt22_2018-10-16_18-43-54_5100_50ms1Hz5mW_nopp' %_Ch29
 %'SpVi16_0403_WR_4850_LS1Hz2ms100mW_nopp' % _Ch7'% 'SpVi12_1107_WR_Texture_LS500mH_24Ch_nopp' %_Ch6
-channelNum=14; %11 %24; 
+channelNum=29; %11 %24;
 %% 'SpVi12_133_2Hz2ms_7mW_nopp'
 %'SpVi12_1206_WR_LS_500mHz_2ms_2_nopp'
 % 'SpVi12_1107_WR_Texture_LS500mH_24Ch_nopp'
@@ -117,7 +118,7 @@ IPI=mode(diff(TTLs.start(:,2)))+pulseDur;
 
 %% Figures
 % some issue with ttl times from npy -> see CH29 from 'vIRt22_2018-10-16_18-43-54_5100_50ms1Hz5mW_nopp' KS 
-for cellNum=1%:size(spikeData.selectedUnits,1)
+for cellNum=1:size(spikeData.selectedUnits,1)
 % keep one cell 
 % cellNum=2;
 
