@@ -2,7 +2,7 @@ fileName='vIRt22_2018-10-16_19-11-34_5100_50ms1Hz10mW_nopp' %_Ch29
 % 'vIRt22_2018-10-16_18-43-54_5100_50ms1Hz5mW_nopp' %_Ch29
 %'SpVi16_0403_WR_4850_LS1Hz2ms100mW_nopp' % _Ch7'% 'SpVi12_1107_WR_Texture_LS500mH_24Ch_nopp' %_Ch6
 channelNum=29; %11 %24;
-%% 'SpVi12_133_2Hz2ms_7mW_nopp'
+%'SpVi12_133_2Hz2ms_7mW_nopp'
 %'SpVi12_1206_WR_LS_500mHz_2ms_2_nopp'
 % 'SpVi12_1107_WR_Texture_LS500mH_24Ch_nopp'
 %'SpVi12_1107_WR_Texture_LS500mH_24Ch_nopp'
@@ -18,6 +18,11 @@ spikeData=load([fileName '_Ch' num2str(channelNum) '.mat'],'waveForms','spikeTim
 load([fileName '_Ch' num2str(channelNum) '.mat'],'TTLs');
 load([fileName '_Ch' num2str(channelNum) '.mat'], 'traceExcerpt');
 traceData=load([fileName '_Ch' num2str(channelNum) '.mat'], 'allTraces','traceInfo');
+try % if recording info file is there
+    load([fileName '_info.mat'])
+catch
+    %? 
+end
 
 % read TTL dat file 
 %     cd(sessionDir);

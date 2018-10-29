@@ -275,7 +275,27 @@ elseif contains(argin_fName,'.csv') || contains(argin_fName,'_jrc.mat') %from JR
     %             [Spikes.Units{elNum,1},Spikes.SpikeTimes{elNum,1}]=deal([]);
     %         end
     %     end
-elseif contains(argin_fName,'.mat') % just Matlab processing
+elseif contains(argin_fName,'.mat') % Matlab processing / export
+        load(argin_fName)
+        numUnits=numel(Spikes.Offline_Sorting.Units);
+        spikes.unitID=vertcat(Spikes.Offline_Sorting.Units{:});
+        unitIds=unique(spikes.unitID);
+        spikes.preferredElectrode=...
+            cellfun(@(x,y) ones(numel(x),1)*y, Spikes.Offline_Sorting.Units,...
+            mat2cell([1:numUnits]',ones(numUnits,1)),'UniformOutput',false);
+        spikes.preferredElectrode=vertcat(spikes.preferredElectrode{:});
+        for unitNUm=1:numel(unitIds)
+            unitIdx=spikes.unitID==unitIds(unitNUm);
+            spikes.preferredElectrode(unitIdx)=mode(spikes.preferredElectrode(unitIdx));
+        end
+        spikes.times=vertcat(Spikes.Offline_Sorting.SpikeTimes{:});
+        spikes.waveforms=vertcat(Spikes.Offline_Sorting.Waveforms{:});
+        spikes.samplingRate=Spikes.Offline_Sorting.samplingRate;
+        [spikes.times,timeIdx]=sort(spikes.times);
+        spikes.unitID=spikes.unitID(timeIdx);
+        spikes.waveforms=spikes.waveforms(timeIdx,:);
+        spikes.preferredElectrode=spikes.preferredElectrode(timeIdx,:);
+
     %     %Matlab export - all units unsorted by default
     %     for elNum=1:numel(electrodes)
     %         try

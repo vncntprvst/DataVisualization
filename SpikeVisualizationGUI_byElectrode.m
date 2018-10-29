@@ -160,6 +160,8 @@ else
     if handles.fileLoaded==0 & strfind(handles.spikeFile,'Resorted.mat')
         cd(handles.exportDir);
         spikeData=load(handles.spikeFile);
+        handles.loadingDir=handles.exportDir;
+        handles.loadingFile=handles.spikeFile;
         handles = rmfield(handles,{'spikeFile','exportDir'});
         if isfield(handles,'rec_info')
             handles = rmfield(handles,'rec_info');
@@ -169,6 +171,9 @@ else
         end
         if isfield(spikeData,'classification')
             handles = rmfield(handles,'classification');
+        end
+        if isfield(handles,'userinfo') & isfield(spikeData,'userinfo')
+            handles = rmfield(handles,'userinfo');
         end
         handles=CatStruct(handles,spikeData);
         clear spikeData;
@@ -672,6 +677,12 @@ catch % try to load from .dat file
             handles.datDir=cd;
         else
             % ask user for raw data file
+        end
+    end
+    if ~exist(fullfile(handles.datDir,handles.datFile),'file')
+        if isfield(handles,'loadingDir') & exist(fullfile(handles.loadingDir,...
+                handles.datFile),'file') % might have been moved
+            handles.datDir=handles.loadingDir;
         end
     end
     handles.traces = memmapfile(fullfile(handles.datDir,handles.datFile),'Format','int16');
@@ -1825,7 +1836,7 @@ function Reload_PB_Callback(hObject, ~, handles)
 
 %% --- Executes on button press in Save_PB.
 function Save_PB_Callback(hObject, ~, handles)
-if ~isfield(handles,'exportDir')
+if ~isfield(handles,'exportDir') || ~exist(handles.exportDir,'dir')
      handles.exportDir=handles.datDir;
 end
 if isfield(handles,'fname')
@@ -1852,7 +1863,8 @@ exportFields=allFields(cellfun(@(fldName) ...
         strcmp(fldName,'classification') || strcmp(fldName,'Spikes') || ...
         strcmp(fldName,'rec_info') || strcmp(fldName,'subset') || ...
         strcmp(fldName,'userinfo') || strcmp(fldName,'rawData') || ...
-        strcmp(fldName,'rawDataInfo') || strcmp(fldName,'fname'),...
+        strcmp(fldName,'rawDataInfo') || strcmp(fldName,'fname') || ...
+        strcmp(fldName,'Trials') ,...
         allFields,'UniformOutput',true));
 exportFields=cellfun(@(x) [x '*'], exportFields,'UniformOutput',false); %placeholders for coma separation
 exportFields=strrep([exportFields{:}],'*',[char(39) ',' char(39)]); %insert coma
