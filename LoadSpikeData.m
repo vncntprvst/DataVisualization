@@ -117,50 +117,63 @@ elseif contains(argin_fName,'.hdf5')
     % plot(spikeTimes{templateNum,1}, spikeAmplitudes{templateNum,1}, '.')
 %     plot(spikes.spikeTimes(spikes.unitID==templateNum),spikes.amplitude(spikes.unitID==templateNum), '.')
 elseif contains(argin_fName,'rez.mat') || contains(argin_fName,'_KS') %Kilosort
-    %     load(fName);
-    %
-    %     spikeTimes = uint64(rez.st3(:,1));
-    %     spikeTemplates = uint32(rez.st3(:,2));
-    %     templates=abs(rez.Wraw);
-    %     templateToEl=zeros(max(unique(spikeTemplates)),1);
-    %     for templNum=1:max(unique(spikeTemplates))
-    %         thatTemplate=squeeze(templates(:,:,templNum));
-    %         [elecRow,~] = ind2sub(size(thatTemplate),find(thatTemplate==max(max(thatTemplate))));
-    %         if size(elecRow,1)>1
-    %             if length(unique(elecRow))>1 %weird
-    %                 %                     then look for next biggest value?
-    %                 return
-    %             else
-    %                 elecRow=unique(elecRow);
-    %             end
-    %         end
-    %         templateToEl(templNum)=elecRow;
-    %     end
-    %     for elNum=1:electrodes
-    %         try
-    %             %Results, after fitting templates
-    %             thisElTemplates=find(templateToEl==elNum);
-    %             units=false(size(spikeTemplates,1),1);
-    %             for templt=1:size(thisElTemplates,1)
-    %                 units=units | spikeTemplates==thisElTemplates(templt);
-    %             end
-    %             Spikes.Units{elNum,1}=spikeTemplates(units);
-    %             Spikes.SpikeTimes{elNum,1}=spikeTimes(units);
-    %             % extract spike waveforms  traces = memmapfile('example.dat','Format','int16');
-    %             if isa(traces,'memmapfile') % reading electrode data from .dat file
-    %                 Spikes.Waveforms{elNum,1}=ExtractChunks(traces.Data(elNum:electrodes:max(size(traces.Data))),...
-    %                     Spikes.SpikeTimes{elNum,1},50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
-    %             else
-    %                 Spikes.Waveforms{elNum,1}=ExtractChunks(traces(elNum,:),...
-    %                     Spikes.SpikeTimes{elNum,1},50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
-    %             end
-    %             % scale to resolution
-    %             Spikes.Waveforms{elNum,1}=Spikes.Waveforms{elNum,1}.*bitResolution;
-    %             Spikes.samplingRate(elNum,1)=samplingRate;
-    %         catch
-    %         end
-    %     end
-    %
+        load(argin_fName);
+    %        
+        spikes.times=uint64(rez.st3(:,1));
+        spikes.unitID=uint32(rez.st3(:,2));
+        spikes.waveforms=[];
+        spikes.samplingRate=30000; 
+        unitIDs=unique(spikes.unitID);
+        templates=abs(rez.Wraw);
+        templateToEl=zeros(numel(unitIDs),1);
+        for templNum=1:numel(unitIDs)
+            thatTemplate=squeeze(templates(:,:,unitIDs(templNum)));
+            [elecRow,~] = ind2sub(size(thatTemplate),find(thatTemplate==max(max(thatTemplate))));
+            if size(elecRow,1)>1
+                if length(unique(elecRow))>1 %weird
+                    %                     then look for next biggest value?
+                    return
+                else
+                    elecRow=unique(elecRow);
+                end
+            end
+            templateToEl(templNum)=elecRow;
+        end
+        spikes.preferredElectrode=nan(numel(spikes.times),1);
+        for unitNum=1:numel(unitIDs)
+            spikes.preferredElectrode(unitIDs(unitNum)==spikes.unitID)=templateToEl(unitNum)
+        end      
+        
+        [spikes.times,timeIdx]=sort(spikes.times);
+        spikes.unitID=spikes.unitID(timeIdx);
+        spikes.preferredElectrode=spikes.preferredElectrode(timeIdx);
+%         spikes.waveforms=spikes.waveforms(timeIdx,:);       
+
+%         for elNum=1:electrodes
+%             try
+%                 %Results, after fitting templates
+%                 thisElTemplates=find(templateToEl==elNum);
+%                 units=false(size(spikeTemplates,1),1);
+%                 for templt=1:size(thisElTemplates,1)
+%                     units=units | spikeTemplates==thisElTemplates(templt);
+%                 end
+%                 Spikes.Units{elNum,1}=spikeTemplates(units);
+%                 Spikes.SpikeTimes{elNum,1}=spikeTimes(units);
+%                 % extract spike waveforms  traces = memmapfile('example.dat','Format','int16');
+%                 if isa(traces,'memmapfile') % reading electrode data from .dat file
+%                     Spikes.Waveforms{elNum,1}=ExtractChunks(traces.Data(elNum:electrodes:max(size(traces.Data))),...
+%                         Spikes.SpikeTimes{elNum,1},50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
+%                 else
+%                     Spikes.Waveforms{elNum,1}=ExtractChunks(traces(elNum,:),...
+%                         Spikes.SpikeTimes{elNum,1},50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
+%                 end
+%                 % scale to resolution
+%                 Spikes.Waveforms{elNum,1}=Spikes.Waveforms{elNum,1}.*bitResolution;
+%                 Spikes.samplingRate(elNum,1)=samplingRate;
+%             catch
+%             end
+%         end
+    
 elseif contains(argin_fName,'.csv') || contains(argin_fName,'_jrc.mat') %from JRClust
     %
     %     %% locate the _jrc file
