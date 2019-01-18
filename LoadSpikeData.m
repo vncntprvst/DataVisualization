@@ -164,17 +164,33 @@ elseif contains(argin_fName,'rez.mat') || contains(argin_fName,'_KS') %Kilosort
 elseif contains(argin_fName,'.csv') || contains(argin_fName,'_jrc.mat') %from JRClust
     %
     %     %% locate the _jrc file
-    %     dirListing=dir;
-    %     S0struct=dirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_jrc.mat'),...
-    %         {dirListing.name},'UniformOutput',false))).name;
-    %
+        
+%         S0struct=dirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_jrc.mat'),...
+%             {dirListing.name},'UniformOutput',false))).name;
+    
     %     % dimm_spk Dimensions for spike waveforms (stored in_spkwav.bin file)
     %     % viTime_spk Spike timing in ADC sample unit
     %     % cviSpk_site Cell of spike index (for _spk prefix) per site
     %     % miClu_log
     %     % P Parameter struct used for automated clustering
     %     % S_clu Cluster-specific information
-    %     load(S0struct, 'dimm_spk','viTime_spk','cviSpk_site','miClu_log','P','S_clu')
+  
+            % from KiloSort spikes.times=readNPY('spike_times.npy');
+
+    
+        load(argin_fName,'S_clu','spikeTimes','spikeSites','P');
+%            for updated structure: 'cviSpk_site','miClu_log','P','S_clu','dimm_spk','viTime_spk'
+
+        spikes.unitID=S_clu.spikeClusters;
+        spikes.times=spikeTimes;
+        spikes.preferredElectrode=spikeSites;
+        spikes.templatesIdx=S_clu.clusterTemplates;
+        spikes.templates=S_clu.spikeTemplates;
+        spikes.waveforms=S_clu.tmrWav_spk_clu;
+        spikes.bitResolution=P.uV_per_bit;
+        spikes.samplingRate=P.sampleRateHz;
+        
+        
     %
     %     %% import info from cvs file export
     %     %     clusterInfo = ImportJRClusSortInfo(fName);
@@ -191,23 +207,28 @@ elseif contains(argin_fName,'.csv') || contains(argin_fName,'_jrc.mat') %from JR
     %
     %
     %     %% get filtered waveforms
-    %     vcFile=dirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_spkwav'),...
-    %         {dirListing.name},'UniformOutput',false))).name;
-    %     vcDataType = 'int16';
-    %     fid=fopen(vcFile, 'r');
-    %     % mnWav = fread_workingresize(fid, dimm, vcDataType);
-    %     mnWav = fread(fid, prod(dimm_spk), ['*', vcDataType]);
-    %     if numel(mnWav) == prod(dimm_spk)
-    %         mnWav = reshape(mnWav, dimm_spk);
-    %     else
-    %         dimm2 = floor(numel(mnWav) / dimm_spk(1));
-    %         if dimm2 >= 1
-    %             mnWav = reshape(mnWav, dimm_spk(1), dimm2);
-    %         else
-    %             mnWav = [];
-    %         end
-    %     end
-    %     if ~isempty(vcFile), fclose(fid); end
+    dirListing=dir;
+    spikeWaveFormsFile=cellfun(@(x) strfind(x,'_spkwav'),...
+            {dirListing.name},'UniformOutput',false);
+    if ~isempty(vertcat(spikeWaveFormsFile{:}))
+        vcFile=dirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_spkwav'),...
+            {dirListing.name},'UniformOutput',false))).name;
+        vcDataType = 'int16';
+        fid=fopen(vcFile, 'r');
+        % mnWav = fread_workingresize(fid, dimm, vcDataType);
+        mnWav = fread(fid, prod(dimm_spk), ['*', vcDataType]);
+        if numel(mnWav) == prod(dimm_spk)
+            mnWav = reshape(mnWav, dimm_spk);
+        else
+            dimm2 = floor(numel(mnWav) / dimm_spk(1));
+            if dimm2 >= 1
+                mnWav = reshape(mnWav, dimm_spk(1), dimm2);
+            else
+                mnWav = [];
+            end
+        end
+        if ~isempty(vcFile), fclose(fid); end
+    end
     %     %% degenerate. keeping largest waveforms
     %     %     keepSite=squeeze(prod(abs(mnWav)));[keepSite,~]=find(keepSite==max(keepSite));
     %     %     waveForms=nan(size(mnWav,1),size(mnWav,3));
