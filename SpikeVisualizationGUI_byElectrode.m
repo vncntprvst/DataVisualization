@@ -255,10 +255,10 @@ else
                     recInfo=load([fileName{:} '_info.mat']);
                 elseif ~isempty(handles.offlineSort_SpikeFile)
                     exportDirListing=dir(cd);
-                    if sum(~cellfun('isempty',cellfun(@(x) strfind(x,'_info.'),...
-                {exportDirListing.name},'UniformOutput',false)))
-                    fileName=exportDirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_info.'),...
-                {exportDirListing.name},'UniformOutput',false))).name;
+                    if sum(cellfun(@(x) contains(x,{'_info.';'recInfo'}),...
+                {exportDirListing.name}))
+                    fileName=exportDirListing(cellfun(@(x) contains(x,{'_info.';'recInfo.'}),...
+                {exportDirListing.name})).name;
                     recInfo=load(fileName);
                     else %might be in folder above
                         exportDirListing=dir('..');
