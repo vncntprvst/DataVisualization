@@ -189,21 +189,34 @@ elseif contains(argin_fName,'.csv') || contains(argin_fName,'_jrc.mat') %from JR
     %     % S_clu Cluster-specific information
   
             % from KiloSort spikes.times=readNPY('spike_times.npy');
-
-    
-        load(argin_fName,'S_clu','spikeTimes','spikeSites','P');
-%            for updated structure: 'cviSpk_site','miClu_log','P','S_clu','dimm_spk','viTime_spk'
-
-        spikes.unitID=S_clu.spikeClusters;
-        spikes.times=spikeTimes;
-        spikes.preferredElectrode=spikeSites;
-        spikes.templatesIdx=S_clu.clusterTemplates;
-        spikes.templates=S_clu.spikeTemplates;
-        spikes.waveforms=S_clu.tmrWav_spk_clu;
-        spikes.bitResolution=P.uV_per_bit;
-        spikes.samplingRate=P.sampleRateHz;
-        
-        
+      
+        try
+            % for updated structure: 
+            load(argin_fName,'cviSpk_site','miClu_log','P','S_clu','dimm_spk','viTime_spk');
+            
+            spikes.unitID=S_clu.viClu;
+            spikes.times=viTime_spk;
+            spikes.preferredElectrode=cviSpk_site;
+            spikes.templatesIdx=S_clu.viSite_clu;
+            spikes.templates=S_clu.tmrWav_spk_clu;
+            spikes.waveforms=[];
+            spikes.bitResolution=P.uV_per_bit;
+            spikes.samplingRate=P.sRateHz;
+            
+        catch
+            % old structure
+            load(argin_fName,'S_clu','spikeTimes','spikeSites','P');
+            
+            spikes.unitID=S_clu.spikeClusters;
+            spikes.times=spikeTimes;
+            spikes.preferredElectrode=spikeSites;
+            spikes.templatesIdx=S_clu.clusterTemplates;
+            spikes.templates=S_clu.spikeTemplates;
+            spikes.waveforms=S_clu.tmrWav_spk_clu; %mean waveform
+            spikes.bitResolution=P.uV_per_bit;
+            spikes.samplingRate=P.sampleRateHz;
+            
+        end
     %
     %     %% import info from cvs file export
     %     %     clusterInfo = ImportJRClusSortInfo(fName);
@@ -240,6 +253,7 @@ elseif contains(argin_fName,'.csv') || contains(argin_fName,'_jrc.mat') %from JR
                 mnWav = [];
             end
         end
+        spikes.waveforms=mnWav;
         if ~isempty(vcFile), fclose(fid); end
     end
     %     %% degenerate. keeping largest waveforms
