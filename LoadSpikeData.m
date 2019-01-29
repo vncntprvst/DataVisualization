@@ -192,11 +192,12 @@ elseif contains(argin_fName,'.csv') || contains(argin_fName,'_jrc.mat') %from JR
       
         try
             % for updated structure: 
-            load(argin_fName,'cviSpk_site','miClu_log','P','S_clu','dimm_spk','viTime_spk');
+            load(argin_fName,'miClu_log','P','S_clu','dimm_spk',...
+                'viSite_spk','viTime_spk');%'cviSpk_site'
             
             spikes.unitID=S_clu.viClu;
             spikes.times=viTime_spk;
-            spikes.preferredElectrode=cviSpk_site;
+            spikes.preferredElectrode=viSite_spk; %Site with the peak spike amplitude %cviSpk_site Cell of the spike indices per site
             spikes.templatesIdx=S_clu.viSite_clu;
             spikes.templates=S_clu.tmrWav_spk_clu;
             spikes.waveforms=[];
@@ -242,7 +243,7 @@ elseif contains(argin_fName,'.csv') || contains(argin_fName,'_jrc.mat') %from JR
         vcDataType = 'int16';
         fid=fopen(vcFile, 'r');
         % mnWav = fread_workingresize(fid, dimm, vcDataType);
-        mnWav = fread(fid, prod(dimm_spk), ['*', vcDataType]);
+        mnWav = fread(fid, prod(dimm_spk), ['*', vcDataType]); %(nSamples_spk x nSites_spk x nSpikes: int16)
         if numel(mnWav) == prod(dimm_spk)
             mnWav = reshape(mnWav, dimm_spk);
         else
@@ -254,6 +255,8 @@ elseif contains(argin_fName,'.csv') || contains(argin_fName,'_jrc.mat') %from JR
             end
         end
         spikes.waveforms=mnWav;
+        spikes.waveforms=permute(spikes.waveforms,[3 1 2]);
+        spikes.waveforms=squeeze(spikes.waveforms(:,:,1)); %keep best waveform only
         if ~isempty(vcFile), fclose(fid); end
     end
     %     %% degenerate. keeping largest waveforms
