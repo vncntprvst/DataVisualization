@@ -174,7 +174,9 @@ elseif contains(argin_fName,'rez.mat') || contains(argin_fName,'_KS') %Kilosort
 %             end
 %         end
     
-elseif contains(argin_fName,'.csv') || contains(argin_fName,'_jrc.mat') %from JRClust
+elseif contains(argin_fName,'.csv') || ... 
+        contains(argin_fName,'_jrc.mat') || ... 
+        contains(argin_fName,'_res.mat') %from JRClust%from JRClust
     %
     %     %% locate the _jrc file
         
@@ -190,34 +192,46 @@ elseif contains(argin_fName,'.csv') || contains(argin_fName,'_jrc.mat') %from JR
   
             % from KiloSort spikes.times=readNPY('spike_times.npy');
       
-        try
-            % for updated structure: 
-            load(argin_fName,'miClu_log','P','S_clu','dimm_spk',...
-                'viSite_spk','viTime_spk');%'cviSpk_site'
-            
-            spikes.unitID=S_clu.viClu;
-            spikes.times=viTime_spk;
-            spikes.preferredElectrode=viSite_spk; %Site with the peak spike amplitude %cviSpk_site Cell of the spike indices per site
-            spikes.templatesIdx=S_clu.viSite_clu;
-            spikes.templates=S_clu.tmrWav_spk_clu;
-            spikes.waveforms=[];
-            spikes.bitResolution=P.uV_per_bit;
-            spikes.samplingRate=P.sRateHz;
-            
-        catch
-            % old structure
-            load(argin_fName,'S_clu','spikeTimes','spikeSites','P');
-            
-            spikes.unitID=S_clu.spikeClusters;
-            spikes.times=spikeTimes;
-            spikes.preferredElectrode=spikeSites;
-            spikes.templatesIdx=S_clu.clusterTemplates;
-            spikes.templates=S_clu.spikeTemplates;
-            spikes.waveforms=S_clu.tmrWav_spk_clu; %mean waveform
-            spikes.bitResolution=P.uV_per_bit;
-            spikes.samplingRate=P.sampleRateHz;
-            
-        end
+            try % JRC v3:
+                load(argin_fName,'spikeTimes','spikeSites','spikeClusters')
+                
+                spikes.unitID=spikeClusters;
+                spikes.times=spikeTimes;
+                spikes.preferredElectrode=spikeSites; %Site with the peak spike amplitude %cviSpk_site Cell of the spike indices per site
+                spikes.templatesIdx=[];
+                spikes.templates=[];
+                spikes.waveforms=[];
+                spikes.bitResolution=[];
+                spikes.samplingRate=[];
+            catch
+                try
+                    % v2 updated structure:
+                    load(argin_fName,'miClu_log','P','S_clu','dimm_spk',...
+                        'viSite_spk','viTime_spk');%'cviSpk_site'
+                    
+                    spikes.unitID=S_clu.viClu;
+                    spikes.times=viTime_spk;
+                    spikes.preferredElectrode=viSite_spk; %Site with the peak spike amplitude %cviSpk_site Cell of the spike indices per site
+                    spikes.templatesIdx=S_clu.viSite_clu;
+                    spikes.templates=S_clu.tmrWav_spk_clu;
+                    spikes.waveforms=[];
+                    spikes.bitResolution=P.uV_per_bit;
+                    spikes.samplingRate=P.sRateHz;
+                    
+                catch
+                    % old structure
+                    load(argin_fName,'S_clu','spikeTimes','spikeSites','P');
+                    
+                    spikes.unitID=S_clu.spikeClusters;
+                    spikes.times=spikeTimes;
+                    spikes.preferredElectrode=spikeSites;
+                    spikes.templatesIdx=S_clu.clusterTemplates;
+                    spikes.templates=S_clu.spikeTemplates;
+                    spikes.waveforms=S_clu.tmrWav_spk_clu; %mean waveform
+                    spikes.bitResolution=P.uV_per_bit;
+                    spikes.samplingRate=P.sampleRateHz;
+                end
+            end
     %
     %     %% import info from cvs file export
     %     %     clusterInfo = ImportJRClusSortInfo(fName);
@@ -327,7 +341,15 @@ elseif contains(argin_fName,'.csv') || contains(argin_fName,'_jrc.mat') %from JR
     %         end
     %     end
 elseif contains(argin_fName,'.mat') % Matlab processing / export
-        load(argin_fName)
+    spikes=load(argin_fName);
+    if isfield(spikes,'metadata') %was exported from OE npy files
+        spikes.times=spikes.spikeTimes;
+        spikes.waveforms=spikes.waveForms;
+        spikes.samplingRate=30000;
+        spikes.unitID=spikes.clusters;
+        spikes.preferredElectrode=spikes.electrodes;
+        spikes = rmfield(spikes,{'spikeTimes','waveForms','clusters','electrodes','clusters','metadata'});
+    else
         numUnits=numel(Spikes.Offline_Sorting.Units);
         spikes.unitID=vertcat(Spikes.Offline_Sorting.Units{:});
         unitIds=unique(spikes.unitID);
@@ -346,7 +368,7 @@ elseif contains(argin_fName,'.mat') % Matlab processing / export
         spikes.unitID=spikes.unitID(timeIdx);
         spikes.waveforms=spikes.waveforms(timeIdx,:);
         spikes.preferredElectrode=spikes.preferredElectrode(timeIdx,:);
-
+    end
     %     %Matlab export - all units unsorted by default
     %     for elNum=1:numel(electrodes)
     %         try
