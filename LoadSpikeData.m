@@ -230,8 +230,8 @@ elseif contains(argin_fName,'.csv') || ...
                     spikes.unitID=S_clu.spikeClusters;
                     spikes.times=spikeTimes;
                     spikes.preferredElectrode=spikeSites;
-                    spikes.templatesIdx=S_clu.clusterTemplates;
-                    spikes.templates=S_clu.spikeTemplates;
+%                     spikes.templatesIdx=S_clu.clusterTemplates;
+%                     spikes.templates=S_clu.spikeTemplates;
                     spikes.waveforms=S_clu.tmrWav_spk_clu; %mean waveform
                     spikes.bitResolution=P.uV_per_bit;
                     spikes.samplingRate=P.sampleRateHz;
@@ -265,7 +265,8 @@ elseif contains(argin_fName,'.csv') || ...
                 end
             end
             %extract spike waveform
-            if isempty(spikes.waveforms) && exist('traces','var')
+            if (isempty(spikes.waveforms) || size(spikes.waveforms,1) <  size(spikes.unitID,1))...
+                    && exist('traces','var')
                 spikes.waveforms=NaN(size(spikes.times,1),50);
                 electrodesId=unique(spikes.preferredElectrode);
                 for electrodeNum=1:numel(electrodesId)

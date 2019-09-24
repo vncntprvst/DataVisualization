@@ -147,7 +147,7 @@ elseif contains(argFname,'.csv') || contains(argFname,'_jrc.mat') %from JRClust
     
     
     %% get filtered waveforms
-    vcFile=dirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_spkwav'),...
+    vcFile=dirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'wav'),...
         {dirListing.name},'UniformOutput',false))).name;
     vcDataType = 'int16';
     fid=fopen(vcFile, 'r');

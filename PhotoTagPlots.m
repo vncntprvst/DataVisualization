@@ -1,18 +1,6 @@
-fileName='vIRt22_2018-10-16_19-11-34_5100_50ms1Hz10mW_nopp' %_Ch29
-% 'vIRt22_2018-10-16_18-43-54_5100_50ms1Hz5mW_nopp' %_Ch29
-%'SpVi16_0403_WR_4850_LS1Hz2ms100mW_nopp' % _Ch7'% 'SpVi12_1107_WR_Texture_LS500mH_24Ch_nopp' %_Ch6
-channelNum=29; %11 %24;
-%'SpVi12_133_2Hz2ms_7mW_nopp'
-%'SpVi12_1206_WR_LS_500mHz_2ms_2_nopp'
-% 'SpVi12_1107_WR_Texture_LS500mH_24Ch_nopp'
-%'SpVi12_1107_WR_Texture_LS500mH_24Ch_nopp'
-%'SpVi12_133_2Hz2ms_7mW_nopp'
-%'SpVi12_1103_WR_LS_500mHz2ms70m_nopp'
-%'SpVi12_1107_WR_MS_LS500mHz2ms6_nopp';
-%'SpVi12_1107_WR_MS_LS500mHz2ms6_24Ch_nopp'; 
-%'SpVi12_1024_KX_MLStim_26Ch_nopp'; %'039v_0925_2Hz20ms_20mW_28Ch_nopp'; 
-% '039v_0927_2Hz20ms_20mW_28Ch_nopp'; % 'SpVi12_133_2Hz2ms_10mW_nopp';
-% SpVi12_133_2Hz2ms_10mW_nopp_Ch %SpVi12_133_2Hz2ms_10mW_nopp_Ch
+fileName= 'vIRt41_0919_5400_FNOptoStim_10Hz_10ms_10mW_nopp_16Ch' 
+channelNum=5; 
+
 %% From SpikeVisualizationGUI export
 spikeData=load([fileName '_Ch' num2str(channelNum) '.mat'],'waveForms','spikeTimes','unitsIdx','samplingRate','selectedUnits');
 load([fileName '_Ch' num2str(channelNum) '.mat'],'TTLs');
@@ -38,26 +26,26 @@ TTLs.end(:,1)=TTLs.end(:,1)-double(rec_info.recordingStartTime);
 TTLs.end(:,2)=TTLs.end(:,1)/double(TTLs.samplingRate{1}/1000); 
 
 %% From JRClust csv export
-% dirListing=dir; dirName=cd;
-% infoFileName=dirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_info.'),...
-%     {dirListing.name},'UniformOutput',false))).name;
-% recInfo=load(fullfile(dirName,infoFileName),'rec_info');recInfo=recInfo.rec_info;
-% 
-% JRclustData=load([fileName '_JR.csv']);
-% spikeData.selectedUnits=[2]; % 3 4];
-% unitIdx=JRclustData(:,2)==2; % | JRclustData(:,2)==3 | JRclustData(:,2)==4;
-% spikeData.unitsIdx=int8(JRclustData(unitIdx,2));
-% spikeData.spikeTimes=uint32(JRclustData(unitIdx,1)*recInfo.samplingRate);
-% 
-% traces = memmapfile(fullfile(dirName,[fileName '.dat']),'Format','int16');
-% waveForms=cell(recInfo.numRecChan,1);
-% for chNum=1:recInfo.numRecChan
-%     waveForms{chNum,1}=ExtractChunks(traces.Data(chNum:recInfo.numRecChan:max(size(traces.Data))),...
-%         JRclustData(JRclustData(JRclustData(:,3)==chNum,2)==spikeData.selectedUnits,1)*recInfo.samplingRate,...
-%         50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
-% end
-% 
-% spikeData.waveForms=int16(cell2mat(waveForms(~cellfun('isempty',waveForms)))');
+dirListing=dir; dirName=cd;
+infoFileName=dirListing(~cellfun('isempty',cellfun(@(x) strfind(x,'_info.'),...
+    {dirListing.name},'UniformOutput',false))).name;
+recInfo=load(fullfile(dirName,infoFileName),'rec_info');recInfo=recInfo.rec_info;
+
+JRclustData=load([fileName '.csv']); %_JR
+spikeData.selectedUnits=[2]; % 3 4];
+unitIdx=JRclustData(:,2)==2; % | JRclustData(:,2)==3 | JRclustData(:,2)==4;
+spikeData.unitsIdx=int8(JRclustData(unitIdx,2));
+spikeData.spikeTimes=uint32(JRclustData(unitIdx,1)*recInfo.samplingRate);
+
+traces = memmapfile(fullfile(dirName,[fileName '.dat']),'Format','int16');
+waveForms=cell(recInfo.numRecChan,1);
+for chNum=1:recInfo.numRecChan
+    waveForms{chNum,1}=ExtractChunks(traces.Data(chNum:recInfo.numRecChan:max(size(traces.Data))),...
+        JRclustData(JRclustData(JRclustData(:,3)==chNum,2)==spikeData.selectedUnits,1)*recInfo.samplingRate,...
+        50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
+end
+
+spikeData.waveForms=int16(cell2mat(waveForms(~cellfun('isempty',waveForms)))');
 % %
 % % spikes=LoadSpikeData([fileName '_JR.csv'],[],recInfo.numRecChan,recInfo.samplingRate,recInfo.bitResolution);
 % % 
@@ -70,6 +58,20 @@ TTLs.end(:,2)=TTLs.end(:,1)/double(TTLs.samplingRate{1}/1000);
 % % spikeTimes=cell2mat(spikeTimes(~cellfun('isempty',units)));
 % % waveForms=cell2mat(waveForms(~cellfun('isempty',units))');
 % % units=cell2mat(units(~cellfun('isempty',units)));
+
+%% Just use LoadSpikeData
+traces = memmapfile(fullfile(cd,[fileName '_traces.bin']),'Format','int16');
+spikeData=LoadSpikeData([fileName '_jrc.mat' ],traces); %electrodes,samplingRate,bitResolution;
+% if field name change needed:
+spikeData.unitsIdx=spikeData.unitID;
+spikeData.spikeTimes=spikeData.times;
+spikeData.waveForms=spikeData.waveforms';
+rmfield(spikeData,{'unitID','times','waveforms'});
+% if TTLs arent exported, do it from DataExportGUI, separate channel
+load('vIRt41_0919_5400_FNOptoStim_10Hz_10ms_10mW_nopp_trials.mat', 'trials')
+TTLs=trials;
+
+spikeData.selectedUnits=[7,18,24]-1;
 
 %% get spike times and convert to binary array
 for clusNum=1:size(spikeData.selectedUnits,1)

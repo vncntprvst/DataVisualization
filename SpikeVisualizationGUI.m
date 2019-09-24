@@ -390,9 +390,9 @@ else
                 if ~isfield(handles.rec_info,'bitResolution') || isempty(handles.rec_info.bitResolution)
                     handles.rec_info.bitResolution=0.25; %default 0.25 uV/bit
                 end
-                handles.Spikes.Offline_Sorting=LoadSpikeData(handles.offlineSort_SpikeFile,...
-                    rawData,numel(handles.rec_info.exportedChan),handles.rec_info.samplingRate,...
-                    handles.rec_info.bitResolution); %handles.tracesInfo.size(1)   
+                handles.Spikes.Offline_Sorting=LoadSpikeData(handles.offlineSort_SpikeFile,rawData); %,...
+%                     ,numel(handles.rec_info.exportedChan),handles.rec_info.samplingRate,...
+%                     handles.rec_info.bitResolution); %handles.tracesInfo.size(1)   
                 clear rawData;
             end
             cd(handles.exportDir);
@@ -425,9 +425,21 @@ else
             elseif isfield(handles.Spikes,'Offline_Sorting') || strcmp(get(handles.Spikes_SortOff_Menu,'Checked'),'on')
                 set(handles.Spikes_SortOff_Menu,'Checked','on');
                 set(handles.Spikes_SortOn_Menu,'Checked','off');
-                handles.Spikes.HandSort.Units=handles.Spikes.Offline_Sorting.Units;
-                handles.Spikes.HandSort.SpikeTimes=handles.Spikes.Offline_Sorting.SpikeTimes;
-                handles.Spikes.HandSort.Waveforms=handles.Spikes.Offline_Sorting.Waveforms;
+                try
+                    handles.Spikes.HandSort.Units=handles.Spikes.Offline_Sorting.Units;
+                catch
+                    handles.Spikes.HandSort.Units=handles.Spikes.Offline_Sorting.unitID;
+                end
+                try
+                    handles.Spikes.HandSort.SpikeTimes=handles.Spikes.Offline_Sorting.SpikeTimes;
+                catch
+                    handles.Spikes.HandSort.SpikeTimes=handles.Spikes.Offline_Sorting.times;
+                end
+                try
+                    handles.Spikes.HandSort.Waveforms=handles.Spikes.Offline_Sorting.Waveforms;
+                catch
+                    handles.Spikes.HandSort.Waveforms=handles.Spikes.Offline_Sorting.waveforms;
+                end
                 handles.Spikes.HandSort.samplingRate=handles.Spikes.Offline_Sorting.samplingRate;
             elseif isfield(handles.Spikes,'Online_Sorting') || strcmp(get(handles.Spikes_SortOn_Menu,'Checked'),'on')
                 set(handles.Spikes_SortOff_Menu,'Checked','off');
@@ -439,7 +451,8 @@ else
             end
             % set data classes
             handles.Spikes.HandSort.SpikeTimes=...
-                cellfun(@(spktimes) uint32(spktimes), handles.Spikes.HandSort.SpikeTimes,'UniformOutput',false);  %safe for about 40 hours of recording
+
+        cellfun(@(spktimes) uint32(spktimes), handles.Spikes.HandSort.SpikeTimes,'UniformOutput',false);  %safe for about 40 hours of recording
             handles.Spikes.HandSort.Units=...
                 cellfun(@(units) int8(units), handles.Spikes.HandSort.Units,'UniformOutput',false); %256 units per channel max
             handles.Spikes.HandSort.Waveforms=...
