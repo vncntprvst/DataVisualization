@@ -16,9 +16,11 @@ runData.Value=runData.Value-runData.Value(1);
 runData.TimestampTimeOfDayTotalMilliseconds=runData.TimestampTimeOfDayTotalMilliseconds-runData.TimestampTimeOfDayTotalMilliseconds(1);
 
 %Plot
-figure;
+folderName=regexp(pathName,['(?<=\' filesep ')\w+' '(?=\' filesep '$)'],'once','match');
+figTitle=[folderName ' wheel training'];
+figure('name',figTitle);
 plot(runData.TimestampTimeOfDayTotalMilliseconds/60000,runData.Value*0.03,...
     'k','Linewidth',2); %3cm off wheel center 
-title({'vIRt41 0813 training';'Distance run'})
+title({figTitle;'Distance run'})
 xlabel('Time (mn)')
 ylabel('Distance (m)')
