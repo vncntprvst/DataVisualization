@@ -29,7 +29,7 @@ if ~isempty(TTLtimes)
 end
 box off;
 xlabel('Time (ms)');
-set(gca,'Color','white','FontSize',18,'FontName','Helvetica');
+set(gca,'Color','white','FontSize',12,'FontName','Helvetica');
 
 for cellNum=1:length(spikeTimes)
     if ~isempty(spikeTimes{cellNum}) & ~isnan(spikeTimes{cellNum})

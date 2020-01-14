@@ -175,8 +175,8 @@ elseif contains(argin_fName,'rez.mat') || contains(argin_fName,'_KS') %Kilosort
 %         end
     
 elseif contains(argin_fName,'.csv') || ... 
-        contains(argin_fName,'_jrc.mat') || ... 
-        contains(argin_fName,'_res.mat') %from JRClust%from JRClust
+        contains(argin_fName,'_jrc') || ... 
+        contains(argin_fName,'_res') %from JRClust%from JRClust
     %
     %     %% locate the _jrc file
         
@@ -192,7 +192,7 @@ elseif contains(argin_fName,'.csv') || ...
   
             % from KiloSort spikes.times=readNPY('spike_times.npy');
       
-            try % JRC v3:
+            try % JRC v3 and v4:
                 load(argin_fName,'spikeTimes','spikeSites','spikeClusters','spikesBySite')
 %                 evtWindow = [-0.25, 0.75]; %evtWindowRaw = [-0.5, 1.5]; nSiteDir = 4;
 %                 waveformsFid=fopen('vIRt32_2019_04_24_16_48_53_5185_1_1_export_filt.jrc');
