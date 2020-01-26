@@ -111,7 +111,6 @@ for cellNum=1:size(ephysData.selectedUnits,1)
     
     %% waveforms
     subplot(3,3,[1,4]); hold on
-    
     OptoWaveforms(ephysData.spikes,TTLs.start,ephysData.selectedUnits(cellNum),delay,gca)
     
     %% rasters
@@ -143,7 +142,7 @@ for cellNum=1:size(ephysData.selectedUnits,1)
     % if ~isempty(excerptTTLtimes)
     % %     excerptTTLtimes=excerptTTLtimes(end); %if wants to keep only one pulse
     % else % check further out in the trace
-    traceExcerpt.location=TTLs.start(11)*SRR;
+    traceExcerpt.location=TTLs.start(1)*SRR;
     %     mod(winIdxStart,traceData.traceInfo.numChan)
     if exist('traceData','var') && isa(traceData,'memmapfile')
         winIdxStart=(traceExcerpt.location-traceExcerpt.excerptSize)*traceData.traceInfo.numChan+1;
@@ -153,7 +152,7 @@ for cellNum=1:size(ephysData.selectedUnits,1)
         winIdxStart=(traceExcerpt.location-traceExcerpt.excerptSize); %*traceData.traceInfo.numChan+1;
         winIdxEnd=traceExcerpt.location+traceExcerpt.excerptSize;
     end
-    excerptWindow=int32(winIdxStart:winIdxEnd-1);
+    excerptWindow=int32(winIdxStart:winIdxEnd-1)-SRR;
     %     size(excerptWindow,2)>(2*traceExcerpt.excerptSize*traceData.traceInfo.numChan)
     if exist('traceData','var') && isa(traceData,'memmapfile')
         traceExcerpt.data=traceData.allTraces.Data(excerptWindow);
@@ -165,10 +164,9 @@ for cellNum=1:size(ephysData.selectedUnits,1)
         prefElec=double(ephysData.spikes.preferredElectrode(ismember(...
             ephysData.spikes.unitID,ephysData.selectedUnits(cellNum))));
         keepTrace=mode(prefElec);  
-        %Sometimes not the best trace. Find a way plot most relevant
-        % trace
-        [uniqueTraces,traceFreq]=hist(prefElec,unique(prefElec));
-        keepTrace=uniqueTraces(3);
+        %Sometimes not the best trace. Find a way plot most relevant trace
+%         [traceFreq,uniqueTraces]=hist(prefElec,unique(prefElec));
+%         keepTrace=uniqueTraces(4);
         traceExcerpt.data=ephysData.traces(keepTrace,excerptWindow); 
 %         figure; plot(traceExcerpt.data)
 %         figure; plot(ephysData.traces(keepTrace,:))

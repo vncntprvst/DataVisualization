@@ -44,5 +44,5 @@ for pulseNum=1 %:3
 end
 set(gca,'Color','white','FontSize',12,'FontName','Helvetica');
 %legend
-legend([FRploth,OptoStimh],{'Average firing rate','Optical stimulation'},'FontSize',12);
+legend([FRploth,OptoStimh],{'Average firing rate','Optical stimulation'},'FontSize',8);
 legend('boxoff')

@@ -193,7 +193,9 @@ elseif contains(argin_fName,'.csv') || ...
             % from KiloSort spikes.times=readNPY('spike_times.npy');
       
             try % JRC v3 and v4:
-                load(argin_fName,'spikeTimes','spikeSites','spikeClusters','spikesBySite')
+
+
+                load(argin_fName,'spikeTimes','spikeSites','spikeClusters','filtShape')
 %                 evtWindow = [-0.25, 0.75]; %evtWindowRaw = [-0.5, 1.5]; nSiteDir = 4;
 %                 waveformsFid=fopen('vIRt32_2019_04_24_16_48_53_5185_1_1_export_filt.jrc');
 %                 waveforms=fread(waveformsFid,...
@@ -205,7 +207,7 @@ elseif contains(argin_fName,'.csv') || ...
                 spikes.preferredElectrode=spikeSites; %Site with the peak spike amplitude %cviSpk_site Cell of the spike indices per site
                 spikes.templatesIdx=[];
                 spikes.templates=[];
-                spikes.waveforms=[];
+                spikes.waveforms=[];                        
                 spikes.bitResolution=[];
                 spikes.samplingRate=[];
             catch
@@ -265,6 +267,17 @@ elseif contains(argin_fName,'.csv') || ...
                 end
             end
             %extract spike waveform
+%             filtWFfile=[regexp(argin_fName,'\w+(?=_res)','match','once') '_filt.jrc'];
+%             if exist('filtShape','var') & exist(fullfile(cd,filtWFfile),'file')
+%                 fid = fopen(filtWFfile, 'r');
+%                 spikes.waveforms= reshape(fread(fid, inf, '*int16'), filtShape);
+%                 fclose(fid);
+%                 spikes.waveforms = permute(spikes.waveforms,[3 1 2]);
+% %                 unitIDs=unique(spikes.unitID);
+% %                 for unitNum=1:numel(unitIDs)
+% %                     numel(unique(spikeSites(spikes.unitID==unitIDs(unitNum))))
+% %                 end
+%             else
             if (isempty(spikes.waveforms) || size(spikes.waveforms,1) <  size(spikes.unitID,1))...
                     && exist('traces','var')
                 spikes.waveforms=NaN(size(spikes.times,1),50);
@@ -272,20 +285,36 @@ elseif contains(argin_fName,'.csv') || ...
                 for electrodeNum=1:numel(electrodesId)
                     if isa(traces,'memmapfile') % reading electrode data from .dat file
                         spikes.waveforms(spikes.preferredElectrode==electrodeNum,:)=...
-                            ExtractChunks(traces.Data(electrodeNum+1:numel(electrodesId):max(size(traces.Data))),...
+                            ExtractChunks(traces.Data(electrodeNum:numel(electrodesId):max(size(traces.Data))),...
                             spikes.times(spikes.preferredElectrode==electrodeNum),50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
                     else
                         spikes.waveforms(spikes.preferredElectrode==electrodeNum,:)=...
-                            ExtractChunks(traces(electrodeNum+1,:),...
+                            ExtractChunks(traces(electrodeNum,:),...
                             spikes.times(spikes.preferredElectrode==electrodeNum),50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
                     end
                     % scale to resolution
                     %             spikes.waveforms{elNum,1}=spikes.Waveforms{elNum,1}.*bitResolution;
                 end
             end
-%             figure; plot(mean(spikes.waveforms(spikeClusters==8,:)))
-    
-    %
+% figure; hold on
+% plot(mean(spikes.waveforms(spikeClusters==4,:))/bitResolution); % bitResolution=0.25;
+% plot(mean(waveforms(spikeClusters==4,:,1)))
+% refCh=mode(spikes.preferredElectrode(spikeClusters==4));
+% spikeTimes=spikes.times(spikeClusters==4);
+% spikeSites=spikes.preferredElectrode(spikeClusters==4);
+% unitWF=waveforms(spikeClusters==4,:,:);
+% unitWF_t=spikes.waveforms(spikeClusters==4,:);
+% figure; hold on;
+% for chNum=1:16
+%     plot(traces(chNum,1:6000)+(chNum-1)*max(max(traces(:,1:6000)))*2,'k')
+% end
+% for spikeNum=1:15
+%     for spkchNum=1:9
+%         plot(spikeTimes(spikeNum)-10:spikeTimes(spikeNum)+21,unitWF(spikeNum,:,spkchNum)+int16((refCh-1)*max(max(traces(:,1:6000)))*2))
+%     end
+% %     plot(spikeTimes(spikeNum)-10:spikeTimes(spikeNum)+21,unitWF_t(spikeNum,:)+double((refCh-1)*max(max(traces(:,1:6000)))*2),'b')
+% end
+ %
     %     %% import info from cvs file export
     %     %     clusterInfo = ImportJRClusSortInfo(fName);
     %

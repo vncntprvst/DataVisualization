@@ -1138,22 +1138,7 @@ if diff(size(selectedUnits))<0
     end
     selectedUnits=selectedUnits(keepU);
 end
-%spike times for that unit
-unitST=spikeTimes(unitsIDs==selectedUnits);
-% compute interspike interval
-if ~isempty(diff(unitST))
-    ISI=diff(unitST)/(samplingRate/1000);
-    axes(handles.ISI_Axes); hold on;
-    cla(handles.ISI_Axes,'reset');
-    set(handles.ISI_Axes,'Visible','on');
-    ISIhist=histogram(double(ISI),logspace(0, 4, 50),'DisplayStyle','stairs','LineWidth',1.5);  %,'Normalization','probability'
-%     ISIhist.FaceColor = handles.cmap(unitID(unitID==selectedUnits),:);
-    ISIhist.EdgeColor = handles.cmap(selectedUnits,:); %'k';
-    xlabel('Interspike Interval (ms)')
-    axis('tight');box off; grid('on'); set(gca,'xscale','log','GridAlpha',0.25,'MinorGridAlpha',1);
-    set(gca,'xlim',[0 10^4],... %'XTick',linspace(0,40,5),'XTickLabel',linspace(0,40,5),...
-        'TickDir','out','Color','white','FontSize',10,'FontName','Calibri');
-    hold off
+EphysFun.PlotISI(unitsIDs,spikeTimes,selectedUnits,samplingRate,handles.ACG_Axes);
 end
 
 %% Plot autocorrelogram
@@ -1174,34 +1159,7 @@ if diff(size(selectedUnits))<0
     end
     selectedUnits=selectedUnits(keepU);
 end
-%get unit spike times
-unitST=spikeTimes(unitsIDs==selectedUnits);
-% change to ms timescale
-unitST=unitST/(samplingRate/1000);
-%get ISI
-% ISI=diff(unitST)/(samplingRate/1000);
-%bin
-spikeTimeIdx=zeros(1,unitST(end));
-spikeTimeIdx(unitST)=1;
-binSize=1;
-numBin=ceil(size(spikeTimeIdx,2)/binSize);
-binUnits = histcounts(double(unitST), linspace(0,size(spikeTimeIdx,2),numBin));
-binUnits(binUnits>1)=1; %no more than 1 spike per ms
-% compute autocorrelogram
-[ACG,lags]=xcorr(double(binUnits),200,'unbiased'); %'coeff'
-ACG(lags==0)=0;
-axes(handles.ACG_Axes); hold on;
-cla(handles.ACG_Axes,'reset');
-set(handles.ACG_Axes,'Visible','on');
-ACGh=bar(lags,ACG);
-ACGh.FaceColor = handles.cmap(selectedUnits,:);
-ACGh.EdgeColor = 'none';
-% axis('tight');
-box off; grid('on'); %set(gca,'yscale','log','GridAlpha',0.25,'MinorGridAlpha',1);
-xlabel('Autocorrelogram (1 ms bins)')
-set(gca,'xlim',[-20 20],... %'ylim',[0 max([max(get(gca,'ylim')) 10^1])]
-    'Color','white','FontSize',10,'FontName','Calibri','TickDir','out');
-hold off
+EphysFun.PlotACG(unitsIDs,spikeTimes,selectedUnits,samplingRate,handles.ACG_Axes);
 
 %% Plot cross-correlogram
 function Plot_XCG(handles)
