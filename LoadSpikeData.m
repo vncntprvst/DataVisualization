@@ -193,9 +193,8 @@ elseif contains(argin_fName,'.csv') || ...
             % from KiloSort spikes.times=readNPY('spike_times.npy');
       
             try % JRC v3 and v4:
-
-
                 load(argin_fName,'spikeTimes','spikeSites','spikeClusters','filtShape')
+                
 %                 evtWindow = [-0.25, 0.75]; %evtWindowRaw = [-0.5, 1.5]; nSiteDir = 4;
 %                 waveformsFid=fopen('vIRt32_2019_04_24_16_48_53_5185_1_1_export_filt.jrc');
 %                 waveforms=fread(waveformsFid,...
@@ -266,19 +265,52 @@ elseif contains(argin_fName,'.csv') || ...
                     end
                 end
             end
-            %extract spike waveform
+            %% extract spike waveform 
+            % see ...\JRCLUST\@JRC\loadFiles.m > binData = readBin(filename, binShape, dataType)
+            
+%             The "best" site for a spike is always the top row, but not
+%             all spikes for a given unit can be assumed to have the same "best" site.
+%             For a given spike you can find its best or center site in spikeSites.
+%             Then you can get the list of however many neighboring sites were
+%             considered from hCfg.siteNeighbors, like:
+%             hCfg = jrclust.Config('/path/to/your/params.prm');
+%             hCfg.siteNeighbors
+%             That will give you an nNeighbors x nSites matrix, so if you want
+%             the neighbors for the ith site, take the ith column of that matrix.
+%             Then what you could do is embed all your spikes in a matrix that
+%             spans all the neighbors of all the spikes in your unit, and for 
+%             those spikes who don't have traces in those sites, simply put nans.
+%             Then do a nanmean on that matrix.
+                      
 %             filtWFfile=[regexp(argin_fName,'\w+(?=_res)','match','once') '_filt.jrc'];
-%             if exist('filtShape','var') & exist(fullfile(cd,filtWFfile),'file')
+%             if exist('filtShape','var') & exist(fullfile(cd,filtWFfile),'file') 
+% %                 recInfofile=[regexp(argin_fName,'\w+(?=export_res)','match','once') 'recInfo.mat'];
+% %                 if exist(fullfile(cd,recInfofile),'file')
+% %                     load(recInfofile);
+% %                     exportDirListing=dir(recInfo.export.directory);
+% %                     paramFileIdx=cellfun(@(fName) contains(fName,'prm'),...
+% %                         {exportDirListing.name});
+% %                     hCfg = jrclust.Config(fullfile(exportDirListing(paramFileIdx).folder,...
+% %                         exportDirListing(paramFileIdx).name));
+% %                     siteNeighbors=hCfg.siteNeighbors;
+% %                 else
+% %                     % calculate it
+% %                     % siteNeighbors = findSiteNeighbors(siteLoc, 2*nSiteDir + 1, ignoreSites, shankMap);
+% %                 end
 %                 fid = fopen(filtWFfile, 'r');
 %                 spikes.waveforms= reshape(fread(fid, inf, '*int16'), filtShape);
+% %                 spikes.waveforms= fread(fid, inf, '*int16');
 %                 fclose(fid);
 %                 spikes.waveforms = permute(spikes.waveforms,[3 1 2]);
 % %                 unitIDs=unique(spikes.unitID);
 % %                 for unitNum=1:numel(unitIDs)
-% %                     numel(unique(spikeSites(spikes.unitID==unitIDs(unitNum))))
+% %                     %which sites does it occur on? 
+% %                     unique(spikes.preferredElectrode(spikes.unitID==unitIDs(unitNum)))
 % %                 end
+% %                 spikesEmbedding=nan(filtShape(3), size(siteNeighbors,2));
+%                                 
 %             else
-            if (isempty(spikes.waveforms) || size(spikes.waveforms,1) <  size(spikes.unitID,1))...
+                if (isempty(spikes.waveforms) || size(spikes.waveforms,1) <  size(spikes.unitID,1))...
                     && exist('traces','var')
                 spikes.waveforms=NaN(size(spikes.times,1),50);
                 electrodesId=unique(spikes.preferredElectrode);
@@ -297,8 +329,8 @@ elseif contains(argin_fName,'.csv') || ...
                 end
             end
 % figure; hold on
-% plot(mean(spikes.waveforms(spikeClusters==4,:))/bitResolution); % bitResolution=0.25;
-% plot(mean(waveforms(spikeClusters==4,:,1)))
+% plot(mean(spikes.waveforms(spikeClusters==46,12:40))/bitResolution); % bitResolution=0.25;
+% plot(mean(waveforms(spikeClusters==46,:,1)))
 % refCh=mode(spikes.preferredElectrode(spikeClusters==4));
 % spikeTimes=spikes.times(spikeClusters==4);
 % spikeSites=spikes.preferredElectrode(spikeClusters==4);

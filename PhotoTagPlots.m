@@ -106,7 +106,7 @@ for cellNum=1:size(ephysData.selectedUnits,1)
     % keep one cell
     % cellNum=2;
     
-    figure('Position',[296 149 1504 761],'name',...
+    figure('Position',[639 154 923 822],'name',...
         [fileName ' Unit' num2str(ephysData.selectedUnits(cellNum))] ); %Ch' num2str(spikeData.selectedUnits(cellNum))
     
     %% waveforms
@@ -114,10 +114,14 @@ for cellNum=1:size(ephysData.selectedUnits,1)
     OptoWaveforms(ephysData.spikes,TTLs.start,ephysData.selectedUnits(cellNum),delay,gca)
     
     %% rasters
-    subplot(3,3,[2,5]);
+    subplot(3,3,[2]);
     if ~iscell(alignedRasters); alignedRasters={alignedRasters}; end
-    OptoRasters(alignedRasters(cellNum),preAlignWindow,pulseDur,gca);
+    OptoRasters(alignedRasters(cellNum),preAlignWindow,pulseDur,IPI,gca);
     % title(['Channel ' num2str(channelNum) ', Neuron ' num2str(spikeData.selectedUnits(cellNum))],'FontName','Cambria');
+    
+    %% Jitter
+    subplot(3,3,[5]);
+    OptoJitter(ephysData.spikes,TTLs.start,ephysData.selectedUnits(cellNum),delay,gca)
     
     %% SDF
     subplot(3,3,[3,6])
