@@ -15,7 +15,7 @@ for cellNum=1:length(keepCell)
 %     figure; hold on; plot(times,ones(length(times),1),'*');...
 %     plot(TTLtimes,ones(length(TTLtimes),1),'d')
     for TTLNum=1:length(TTLtimes)
-        pulseIdx(:,TTLNum)=times>=TTLtimes(TTLNum) & times<=TTLtimes(TTLNum)+duration;
+        pulseIdx(:,TTLNum)=times>=TTLtimes(TTLNum) & times<=TTLtimes(TTLNum)+max([duration 10]); %keep min window of 10ms 
     end
     onSpikes=logical(sum(pulseIdx,2));
     
