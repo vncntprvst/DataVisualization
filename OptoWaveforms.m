@@ -8,14 +8,14 @@ for cellNum=1:length(keepCell)
     colormap(parula); %cmap=colormap;
     %% Spike waveform
     waveforms=double(spikeData.waveforms(spikeData.unitID==keepCell(cellNum),:));
-    times=spikeData.times(spikeData.unitID==keepCell(cellNum),:)/(spikeData.samplingRate/1000);
+    times=single(spikeData.times(spikeData.unitID==keepCell(cellNum),:));
     
     %get wich spike times occur during TTL
     pulseIdx=false(size(times,1),size(TTLtimes,1));
 %     figure; hold on; plot(times,ones(length(times),1),'*');...
 %     plot(TTLtimes,ones(length(TTLtimes),1),'d')
     for TTLNum=1:length(TTLtimes)
-        pulseIdx(:,TTLNum)=times>=TTLtimes(TTLNum) & times<=TTLtimes(TTLNum)+max([duration 10]); %keep min window of 10ms 
+        pulseIdx(:,TTLNum)=times>=TTLtimes(TTLNum) & times<=TTLtimes(TTLNum)+max([duration 0.010]); %keep min window of 10ms 
     end
     onSpikes=logical(sum(pulseIdx,2));
     

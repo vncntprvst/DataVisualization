@@ -10,12 +10,16 @@ for cellNum=1:length(keepCell)
         figure('Position',[1092 149 708 761]); hold on
     end
     
-    times=spikeData.times(spikeData.unitID==keepCell(cellNum),:)/(spikeData.samplingRate/1000);
+    times=spikeData.times(spikeData.unitID==keepCell(cellNum),:);
     
     %get wich spike times occur during TTL
     spikeLatency=nan(numel(TTLtimes),1);
     for TTLNum=1:length(TTLtimes)
-        spikeLatency(TTLNum)=times(find(times>=TTLtimes(TTLNum),1))-TTLtimes(TTLNum);
+        try
+            spikeLatency(TTLNum)=times(find(times>=TTLtimes(TTLNum),1))-TTLtimes(TTLNum);
+        catch
+            continue
+        end
     end
 
     hold on
@@ -30,7 +34,7 @@ for cellNum=1:length(keepCell)
         'FontSize',10,'FontName','Helvetica','TickDir','out');
     box off;
     xlabel({'mean response latency vs';' mean ISI (+/- SD)'})
-    ylabel('Time (ms)');
+    ylabel('Time (s)');
     set(gca,'Color','white','FontSize',12,'FontName','Helvetica');
 
 end

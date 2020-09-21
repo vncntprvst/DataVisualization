@@ -2,14 +2,14 @@ function PhotoTagPlots(ephysData,pulses)
 
 %% variables
 fileName=ephysData.recInfo.sessionName; %'vIRt44_1210_5450';
-TTLs.start=pulses.TTLTimes(1,:); TTLs.end=pulses.TTLTimes(2,:);
-pulseDur=min(mode(TTLs.end-TTLs.start));
+TTLs.start=pulses.TTLTimes; %(1,:); TTLs.end=pulses.TTLTimes(2,:);
+pulseDur=pulses.duration; %  min(mode(TTLs.end-TTLs.start));
 IPI=mode(diff(TTLs.start));
-delay=5;
-preAlignWindow=50;
-postAlignWindow=200;
+delay=0.005;
+preAlignWindow=0.050;
+postAlignWindow=0.20;
 SRR=ephysData.recInfo.SRratio;
-traceExcerpt.excerptSize=1000*SRR;
+traceExcerpt.excerptSize=SRR;
 
 % spikeData.selectedUnits=[7,18,24]-1;
 if islogical(ephysData.selectedUnits) %logical array
@@ -18,9 +18,9 @@ end
 
 %% compute rasters
 spikeRasters=EphysFun.MakeRasters(ephysData.spikes.times,ephysData.spikes.unitID,...
-    ephysData.spikes.samplingRate,int32(size(ephysData.traces,2)/ephysData.spikes.samplingRate*1000));
+    1,int32(size(ephysData.traces,2)/ephysData.spikes.samplingRate*1000)); %ephysData.spikes.samplingRate
 spikeRasters=spikeRasters(ephysData.selectedUnits,:);
-alignedRasters=EphysFun.AlignRasters(spikeRasters,TTLs.start,preAlignWindow,postAlignWindow);
+alignedRasters=EphysFun.AlignRasters(spikeRasters,TTLs.start,preAlignWindow,postAlignWindow,1000);
 
 %% compute spike density functions
 % spikeRate=EphysFun.MakeSDF(spikeRasters);
@@ -69,13 +69,17 @@ for cellNum=1:size(ephysData.selectedUnits,1)
         traceExcerpt.data=PreProcData(traceExcerpt.data,30000,preprocOption);
         traceExcerpt.data=traceExcerpt.data(channelNum,:);%     figure; plot(dataExcerpt(11,:))
     else
-        prefElec=double(ephysData.spikes.preferredElectrode(ismember(...
-            ephysData.spikes.unitID,ephysData.selectedUnits(cellNum))));
-        keepTrace=mode(prefElec);  
         %Sometimes not the best trace. Find a way plot most relevant trace
-%         [traceFreq,uniqueTraces]=hist(prefElec,unique(prefElec));
-        keepTrace=uniqueTraces(end);
-        traceExcerpt.data=ephysData.traces(keepTrace,excerptWindow); 
+        prefElec=double(ephysData.spikes.preferredElectrode(ismember(...
+                ephysData.spikes.unitID,ephysData.selectedUnits(cellNum))));
+%         try
+%             [traceFreq,uniqueTraces]=hist(prefElec,unique(prefElec));
+%             keepTrace=uniqueTraces(end);
+%             traceExcerpt.data=ephysData.traces(keepTrace,excerptWindow);
+%         catch
+            keepTrace=mode(prefElec);
+            traceExcerpt.data=ephysData.traces(keepTrace,excerptWindow);
+%         end
 %         figure; plot(traceExcerpt.data)
 %         figure; plot(ephysData.traces(keepTrace,:))
     end
@@ -87,7 +91,7 @@ for cellNum=1:size(ephysData.selectedUnits,1)
         SRR)*SRR;
     
     excerptSpikeTimes={NaN};
-%     figure;
+%     figure; plot(traceExcerpt.data)
     OptoRawTrace(traceExcerpt,excerptSpikeTimes,...
         SRR,excerptTTLtimes,pulseDur,'',gca)
     
@@ -96,8 +100,8 @@ for cellNum=1:size(ephysData.selectedUnits,1)
     spikesTimes=ephysData.spikes.times(ephysData.spikes.unitID==ephysData.selectedUnits(cellNum));
     waveForms=NaN(size(spikesTimes,1),50);
 %         electrodesId=unique(spikes.preferredElectrode);
-    waveForms=ExtractChunks(ephysData.traces(keepTrace,:),...
-            spikesTimes,50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
+    waveForms=ExtractChunks(ephysData.traces(keepTrace,:),... %foo = PreProcData(foo,30000,{'bandpass',[300 3000]});
+            spikesTimes*ephysData.recInfo.samplingRate,50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
     % scale to resolution
     waveForms=waveForms.*ephysData.recInfo.bitResolution;
     ephysData.spikes.waveforms(ephysData.spikes.unitID==ephysData.selectedUnits(cellNum),:)=waveForms;
@@ -107,7 +111,7 @@ for cellNum=1:size(ephysData.selectedUnits,1)
     %% rasters
     subplot(3,3,[2]);
     if ~iscell(alignedRasters); alignedRasters={alignedRasters}; end
-    OptoRasters(alignedRasters(cellNum),preAlignWindow,pulseDur,IPI,gca);
+    OptoRasters(alignedRasters(cellNum),preAlignWindow*1000,pulseDur,IPI,gca);
     % title(['Channel ' num2str(channelNum) ', Neuron ' num2str(spikeData.selectedUnits(cellNum))],'FontName','Cambria');
     
     %% Jitter
@@ -116,7 +120,7 @@ for cellNum=1:size(ephysData.selectedUnits,1)
     
     %% SDF
     subplot(3,3,[3,6])
-    OptoSDF(alignedRasters(cellNum),preAlignWindow,pulseDur,IPI,gca)
+    OptoSDF(alignedRasters(cellNum),preAlignWindow*1000,pulseDur*1000,IPI*1000,gca)
     
     % %% ISI
     % subplot(3,3,4); hold on
