@@ -27,12 +27,14 @@ for sessionNum=1:numel(expDirs)
         disp(['error loading data from ' dataDir])
         continue
     end
-    handpick=[46]; %vIRt47_0803_5900 : 54
+    handpick=[]; %46 %vIRt47_0803_5900 : 54
     ephys = SelectUnits(ephys,'quality',handpick); %quality frequency
     ephys = OrderByDepth(ephys);
     
     if ~isfield(pulses,'duration'); pulses.duration=0.01; end
-    PhotoTagPlots(ephys,pulses); %Implement SALT test
+    taggedCells = FindPhototagged(ephys,pulses);
+    ephys.selectedUnits  = find(taggedCells);
+    PhotoTagPlots(ephys,pulses); 
        
 end
 

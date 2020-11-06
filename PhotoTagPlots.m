@@ -38,7 +38,7 @@ for cellNum=1:size(ephysData.selectedUnits,1)
     
     figure('Position',[639 154 923 822],'name',...
         [fileName ' Unit' num2str(ephysData.selectedUnits(cellNum))] ); %Ch' num2str(spikeData.selectedUnits(cellNum))
-        
+    
     %% raw trace
     subplot(3,3,7:9); hold on
     if ~isfield(ephysData.recInfo,'SRratio')
@@ -71,17 +71,17 @@ for cellNum=1:size(ephysData.selectedUnits,1)
     else
         %Sometimes not the best trace. Find a way plot most relevant trace
         prefElec=double(ephysData.spikes.preferredElectrode(ismember(...
-                ephysData.spikes.unitID,ephysData.selectedUnits(cellNum))));
-%         try
-%             [traceFreq,uniqueTraces]=hist(prefElec,unique(prefElec));
-%             keepTrace=uniqueTraces(end);
-%             traceExcerpt.data=ephysData.traces(keepTrace,excerptWindow);
-%         catch
-            keepTrace=mode(prefElec);
-            traceExcerpt.data=ephysData.traces(keepTrace,excerptWindow);
-%         end
-%         figure; plot(traceExcerpt.data)
-%         figure; plot(ephysData.traces(keepTrace,:))
+            ephysData.spikes.unitID,ephysData.selectedUnits(cellNum))));
+        %         try
+        %             [traceFreq,uniqueTraces]=hist(prefElec,unique(prefElec));
+        %             keepTrace=uniqueTraces(end);
+        %             traceExcerpt.data=ephysData.traces(keepTrace,excerptWindow);
+        %         catch
+        keepTrace=mode(prefElec);
+        traceExcerpt.data=ephysData.traces(keepTrace,excerptWindow);
+        %         end
+        %         figure; plot(traceExcerpt.data)
+        %         figure; plot(ephysData.traces(keepTrace,:))
     end
     
     excerptTTLtimes=double(TTLs.start(TTLs.start>(traceExcerpt.location-...
@@ -91,7 +91,7 @@ for cellNum=1:size(ephysData.selectedUnits,1)
         SRR)*SRR;
     
     excerptSpikeTimes={NaN};
-%     figure; plot(traceExcerpt.data)
+    %     figure; plot(traceExcerpt.data)
     OptoRawTrace(traceExcerpt,excerptSpikeTimes,...
         SRR,excerptTTLtimes,pulseDur,'',gca)
     
@@ -99,9 +99,9 @@ for cellNum=1:size(ephysData.selectedUnits,1)
     
     spikesTimes=ephysData.spikes.times(ephysData.spikes.unitID==ephysData.selectedUnits(cellNum));
     waveForms=NaN(size(spikesTimes,1),50);
-%         electrodesId=unique(spikes.preferredElectrode);
+    %         electrodesId=unique(spikes.preferredElectrode);
     waveForms=ExtractChunks(ephysData.traces(keepTrace,:),... %foo = PreProcData(foo,30000,{'bandpass',[300 3000]});
-            spikesTimes*ephysData.recInfo.samplingRate,50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
+        spikesTimes*ephysData.recInfo.samplingRate,50,'tshifted'); %'tzero' 'tmiddle' 'tshifted'
     % scale to resolution
     waveForms=waveForms.*ephysData.recInfo.bitResolution;
     ephysData.spikes.waveforms(ephysData.spikes.unitID==ephysData.selectedUnits(cellNum),:)=waveForms;
@@ -130,7 +130,13 @@ for cellNum=1:size(ephysData.selectedUnits,1)
     % subplot(3,3,7); hold on
     % OptoACG(spikeData,TTLtimes,spikeData.selectedUnits(cellNum),gca)
     
-
+    if ~exist(fullfile(cd, 'Figures'),'dir')
+        mkdir('Figures')
+    end
+    savefig(gcf,fullfile(cd, 'Figures', [fileName '_Unit' num2str(cellNum) '_PT.fig']));
+    print(gcf,fullfile(cd, 'Figures', [fileName '_Unit' num2str(cellNum) '_PT']),'-dpng');
+    close(gcf)
+    
 end
 end
 
