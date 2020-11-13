@@ -1,4 +1,7 @@
-% Population Phototagging analysis
+% Population Tuning analysis
+
+% Run BatchSaveSessions first 
+
 clearvars
 subjectDir=cd;
 
