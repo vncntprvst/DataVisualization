@@ -1,4 +1,8 @@
-function PhotoTagPlots(ephysData,pulses)
+function PhotoTagPlots(ephysData,pulses,savePlots)
+
+if nargin < 3
+    savePlots =false;
+end
 
 %% variables
 fileName=ephysData.recInfo.sessionName; %'vIRt44_1210_5450';
@@ -130,13 +134,14 @@ for cellNum=1:size(ephysData.selectedUnits,1)
     % subplot(3,3,7); hold on
     % OptoACG(spikeData,TTLtimes,spikeData.selectedUnits(cellNum),gca)
     
-    if ~exist(fullfile(cd, 'Figures'),'dir')
-        mkdir('Figures')
+    if savePlots
+        if ~exist(fullfile(cd, 'Figures'),'dir')
+            mkdir('Figures')
+        end
+        savefig(gcf,fullfile(cd, 'Figures', [fileName '_Unit' num2str(cellNum) '_PT.fig']));
+        print(gcf,fullfile(cd, 'Figures', [fileName '_Unit' num2str(cellNum) '_PT']),'-dpng');
+        close(gcf)
     end
-    savefig(gcf,fullfile(cd, 'Figures', [fileName '_Unit' num2str(cellNum) '_PT.fig']));
-    print(gcf,fullfile(cd, 'Figures', [fileName '_Unit' num2str(cellNum) '_PT']),'-dpng');
-    close(gcf)
-    
 end
 end
 
