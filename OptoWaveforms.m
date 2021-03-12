@@ -1,4 +1,4 @@
-function OptoWaveforms(spikeData,TTLtimes,keepCell,duration,axisHandle)
+function onSpikes=OptoWaveforms(spikeData,TTLtimes,keepCell,duration,axisHandle)
 
 for cellNum=1:length(keepCell)
     %find(mean(meanChan)==max(mean(meanChan)));

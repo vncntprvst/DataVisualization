@@ -21,8 +21,12 @@ if islogical(ephysData.selectedUnits) %logical array
 end
 
 %% compute rasters
-spikeRasters=EphysFun.MakeRasters(ephysData.spikes.times,ephysData.spikes.unitID,...
-    1,int32(size(ephysData.traces,2)/ephysData.spikes.samplingRate*1000)); %ephysData.spikes.samplingRate
+if isfield(ephysData,'rasters')
+    spikeRasters=ephysData.rasters;
+else
+    spikeRasters=EphysFun.MakeRasters(ephysData.spikes.times,ephysData.spikes.unitID,...
+        1,int32(size(ephysData.traces,2)/ephysData.spikes.samplingRate*1000)); %ephysData.spikes.samplingRate
+end
 spikeRasters=spikeRasters(ephysData.selectedUnits,:);
 alignedRasters=EphysFun.AlignRasters(spikeRasters,TTLs.start,preAlignWindow,postAlignWindow,1000);
 
@@ -40,7 +44,7 @@ for cellNum=1:size(ephysData.selectedUnits,1)
     % keep one cell
     % cellNum=2;
     
-    figure('Position',[639 154 923 822],'name',...
+    figure('Position',[214   108   747   754],'name',...
         [fileName ' Unit' num2str(ephysData.selectedUnits(cellNum))] ); %Ch' num2str(spikeData.selectedUnits(cellNum))
     
     %% raw trace
@@ -64,7 +68,7 @@ for cellNum=1:size(ephysData.selectedUnits,1)
         winIdxStart=(traceExcerpt.location-traceExcerpt.excerptSize); %*traceData.traceInfo.numChan+1;
         winIdxEnd=traceExcerpt.location+traceExcerpt.excerptSize;
     end
-    excerptWindow=int32(winIdxStart:winIdxEnd-1)-SRR;
+    excerptWindow=int32(winIdxStart:winIdxEnd-1);%-SRR;
     %     size(excerptWindow,2)>(2*traceExcerpt.excerptSize*traceData.traceInfo.numChan)
     if exist('traceData','var') && isa(traceData,'memmapfile')
         traceExcerpt.data=traceData.allTraces.Data(excerptWindow);
@@ -94,7 +98,15 @@ for cellNum=1:size(ephysData.selectedUnits,1)
         (traceExcerpt.location-traceExcerpt.excerptSize)/...
         SRR)*SRR;
     
-    excerptSpikeTimes={NaN};
+    try
+        excerptSpikeTimes={double(ephysData.spikes.times(ephysData.spikes.times>(traceExcerpt.location-...
+            traceExcerpt.excerptSize)/SRR &...
+            ephysData.spikes.times<(traceExcerpt.location+traceExcerpt.excerptSize)/SRR)-...
+            (traceExcerpt.location-traceExcerpt.excerptSize)/...
+            SRR)*SRR};
+    catch
+        excerptSpikeTimes={NaN};
+    end
     %     figure; plot(traceExcerpt.data)
     OptoRawTrace(traceExcerpt,excerptSpikeTimes,...
         SRR,excerptTTLtimes,pulseDur,'',gca)
@@ -110,7 +122,7 @@ for cellNum=1:size(ephysData.selectedUnits,1)
     waveForms=waveForms.*ephysData.recInfo.bitResolution;
     ephysData.spikes.waveforms(ephysData.spikes.unitID==ephysData.selectedUnits(cellNum),:)=waveForms;
     subplot(3,3,[1,4]); hold on
-    OptoWaveforms(ephysData.spikes,TTLs.start,ephysData.selectedUnits(cellNum),delay,gca)
+    onSpikes=OptoWaveforms(ephysData.spikes,TTLs.start,ephysData.selectedUnits(cellNum),delay,gca);
     
     %% rasters
     subplot(3,3,[2]);
