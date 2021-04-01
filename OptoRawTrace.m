@@ -5,7 +5,14 @@ if ~exist('axisHandle','var') | isempty(axisHandle)
 end
 cmap=parula;
 %plot raw trace
-plot(recTrace.data,'color','k');
+if size(recTrace.data,1)>1        
+    for traceNum=1:size(recTrace.data,1)
+        plot(zscore(recTrace.data(traceNum,:))+15*(traceNum-1)+... %+max(get(gca,'ylim'))
+            max(abs(zscore(recTrace.data(traceNum,:)))),'color','k');
+    end
+else
+    plot(recTrace.data,'color','k');
+end
 
 if ~isempty(TTLtimes)
     for TTLNum=1:length(TTLtimes)

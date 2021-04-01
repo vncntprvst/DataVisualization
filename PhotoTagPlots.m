@@ -11,7 +11,7 @@ pulseDur=pulses.duration; %  min(mode(TTLs.end-TTLs.start));
 IPI=mode(diff(TTLs.start));
 delay=0.005;
 preAlignWindow=0.050;
-postAlignWindow=0.20;
+postAlignWindow=0.05; %0.20;
 SRR=ephysData.recInfo.SRratio;
 traceExcerpt.excerptSize=SRR;
 
@@ -66,7 +66,7 @@ for cellNum=1:size(ephysData.selectedUnits,1)
         winIdxEnd=winIdxStart+(winSize*2*traceExcerpt.excerptSize*traceData.traceInfo.numChan);
     else
         winIdxStart=(traceExcerpt.location-traceExcerpt.excerptSize); %*traceData.traceInfo.numChan+1;
-        winIdxEnd=traceExcerpt.location+traceExcerpt.excerptSize;
+        winIdxEnd=traceExcerpt.location+10*traceExcerpt.excerptSize;
     end
     excerptWindow=int32(winIdxStart:winIdxEnd-1);%-SRR;
     %     size(excerptWindow,2)>(2*traceExcerpt.excerptSize*traceData.traceInfo.numChan)
@@ -85,7 +85,8 @@ for cellNum=1:size(ephysData.selectedUnits,1)
         %             keepTrace=uniqueTraces(end);
         %             traceExcerpt.data=ephysData.traces(keepTrace,excerptWindow);
         %         catch
-        keepTrace=mode(prefElec);
+        keepTrace=mode(prefElec(ephysData.spikes.times>(traceExcerpt.location-...
+            traceExcerpt.excerptSize)/SRR));
         traceExcerpt.data=ephysData.traces(keepTrace,excerptWindow);
         %         end
         %         figure; plot(traceExcerpt.data)
@@ -94,14 +95,14 @@ for cellNum=1:size(ephysData.selectedUnits,1)
     
     excerptTTLtimes=double(TTLs.start(TTLs.start>(traceExcerpt.location-...
         traceExcerpt.excerptSize)/SRR &...
-        TTLs.start<(traceExcerpt.location+traceExcerpt.excerptSize)/SRR)-...
+        TTLs.start<(traceExcerpt.location+10*traceExcerpt.excerptSize)/SRR)-...
         (traceExcerpt.location-traceExcerpt.excerptSize)/...
         SRR)*SRR;
     
     try
         excerptSpikeTimes={double(ephysData.spikes.times(ephysData.spikes.times>(traceExcerpt.location-...
             traceExcerpt.excerptSize)/SRR &...
-            ephysData.spikes.times<(traceExcerpt.location+traceExcerpt.excerptSize)/SRR)-...
+            ephysData.spikes.times<(traceExcerpt.location+10*traceExcerpt.excerptSize)/SRR)-...
             (traceExcerpt.location-traceExcerpt.excerptSize)/...
             SRR)*SRR};
     catch
@@ -110,6 +111,22 @@ for cellNum=1:size(ephysData.selectedUnits,1)
     %     figure; plot(traceExcerpt.data)
     OptoRawTrace(traceExcerpt,excerptSpikeTimes,...
         SRR,excerptTTLtimes,pulseDur,'',gca)
+    
+    figure('Position',[214   108   747   754],'name',...
+        [fileName ' Unit' num2str(ephysData.selectedUnits(cellNum))] ); %Ch' num2str(spikeData.selectedUnits(cellNum))
+    traceIDs=max([keepTrace-5 1]):min([keepTrace+5 size(ephysData.traces,1)]);
+%     for traceNum=1:numel(traceIDs)
+%         subplot(numel(traceIDs),1,traceNum)
+        hold on
+%         keepTrace=traceIDs(traceNum);
+        traceExcerpt.data=ephysData.traces(traceIDs,excerptWindow);
+        
+            OptoRawTrace(traceExcerpt,excerptSpikeTimes,...
+        SRR,excerptTTLtimes,pulseDur,'',gca)
+
+
+%     end
+    
     
     %% waveforms
     
