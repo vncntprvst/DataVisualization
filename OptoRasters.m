@@ -15,16 +15,17 @@ for cellNum=1:length(alignedRasters)
     imagesc(logical(alignedRasters{cellNum})); %
     % imagesc(MeanChan);
     xlabel('Time (ms)');
-    ylabel('Stimulation#','FontSize',12); %'FontWeight','bold'
+    ylabel('Stimulation#'); %'FontWeight','bold'
     % draw alignment bar
     currylim=get(gca,'YLim');
     %     currxlim=get(gca,'XLim');%midl=round(currxlim(2)/20)*10;
     %     set(gca,'XTick',preAlignWindow:50:max(get(gca,'xlim')));
     %     set(gca,'XTickLabel',0:50:max(get(gca,'xlim'))-preAlignWindow,'FontSize',10,'FontName','calibri','TickDir','out');
 %     set(gca,'XLim',[0.5 preAlignWindow+60.5],'XTick',0:10:preAlignWindow+60);
-    set(gca,'XTick',0:50:size(alignedRasters{cellNum},2)); %0:100:preAlignWindow+200); %'XLim',[preAlignWindow-250.5 preAlignWindow+250.5]
-    set(gca,'XTickLabel',(0:50:size(alignedRasters{cellNum},2))-alignTime,'TickDir','out'); %'FontSize',10,'FontName','calibri'
-    
+    set(gca,'XTick',(0:50:size(alignedRasters{cellNum},2))+0.5); %0:100:preAlignWindow+200); %'XLim',[preAlignWindow-250.5 preAlignWindow+250.5]
+    set(gca,'XTickLabel',(0:50:size(alignedRasters{cellNum},2))-alignTime); %'FontSize',10,'FontName','calibri'
+    set(gca,'FontSize',10,'FontName','Calibri','TickDir','out');
+
     %% opto stim patch
 %     patch([alignTime alignTime alignTime+pulseDur alignTime+pulseDur], ...
 %         [[0 currylim(2)] fliplr([0 currylim(2)])], ...

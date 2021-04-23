@@ -1,4 +1,4 @@
-function OptoACG(spikeData,TTLtimes,keepCell,axisHandle)
+function OptoACG(spikeData,TTLtimes,keepCell,pulseDur,axisHandle)
 
 for cellNum=1:length(keepCell)
     %find(mean(meanChan)==max(mean(meanChan)));
@@ -7,50 +7,55 @@ for cellNum=1:length(keepCell)
     end
     colormap(parula); cmap=colormap;
     %% Spike times
-    spikeTimes=spikeData.spikeTimes(spikeData.unitsIdx==keepCell(cellNum),:)/(spikeData.samplingRate/1000);
+    spikeTimes=spikeData.times(spikeData.unitID==keepCell(cellNum),:);
     
     %get wich spike time occur during TTL
     pulseIdx=false(size(spikeTimes,1),size(TTLtimes,1));
     %     figure; hold on; plot(spikeTimes,'*'); plot(TTLtimes,'d')
     for TTLNum=1:size(TTLtimes,1)
-        pulseIdx(:,TTLNum)=spikeTimes>TTLtimes(TTLNum) & spikeTimes<TTLtimes(TTLNum)+5;
+        pulseIdx(:,TTLNum)=spikeTimes>TTLtimes(TTLNum) & spikeTimes<TTLtimes(TTLNum)+pulseDur;
     end
     onSpikes=logical(sum(pulseIdx,2));
     
-    unitST_onPulse=spikeTimes(onSpikes);
-    unitST_offPulse=spikeTimes(~onSpikes);
-    % bin spikes
-    spikeTimeIdx_onPulse=zeros(1,unitST_onPulse(end));
-    spikeTimeIdx_onPulse(unitST_onPulse)=1;
-    binSize=1;
-    numBin=ceil(length(spikeTimeIdx_onPulse)/binSize);
-    binUnits_onPulse = histcounts(double(unitST_onPulse), linspace(0,length(spikeTimeIdx_onPulse),numBin));
-    binUnits_onPulse(binUnits_onPulse>1)=1; %no more than 1 spike per ms
     
+    binSize=1/2;
+    unitST_onPulse=int32(spikeTimes(onSpikes)*1000/binSize);
+    unitST_offPulse=int32(spikeTimes(~onSpikes)*1000/binSize);
+    % bin spikes
+    if ~isempty(unitST_onPulse)
+        spikeTimeIdx_onPulse=zeros(1,unitST_onPulse(end));
+        spikeTimeIdx_onPulse(unitST_onPulse)=1;
+        numBin=ceil(length(spikeTimeIdx_onPulse)/binSize);
+        binUnits_onPulse = histcounts(double(unitST_onPulse), linspace(0,length(spikeTimeIdx_onPulse),numBin));
+        binUnits_onPulse(binUnits_onPulse>1)=1; %no more than 1 spike per ms
+        % compute autocorrelogram
+        [ACG_onPulse,lags_onPulse]=xcorr(double(binUnits_onPulse),200,'unbiased'); %'coeff'
+        ACG_onPulse(lags_onPulse==0)=0;
+    end
     spikeTimeIdx_offPulse=zeros(1,unitST_offPulse(end));
     spikeTimeIdx_offPulse(unitST_offPulse)=1;
     numBin=ceil(length(spikeTimeIdx_offPulse)/binSize);
     binUnits_offPulse = histcounts(double(unitST_offPulse), linspace(0,length(spikeTimeIdx_offPulse),numBin));
     binUnits_offPulse(binUnits_offPulse>1)=1; %no more than 1 spike per ms
-    
     % compute autocorrelogram
-    [ACG_onPulse,lags_onPulse]=xcorr(double(binUnits_onPulse),'coeff'); %'coeff'
-    ACG_onPulse(lags_onPulse==0)=0;
-    [ACG_offPulse,lags_offPulse]=xcorr(double(binUnits_offPulse),'coeff'); %'coeff'
+    [ACG_offPulse,lags_offPulse]=xcorr(double(binUnits_offPulse),200,'unbiased'); %'coeff'
     ACG_offPulse(lags_offPulse==0)=0;
     
-    ACGh_onPulse=bar(lags_onPulse,ACG_onPulse);
-    ACGh_offPulse=bar(lags_offPulse,ACG_offPulse);
-    ACGh_onPulse.FaceColor = [0.3 0.75 0.93];
-    ACGh_onPulse.EdgeColor = 'none';
-    ACGh_offPulse.FaceColor = cmap(cellNum,:);
+    ACGh_offPulse=bar(lags_offPulse,ACG_offPulse,'BarWidth', 1.6);
+    ACGh_offPulse.FaceColor = [1.0000    0.6784    0.0980]; %0.8941    0.7686
     ACGh_offPulse.EdgeColor = 'none';
-    axis('tight');box off;
-    xlabel('Autocorrelogram (5 ms bins)');
-    legend([ACGh_onPulse,ACGh_offPulse],{'Pulse On','Pulse Off'},'location','northeast')
-    set(gca,'xlim',[-550 550],'Color','white','FontSize',10,'FontName','calibri','TickDir','out');
-    set(gca,'Color','white','FontSize',12,'FontName','calibri');
+    if ~isempty(unitST_onPulse)
+        ACGh_onPulse=bar(lags_onPulse,ACG_onPulse,'BarWidth', 1.6);
+        ACGh_onPulse.FaceColor = [0.3 0.75 0.93];
+        ACGh_onPulse.EdgeColor = 'none';
+    end
     
+    axis('tight');box off; grid('on');
+    xlabel('ACG (ms)');
+    %     legend([ACGh_onPulse,ACGh_offPulse],{'Pulse On','Pulse Off'},'location','northeast')
+    %     legend('boxoff')
+    set(gca,'xlim',[-50 50]/binSize,... %'ylim',[0 max([max(get(gca,'ylim')) 10^1])]
+        'xtick',-50/binSize:20:50/binSize,'xticklabel',-50:20*binSize:50);
+    set(gca,'Color','white','FontSize',10,'FontName','calibri','TickDir','out');
+    hold off
 end
-
-

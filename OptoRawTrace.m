@@ -30,13 +30,13 @@ if ~isempty(TTLtimes)
         %     set(gca,'xtick',recTrace.xTicks,'xticklabel',recTrace.xTicklabels,...
         %         'ytick',[],'yticklabel',[],'TickDir','out');
         set(gca,'xtick',linspace(0,2*recTrace.excerptSize,9),...
-            'xticklabel',round(linspace(0,2*recTrace.excerptSize,9)/double(msConv)),...
+            'xticklabel',round(linspace(0,2*recTrace.excerptSize,9)/double(msConv),2),...
             'ytick',[],'yticklabel',[],'TickDir','out');
     end
 end
 box off;
 xlabel('Time (ms)');
-set(gca,'Color','white','FontSize',12,'FontName','Helvetica');
+set(gca,'Color','white','FontSize',10,'FontName','Calibri');
 
 for cellNum=1:length(spikeTimes)
     if ~isempty(spikeTimes{cellNum}) & ~isnan(spikeTimes{cellNum})

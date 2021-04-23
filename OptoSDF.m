@@ -16,11 +16,11 @@ for cellNum=1:length(spikeRasters)
     %plot sem
     box off; %subplot(1,1);hold on; box off;
     patch([1:length(sdf{1}),fliplr(1:length(sdf{1}))],[sdf{1}-rastsem{1},fliplr(sdf{1}+rastsem{1})],...
-        cmap(cellNum,:),'EdgeColor','none','FaceAlpha',0.2); % [0.16 0.38 0.27]
+        'k','EdgeColor','none','FaceAlpha',0.2); % [0.16 0.38 0.27] cmap(cellNum,:)
     % endAlignPloth=subplot(1);hold on; box off;
     % patch([1:length(sdf{2}),fliplr(1:length(sdf{2}))],[sdf{2}-rastsem{2},fliplr(sdf{2}+rastsem{2})],cmap(22,:),'EdgeColor','none','FaceAlpha',0.1);
     %plot sdfs
-    FRploth=plot(gca,sdf{1},'Color',cmap(cellNum,:),'LineWidth',1.8);%[0.16 0.38 0.27]
+    FRploth=plot(gca,sdf{1},'Color','k','LineWidth',1.8);%[0.16 0.38 0.27] cmap(cellNum,:)
     
     zeroLoc=preAlignWindow-3*conv_sigma;
     axis(gca,'tight');set(gca,'xlim',[preAlignWindow-50 preAlignWindow+150]);
@@ -37,12 +37,12 @@ currylim=get(gca,'YLim');
 for pulseNum=1:3
     OptoStimh=patch([preAlignWindow-(3*conv_sigma)+(IPI*(pulseNum-1)),...
         preAlignWindow-(3*conv_sigma)+(IPI*(pulseNum-1)),...
-        preAlignWindow-(3*conv_sigma)+pulseDur-1+(IPI*(pulseNum-1)),...
-        preAlignWindow-(3*conv_sigma)+pulseDur-1+(IPI*(pulseNum-1))], ...
+        preAlignWindow-(3*conv_sigma)+pulseDur+(IPI*(pulseNum-1)),...
+        preAlignWindow-(3*conv_sigma)+pulseDur+(IPI*(pulseNum-1))], ...
         [[0 currylim(2)] fliplr([0 currylim(2)])], ...
         [0 0 0 0],[0.3 0.75 0.93],'EdgeColor','none','FaceAlpha',0.5);
 end
-set(gca,'Color','white','FontSize',12,'FontName','Helvetica');
+set(gca,'FontSize',10,'FontName','Calibri');%Helvetica
 %legend
-legend([FRploth,OptoStimh],{'Average firing rate','Optical stimulation'},'FontSize',8);
-legend('boxoff')
+% legend([FRploth,OptoStimh],{'Average firing rate','Optical stimulation'},'FontSize',8);
+% legend('boxoff')

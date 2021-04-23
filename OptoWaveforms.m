@@ -17,10 +17,11 @@ for cellNum=1:length(keepCell)
     for TTLNum=1:length(TTLtimes)
         pulseIdx(:,TTLNum)=times>=TTLtimes(TTLNum) & times<=TTLtimes(TTLNum)+max([duration 0.010]); %keep min window of 10ms 
     end
-    onSpikes=logical(sum(pulseIdx,2));
+    onSpikes=any(pulseIdx,2);
     
     %off-pulse waveforms
-    offpulseSDFploth=plot(mean(waveforms(~onSpikes,:)),'linewidth',2,'color','k'); %cmap(cellNum,:)
+    offpulseSDFploth=plot(mean(waveforms(~onSpikes &...
+        times>=TTLtimes(1) & times<=TTLtimes(end),:)),'linewidth',2,'color','k'); %cmap(cellNum,:)
     
     wfSEM=std(waveforms(~onSpikes,:))/ sqrt(size(waveforms(~onSpikes,:),2)); %standard error of the mean
     wfSEM = wfSEM * 1.96; % 95% of the data will fall within 1.96 standard deviations of a normal distribution
@@ -37,7 +38,6 @@ for cellNum=1:length(keepCell)
         [mean(waveforms(onSpikes,:))-wfSEM,fliplr(mean(waveforms(onSpikes,:))+wfSEM)],...
         [0.3 0.75 0.93],'EdgeColor','none','FaceAlpha',0.5);
     
-    
     set(gca,'xTick',[0,15,30,45])
     figXlabels=get(gca,'xTickLabel');
     set(gca,'xTickLabel',cellfun(@(xlabl) num2str(str2double(xlabl)/30),...
@@ -45,8 +45,8 @@ for cellNum=1:length(keepCell)
     axis('tight');box off;
     xlabel('Time (ms)')
     ylabel('Voltage (\muV)');
-    set(gca,'Color','white','FontSize',12,'FontName','Helvetica');
-    legend([onpulseSDFploth,offpulseSDFploth],{'Pulse-evoked spikes','Spontaneous spikes'},'FontSize',8,'location','southeast');
-    legend('boxoff')
+    set(gca,'Color','white','FontSize',10,'FontName','Calibri');
+%     legend([onpulseSDFploth,offpulseSDFploth],{'Pulse-evoked spikes','Spontaneous spikes'},'FontSize',8,'location','southeast');
+%     legend('boxoff')
     
 end
