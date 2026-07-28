@@ -52,6 +52,7 @@ classdef CurationTool < handle
         MoveDropdown           matlab.ui.control.DropDown
         FoundDropdown          matlab.ui.control.DropDown
         InfoLabel              matlab.ui.control.Label
+        WindowTool                          % TimeWindowTool companion
     end
 
     properties (Constant, Access = private)
@@ -80,6 +81,9 @@ classdef CurationTool < handle
         end
 
         function delete(tool)
+            if ~isempty(tool.WindowTool) && isvalid(tool.WindowTool)
+                delete(tool.WindowTool);
+            end
             if ~isempty(tool.UIFigure) && isvalid(tool.UIFigure)
                 delete(tool.UIFigure);
             end
@@ -232,13 +236,37 @@ classdef CurationTool < handle
                 "to select it, then Move.", k, tool.ClusterMethod));
             tool.refreshAll();
         end
+
+        function refreshWindow(tool)
+            %REFRESHWINDOW Recompute after the curation time window changed.
+            tool.SelSource = "";
+            tool.SelectedRange = [];
+            tool.LineSegs = {};
+            tool.FoundLabels = [];
+            tool.computeData();
+            tool.updateFoundDropdown();
+            tool.refreshAll();
+            tw = tool.App.timeWindowSec();
+            tool.setInfo(sprintf("Time window %.1f-%.1f s: %d spikes shown.", ...
+                tw(1), tw(2), numel(tool.GlobalIdx)));
+        end
+
+        function ids = shownClusters(tool)
+            ids = tool.ClusterIds;
+        end
     end
 
     methods (Access = private)
         function computeData(tool)
             tool.ClusterIds = reshape(tool.ClusterIds, 1, []);   % keep it a row
             s = tool.App.Spikes;
-            idx = find(ismember(s.clusters, tool.ClusterIds));
+            inWin = ismember(s.clusters, tool.ClusterIds);
+            tw = tool.App.timeWindowSec();
+            if tw(1) > 0 || tw(2) < s.numSamples / s.samplingRate
+                tSec = s.spikeTimes / s.samplingRate;
+                inWin = inWin & tSec >= tw(1) & tSec <= tw(2);
+            end
+            idx = find(inWin);
             [~, order] = sort(s.spikeTimes(idx));
             tool.GlobalIdx = idx(order);
             tool.ClusterOf = s.clusters(tool.GlobalIdx);
@@ -466,6 +494,17 @@ classdef CurationTool < handle
                 tool.SettingsMenus.fixed(kk-1) = uimenu(num, Text=string(kk), ...
                     MenuSelectedFcn=@(~, ~) tool.setClusterK(kk));
             end
+
+            tools = uimenu(tool.UIFigure, Text="Tools");
+            uimenu(tools, Text="Time-window split...", ...
+                MenuSelectedFcn=@(~, ~) tool.launchWindowTool());
+        end
+
+        function launchWindowTool(tool)
+            if ~isempty(tool.WindowTool) && isvalid(tool.WindowTool)
+                delete(tool.WindowTool);
+            end
+            tool.WindowTool = TimeWindowTool(tool.App, tool);
         end
 
         function setMethod(tool, method)

@@ -54,6 +54,7 @@ classdef SpikeVisualizationApp < handle
         Traces = []            % memmapfile of the raw data, lazily opened
         TraceCenter double = NaN
         TraceHalfWidth double = NaN
+        TimeWindow double = []  % [start stop] s that curation is restricted to
 
         ThresholdY double = []             % threshold line levels, microvolts
         ThresholdHandles = images.roi.Line.empty
@@ -150,6 +151,7 @@ classdef SpikeVisualizationApp < handle
             app.Traces = [];
             app.TraceCenter = NaN;
             app.TraceYLim = [];
+            app.TimeWindow = [];
             app.ThresholdY = [];
             app.UndoStack = {};
             app.RedoStack = {};
@@ -1000,6 +1002,54 @@ classdef SpikeVisualizationApp < handle
         function cids = selectedClusterIds(app)
             %SELECTEDCLUSTERIDS Cluster ids currently selected in the list.
             cids = app.selectedClusters();
+        end
+
+        function [tSec, uv] = traceExcerpt(app, centerSec, halfSec)
+            %TRACEEXCERPT Data-channel excerpt (seconds, microvolts) around a time.
+            [tSec, uv] = deal([]);
+            if ~app.ensureTraces()
+                return
+            end
+            fs = app.Spikes.samplingRate;
+            half = round(halfSec * fs);
+            c = round(centerSec * fs);
+            first = max(1, c - half);
+            last = min(app.Spikes.numSamples, c + half);
+            ch = app.Spikes.dataChannel + 1;
+            raw = single(app.Traces.Data.raw(ch, first:last));
+            scv = 1;
+            if isfield(app.Spikes, "uvPerADC")
+                scv = app.Spikes.uvPerADC;
+            end
+            uv = raw * scv;
+            tSec = (first:last) / fs;
+        end
+
+        function w = timeWindowSec(app)
+            %TIMEWINDOWSEC Current curation time window [start stop] in seconds.
+            dur = app.Spikes.numSamples / app.Spikes.samplingRate;
+            if numel(app.TimeWindow) == 2
+                w = [max(0, app.TimeWindow(1)), min(dur, app.TimeWindow(2))];
+            else
+                w = [0, dur];
+            end
+        end
+
+        function setTimeWindow(app, w)
+            %SETTIMEWINDOW Restrict curation to spikes within [start stop] seconds.
+            %   Refreshes the open Curation tool. An empty window means "all".
+            arguments
+                app
+                w double
+            end
+            if numel(w) == 2
+                app.TimeWindow = sort(reshape(w, 1, []));
+            else
+                app.TimeWindow = [];
+            end
+            if ~isempty(app.CurateTool) && isvalid(app.CurateTool)
+                app.CurateTool.refreshWindow();
+            end
         end
 
         function c = clusterColor(app, cid)

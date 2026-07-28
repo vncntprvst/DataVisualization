@@ -16,6 +16,7 @@ the path.
 |------|---------|
 | `SpikeVisualizationApp.m` | Main app: cluster list, waveforms, mean±SD, amplitude drift, ISI (log), ACG, PC features, and a scrollable raw-trace view with spike markers, zoom, and threshold lines. Cluster labelling, merging and saving. |
 | `CurationTool.m` | Companion window with three linked panels (ISI, PC features, waveforms). Select spikes by circling ISI bars, lassoing PC features, or drawing a line across the waveforms, then split or merge. |
+| `TimeWindowTool.m` | Companion (Curation → Tools) that restricts curation to a draggable time band — for splitting units that swap amplitude over time on one electrode. |
 | `LoadSpikesPhy.m` | Reader for a Phy export folder (`params.py`, `spike_*.npy`, `pc_features.npy`, `cluster_*.tsv`), extracting one waveform per spike from the raw data channel. |
 | `addons/*.m` | Drop-in scripts exposed under Options → Run script. |
 | `addons/add_cs_cluster.m` | Injects the P-sort complex-spike train into a Phy folder as its own cluster (see below). |
@@ -144,6 +145,17 @@ reloads. `add_cs_cluster` (Add CS cluster) ships as the first such add-on.
    one more, not currently shown, from the "also merge with…" dropdown). Clusters
    merge into the lowest id. This ignores the selection — use *Move selected* to
    act on selected spikes only.
+
+### Splitting units that cross in amplitude (Curation → Tools → Time-window split)
+
+For a single electrode where two units swap amplitude rank over time, open the
+**Time-window split** tool. It shows amplitude-vs-time for the curated clusters
+with two draggable vertical bars (start/stop) and a raw-trace strip at the bar
+you last moved. Moving a bar restricts the Curation widget to the clusters'
+spikes **within that time band**, so you can isolate an interval where the two
+amplitudes are separated, split there, then step to the next band and stitch.
+Buttons snap the start to 0, the stop to the end, or revert to the whole
+recording.
 
 In the main window, **Merge selected** merges the clusters selected in the list,
 and **Realign selected** shifts each selected cluster's spike times so its mean
