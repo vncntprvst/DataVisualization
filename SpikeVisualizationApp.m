@@ -50,6 +50,7 @@ classdef SpikeVisualizationApp < handle
         TraceSlider            matlab.ui.control.Slider
         InfoLabel              matlab.ui.control.Label
         CurateTool                         % CurationTool handle (companion)
+        PETHWindow                         % PETHTool handle (companion)
 
         Traces = []            % memmapfile of the raw data, lazily opened
         TraceCenter double = NaN
@@ -114,6 +115,9 @@ classdef SpikeVisualizationApp < handle
         function delete(app)
             if ~isempty(app.CurateTool) && isvalid(app.CurateTool)
                 delete(app.CurateTool);
+            end
+            if ~isempty(app.PETHWindow) && isvalid(app.PETHWindow)
+                delete(app.PETHWindow);
             end
             if isvalid(app.UIFigure)
                 delete(app.UIFigure);
@@ -1004,6 +1008,69 @@ classdef SpikeVisualizationApp < handle
             cids = app.selectedClusters();
         end
 
+        function [uv, firstSample] = traceSamples(app, firstSample, lastSample)
+            %TRACESAMPLES Data-channel samples (microvolts) over [first last].
+            uv = [];
+            if ~app.ensureTraces()
+                return
+            end
+            firstSample = max(1, round(firstSample));
+            lastSample = min(app.Spikes.numSamples, round(lastSample));
+            ch = app.Spikes.dataChannel + 1;
+            raw = single(app.Traces.Data.raw(ch, firstSample:lastSample));
+            scv = 1;
+            if isfield(app.Spikes, "uvPerADC")
+                scv = app.Spikes.uvPerADC;
+            end
+            uv = raw * scv;
+        end
+
+        function addSpikes(app, newTimes, clusterId)
+            %ADDSPIKES Append recovered spikes (sample times) to a cluster.
+            arguments
+                app
+                newTimes (:, 1) double
+                clusterId (1, 1) double
+            end
+            if isempty(newTimes)
+                return
+            end
+            app.pushUndo();
+            newTimes = round(newTimes(:));
+            n = numel(newTimes);
+            wf = app.extractWaveformsAt(newTimes);
+            app.Spikes.spikeTimes = [app.Spikes.spikeTimes; newTimes];
+            app.Spikes.clusters = [app.Spikes.clusters; repmat(clusterId, n, 1)];
+            app.Spikes.waveforms = [app.Spikes.waveforms; wf];
+            app.Spikes.wfMinADC = [app.Spikes.wfMinADC; double(min(wf, [], 2))];
+            app.Spikes.wfMaxADC = [app.Spikes.wfMaxADC; double(max(wf, [], 2))];
+            app.Spikes.amplitudePP = [app.Spikes.amplitudePP; ...
+                double(max(wf, [], 2) - min(wf, [], 2))];
+            if isfield(app.Spikes, "amplitudes")
+                app.Spikes.amplitudes = [app.Spikes.amplitudes; nan(n, 1)];
+            end
+            if isfield(app.Spikes, "templates")
+                app.Spikes.templates = [app.Spikes.templates; nan(n, 1)];
+            end
+            if isfield(app.Spikes, "pcFeatures") && ~isempty(app.Spikes.pcFeatures)
+                pad = zeros([n, size(app.Spikes.pcFeatures, 2), ...
+                    size(app.Spikes.pcFeatures, 3)], "single");
+                app.Spikes.pcFeatures = cat(1, app.Spikes.pcFeatures, pad);
+            end
+            if isfield(app.Spikes, "isCS")
+                app.Spikes.isCS = [app.Spikes.isCS; false(n, 1)];
+            end
+            app.Spikes.clusterIds = unique(app.Spikes.clusters);
+            app.syncClassification();
+            app.updateClusterList();
+            app.refreshAll();
+            if ~isempty(app.CurateTool) && isvalid(app.CurateTool)
+                app.CurateTool.refreshWindow();
+            end
+            app.setInfo(sprintf("Added %d recovered spikes to cluster %d.", ...
+                n, clusterId));
+        end
+
         function [tSec, uv] = traceExcerpt(app, centerSec, halfSec)
             %TRACEEXCERPT Data-channel excerpt (seconds, microvolts) around a time.
             [tSec, uv] = deal([]);
@@ -1326,6 +1393,21 @@ classdef SpikeVisualizationApp < handle
                 MenuSelectedFcn=@(~, ~) app.setRealignMode("trough"));
             app.RealignMenus.firstpeak = uimenu(ra, Text="First peak", ...
                 MenuSelectedFcn=@(~, ~) app.setRealignMode("firstpeak"));
+
+            tools = uimenu(app.UIFigure, Text="Tools");
+            uimenu(tools, Text="PETH / event alignment...", ...
+                MenuSelectedFcn=@(~, ~) app.launchPETH());
+        end
+
+        function launchPETH(app)
+            if isempty(app.Spikes) || ~isfield(app.Spikes, "phyDir")
+                app.setInfo("Load a Phy sorting before opening the PETH tool.");
+                return
+            end
+            if ~isempty(app.PETHWindow) && isvalid(app.PETHWindow)
+                delete(app.PETHWindow);
+            end
+            app.PETHWindow = PETHTool(app);
         end
 
         function setRealignMode(app, mode)

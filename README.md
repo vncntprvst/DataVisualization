@@ -17,6 +17,9 @@ the path.
 | `SpikeVisualizationApp.m` | Main app: cluster list, waveforms, mean±SD, amplitude drift, ISI (log), ACG, PC features, and a scrollable raw-trace view with spike markers, zoom, and threshold lines. Cluster labelling, merging and saving. |
 | `CurationTool.m` | Companion window with three linked panels (ISI, PC features, waveforms). Select spikes by circling ISI bars, lassoing PC features, or drawing a line across the waveforms, then split or merge. |
 | `TimeWindowTool.m` | Companion (Curation → Tools) that restricts curation to a draggable time band — for splitting units that swap amplitude over time on one electrode. |
+| `RecoverSpikesTool.m` | Companion (Curation → Tools) that re-detects spikes the sorter missed by template-matching a cluster's mean waveform against the raw trace. |
+| `PETHTool.m` | Companion (main app → Tools) that shows peri-event time histograms of the selected clusters aligned to loaded behavioural events. |
+| `LoadEvents.m` | Reader for an events file (`events.mat`, or long `events.tsv`/`.csv`) of alignment times in recording seconds. |
 | `LoadSpikesPhy.m` | Reader for a Phy export folder (`params.py`, `spike_*.npy`, `pc_features.npy`, `cluster_*.tsv`), extracting one waveform per spike from the raw data channel. |
 | `addons/*.m` | Drop-in scripts exposed under Options → Run script. |
 | `addons/add_cs_cluster.m` | Injects the P-sort complex-spike train into a Phy folder as its own cluster (see below). |
@@ -119,7 +122,9 @@ reloads. `add_cs_cluster` (Add CS cluster) ships as the first such add-on.
 1. Select one or more clusters and click **Curation...**. The window has three
    linked panels — ISI histogram, PC features (joint PCA), and waveforms — each
    overlaying every selected cluster in its own colour, so you can compare two
-   clusters before merging. The current selection is shown in black.
+   clusters before merging. The current selection is shown in black. The PC
+   projection is chosen with the **PC view** dropdown above the plots, and the
+   controls are grouped into **Selection**, **Clustering**, and **Actions**.
 2. Select spikes any of these ways (the selection shows in all three panels):
    * **Circle ISI bars** – freehand over the bars close to 0 in the (log) ISI
      histogram; selects the spikes taking part in those short intervals.
@@ -155,7 +160,23 @@ you last moved. Moving a bar restricts the Curation widget to the clusters'
 spikes **within that time band**, so you can isolate an interval where the two
 amplitudes are separated, split there, then step to the next band and stitch.
 Buttons snap the start to 0, the stop to the end, or revert to the whole
-recording.
+recording. The tool and the Curation widget are linked live: a selection in
+Curation is highlighted on the amplitude plot, and **Lasso select** there sets
+the Curation selection — no re-applying or reopening.
+
+### Recovering spikes the sorter missed (Curation → Tools → Recover missing spikes)
+
+To recover spikes a unit lost — e.g. its low-amplitude spikes early in a
+recording — open **Recover missing spikes**. It takes the target cluster's mean
+waveform as a template, finds threshold-crossing events on the raw trace within a
+time window whose shape correlates with the template above a cutoff and that are
+**not** within the refractory period of any existing spike, and previews them
+(black ×) on the amplitude-vs-time and raw-trace panels. Lower the detection
+threshold (µV) to catch smaller spikes; raise the correlation to stay specific to
+the cluster's shape. **Accept** adds them to the cluster (undoable). Because the
+already-sorted spikes are deduped out, in a window where the unit was under-sorted
+the recovered events are its missing spikes — they trace the unit's amplitude
+drift straight into its sorted spikes.
 
 In the main window, **Merge selected** merges the clusters selected in the list,
 and **Realign selected** shifts each selected cluster's spike times so its mean
@@ -190,6 +211,28 @@ newClusterId = tool.splitSelected();
 tool.mergeWith(otherClusterId);
 app.setThresholds([-80 250]);               % amplitude-window highlight, µV
 ```
+
+## PETHs (main app → Tools → PETH / event alignment)
+
+Open the **PETH** tool to see peri-event time histograms of the selected
+cluster(s) aligned to behavioural events. Events load automatically from an
+`events.mat` in the Phy folder, of the form:
+
+```matlab
+events.saccade = [...];   % alignment times in RECORDING seconds (same clock as spike_times/fs)
+events.target  = [...];
+events.reward  = [...];
+events_cond.saccade = ["2","6",...];   % optional per-occurrence condition labels
+meta = struct(...);                    % optional
+```
+
+The widget shows a grid of histogram PETHs — one row per selected cluster, one
+column per chosen event (pick events in the list; set bin size and pre/post
+window in ms). **Split by condition** replaces the bars with a smoothed spike
+density function (Gaussian, mean ± SEM shading) per condition label (e.g. saccade
+direction), which reads better than overlaid bars. Change the cluster selection
+in the main window and click **Refresh**. A long `events.tsv`/`.csv` (columns
+`event`, `time_s`, optional `condition`) is also accepted via **Load events…**.
 
 ## Saving
 

@@ -31,6 +31,11 @@ classdef TimeWindowTool < handle
         Suppress logical = false
         FocusSec double        % time the trace excerpt is centred on
         AmpYLim double
+
+        CurationSelIdx double = []   % app spike indices selected in Curation
+        PlotIdx double = []          % app spike index behind each amp point
+        PlotX double = []            % time (s) of each amp point
+        PlotY double = []            % peak-to-peak (uV) of each amp point
     end
 
     methods
@@ -42,11 +47,11 @@ classdef TimeWindowTool < handle
             tool.App = app;
             tool.Curate = curate;
             tool.ClusterIds = curate.shownClusters();
+            tool.CurationSelIdx = curate.globalSelection();
             w = app.timeWindowSec();
             tool.FocusSec = w(1);
             tool.buildUI();
-            tool.plotAmplitude();
-            tool.drawBoundaries();
+            tool.redrawAmp();
             tool.plotTrace();
             tool.updateInfo();
         end
@@ -55,6 +60,12 @@ classdef TimeWindowTool < handle
             if ~isempty(tool.UIFigure) && isvalid(tool.UIFigure)
                 delete(tool.UIFigure);
             end
+        end
+
+        function setCurationSelection(tool, globalIdx)
+            %SETCURATIONSELECTION Reflect the Curation selection here (live link).
+            tool.CurationSelIdx = globalIdx;
+            tool.redrawAmp();
         end
     end
 
@@ -75,9 +86,12 @@ classdef TimeWindowTool < handle
             tool.TraceAxes = uiaxes(g);
             tool.TraceAxes.Layout.Row = 2;
 
-            btns = uigridlayout(g, [1 4]);
+            btns = uigridlayout(g, [1 5]);
             btns.Layout.Row = 3;
             btns.Padding = [0 0 0 0];
+            btns.ColumnWidth = {130, 120, 120, 160, "1x"};
+            uibutton(btns, Text="Lasso select", BackgroundColor=[0.9 0.9 1], ...
+                ButtonPushedFcn=@(~, ~) tool.lassoSelect());
             uibutton(btns, Text="Snap start -> 0", ...
                 ButtonPushedFcn=@(~, ~) tool.snapStart());
             uibutton(btns, Text="Snap stop -> end", ...
@@ -85,6 +99,12 @@ classdef TimeWindowTool < handle
             uibutton(btns, Text="Revert (whole recording)", ...
                 ButtonPushedFcn=@(~, ~) tool.revert());
             tool.InfoLabel = uilabel(btns, Text="");
+        end
+
+        function redrawAmp(tool)
+            % Redraw the amplitude plot then the boundary bars (cla drops them).
+            tool.plotAmplitude();
+            tool.drawBoundaries();
         end
 
         function plotAmplitude(tool)
@@ -96,18 +116,40 @@ classdef TimeWindowTool < handle
             if isfield(s, "uvPerADC")
                 uv = s.uvPerADC;
             end
+            allIdx = find(ismember(s.clusters, tool.ClusterIds));
+            tool.PlotIdx = allIdx;
+            tool.PlotX = s.spikeTimes(allIdx) / s.samplingRate;
+            tool.PlotY = s.amplitudePP(allIdx) * uv;
             for cid = tool.ClusterIds
-                m = s.clusters == cid;
-                scatter(ax, s.spikeTimes(m) / s.samplingRate, ...
-                    s.amplitudePP(m) * uv, 4, tool.App.clusterColor(cid), ...
-                    "filled", MarkerFaceAlpha=0.3);
+                m = s.clusters(allIdx) == cid;
+                scatter(ax, tool.PlotX(m), tool.PlotY(m), 4, ...
+                    tool.App.clusterColor(cid), "filled", MarkerFaceAlpha=0.3);
+            end
+            hi = ismember(allIdx, tool.CurationSelIdx);   % Curation selection
+            if any(hi)
+                scatter(ax, tool.PlotX(hi), tool.PlotY(hi), 16, [0 0 0], ...
+                    "o", LineWidth=0.75);
             end
             hold(ax, "off");
-            title(ax, "Amplitude vs time (drag the bars)");
+            title(ax, sprintf("Amplitude vs time (drag bars; %d selected)", sum(hi)));
             xlabel(ax, "Time (s)");
             ylabel(ax, "Peak-to-peak (\muV)");
             xlim(ax, [0 tool.duration()]);
             tool.AmpYLim = ylim(ax);
+        end
+
+        function lassoSelect(tool)
+            %LASSOSELECT Freehand-select amplitude points -> Curation selection.
+            roi = drawfreehand(tool.AmpAxes, Color=[0.1 0.1 0.1]);
+            if isempty(roi) || ~isvalid(roi) || size(roi.Position, 1) < 3
+                return
+            end
+            poly = roi.Position;
+            delete(roi);
+            inside = inpolygon(tool.PlotX, tool.PlotY, poly(:, 1), poly(:, 2));
+            if isvalid(tool.Curate)
+                tool.Curate.selectGlobal(tool.PlotIdx(inside));
+            end
         end
 
         function drawBoundaries(tool)

@@ -53,6 +53,7 @@ classdef CurationTool < handle
         FoundDropdown          matlab.ui.control.DropDown
         InfoLabel              matlab.ui.control.Label
         WindowTool                          % TimeWindowTool companion
+        RecoverTool                         % RecoverSpikesTool companion
     end
 
     properties (Constant, Access = private)
@@ -83,6 +84,9 @@ classdef CurationTool < handle
         function delete(tool)
             if ~isempty(tool.WindowTool) && isvalid(tool.WindowTool)
                 delete(tool.WindowTool);
+            end
+            if ~isempty(tool.RecoverTool) && isvalid(tool.RecoverTool)
+                delete(tool.RecoverTool);
             end
             if ~isempty(tool.UIFigure) && isvalid(tool.UIFigure)
                 delete(tool.UIFigure);
@@ -254,6 +258,20 @@ classdef CurationTool < handle
         function ids = shownClusters(tool)
             ids = tool.ClusterIds;
         end
+
+        function g = globalSelection(tool)
+            %GLOBALSELECTION App spike indices currently selected in this tool.
+            g = tool.GlobalIdx(tool.SelMask);
+        end
+
+        function selectGlobal(tool, globalIdx)
+            %SELECTGLOBAL Select the given app spike indices (from a linked tool).
+            tool.SelMask = ismember(tool.GlobalIdx, globalIdx);
+            tool.SelSource = "external";
+            tool.setInfo(sprintf("%d spikes selected (from time-window lasso).", ...
+                sum(tool.SelMask)));
+            tool.refreshAll();
+        end
     end
 
     methods (Access = private)
@@ -418,6 +436,9 @@ classdef CurationTool < handle
             tool.refreshISI();
             tool.refreshPC();
             tool.refreshWave();
+            if ~isempty(tool.WindowTool) && isvalid(tool.WindowTool)
+                tool.WindowTool.setCurationSelection(tool.globalSelection());
+            end
         end
 
         function name = windowName(tool)
@@ -426,48 +447,68 @@ classdef CurationTool < handle
 
         function buildUI(tool)
             tool.UIFigure = uifigure(Name=tool.windowName(), ...
-                Position=[120 120 1220 660]);
+                Position=[120 110 1240 680]);
             tool.buildSettingsMenu();
             outer = uigridlayout(tool.UIFigure, [4 1]);
-            outer.RowHeight = {"1x", 34, 34, 18};
+            outer.RowHeight = {24, "1x", 78, 18};
             outer.Padding = [6 6 6 6];
             outer.RowSpacing = 4;
 
+            % View controls above the panels (PC projection is over the scatter).
+            head = uigridlayout(outer, [1 3]);
+            head.Layout.Row = 1;
+            head.Padding = [0 0 0 0];
+            uilabel(head, Text="");
+            pcCell = uigridlayout(head, [1 2]);
+            pcCell.Layout.Column = 2;
+            pcCell.ColumnWidth = {"fit", "1x"};
+            pcCell.Padding = [0 0 0 0];
+            uilabel(pcCell, Text="PC view:", HorizontalAlignment="right");
+            tool.PCDropdown = uidropdown(pcCell, ...
+                Items=["PC1 vs PC2", "PC1 vs PC3", "PC2 vs PC3"], ...
+                ValueChangedFcn=@(~, ~) tool.refreshPC());
+            uilabel(head, Text="");
+
             axesRow = uigridlayout(outer, [1 3]);
-            axesRow.Layout.Row = 1;
+            axesRow.Layout.Row = 2;
             axesRow.Padding = [0 0 0 0];
             tool.ISIAxes = uiaxes(axesRow);
             tool.PCAxes = uiaxes(axesRow);
             tool.WaveAxes = uiaxes(axesRow);
 
-            % Row A: selection tools.
-            rowA = uigridlayout(outer, [1 5]);
-            rowA.Layout.Row = 2;
-            rowA.Padding = [0 0 0 0];
-            uibutton(rowA, Text="Circle ISI bars", ...
-                ButtonPushedFcn=@(~, ~) tool.circleISI());
-            uibutton(rowA, Text="Lasso PC features", ...
-                ButtonPushedFcn=@(~, ~) tool.lassoPC());
-            uibutton(rowA, Text="Line select (add)", ...
-                ButtonPushedFcn=@(~, ~) tool.lineSelect());
-            uibutton(rowA, Text="Clear lines/found", ...
-                ButtonPushedFcn=@(~, ~) tool.clearLines());
-            uibutton(rowA, Text="Find clusters", BackgroundColor=[0.9 0.9 1], ...
-                ButtonPushedFcn=@(~, ~) tool.findClusters());
+            % Button groups by category.
+            groups = uigridlayout(outer, [1 3]);
+            groups.Layout.Row = 3;
+            groups.Padding = [0 0 0 0];
+            groups.ColumnWidth = {"1.3x", "0.85x", "1.15x"};
 
-            % Row B: view, found selection, and actions.
-            rowB = uigridlayout(outer, [1 5]);
-            rowB.Layout.Row = 3;
-            rowB.Padding = [0 0 0 0];
-            tool.PCDropdown = uidropdown(rowB, ...
-                Items=["PC1 vs PC2", "PC1 vs PC3", "PC2 vs PC3"], ...
-                ValueChangedFcn=@(~, ~) tool.refreshPC());
-            tool.FoundDropdown = uidropdown(rowB, Items={'(found: none)'}, ...
+            sel = uipanel(groups, Title="Selection");
+            selg = uigridlayout(sel, [1 4]);
+            selg.Padding = [4 2 4 2];
+            uibutton(selg, Text="Circle ISI", ...
+                ButtonPushedFcn=@(~, ~) tool.circleISI());
+            uibutton(selg, Text="Lasso PC", ...
+                ButtonPushedFcn=@(~, ~) tool.lassoPC());
+            uibutton(selg, Text="Line select", ...
+                ButtonPushedFcn=@(~, ~) tool.lineSelect());
+            uibutton(selg, Text="Clear", ...
+                ButtonPushedFcn=@(~, ~) tool.clearLines());
+
+            clu = uipanel(groups, Title="Clustering");
+            clug = uigridlayout(clu, [1 2]);
+            clug.Padding = [4 2 4 2];
+            uibutton(clug, Text="Find clusters", BackgroundColor=[0.9 0.9 1], ...
+                ButtonPushedFcn=@(~, ~) tool.findClusters());
+            tool.FoundDropdown = uidropdown(clug, Items={'(select found)'}, ...
                 ValueChangedFcn=@(s, ~) tool.selectFound(s.Value));
-            tool.MoveDropdown = uidropdown(rowB, Items={'(new cluster)'});
-            uibutton(rowB, Text="Move selected", BackgroundColor=[1 0.85 0.85], ...
+
+            act = uipanel(groups, Title="Actions");
+            actg = uigridlayout(act, [1 3]);
+            actg.Padding = [4 2 4 2];
+            tool.MoveDropdown = uidropdown(actg, Items={'(new cluster)'});
+            uibutton(actg, Text="Move selected", BackgroundColor=[1 0.85 0.85], ...
                 ButtonPushedFcn=@(~, ~) tool.moveSelected());
-            uibutton(rowB, Text="Merge shown", BackgroundColor=[0.85 1 0.85], ...
+            uibutton(actg, Text="Merge shown", BackgroundColor=[0.85 1 0.85], ...
                 ButtonPushedFcn=@(~, ~) tool.mergeShown());
 
             tool.InfoLabel = uilabel(outer, Text="", FontColor=[0.2 0.2 0.2]);
@@ -498,6 +539,8 @@ classdef CurationTool < handle
             tools = uimenu(tool.UIFigure, Text="Tools");
             uimenu(tools, Text="Time-window split...", ...
                 MenuSelectedFcn=@(~, ~) tool.launchWindowTool());
+            uimenu(tools, Text="Recover missing spikes...", ...
+                MenuSelectedFcn=@(~, ~) tool.launchRecoverTool());
         end
 
         function launchWindowTool(tool)
@@ -505,6 +548,13 @@ classdef CurationTool < handle
                 delete(tool.WindowTool);
             end
             tool.WindowTool = TimeWindowTool(tool.App, tool);
+        end
+
+        function launchRecoverTool(tool)
+            if ~isempty(tool.RecoverTool) && isvalid(tool.RecoverTool)
+                delete(tool.RecoverTool);
+            end
+            tool.RecoverTool = RecoverSpikesTool(tool.App, tool);
         end
 
         function setMethod(tool, method)
@@ -533,7 +583,7 @@ classdef CurationTool < handle
 
         function updateFoundDropdown(tool)
             if isempty(tool.FoundLabels)
-                tool.FoundDropdown.Items = {'(found: none)'};
+                tool.FoundDropdown.Items = {'(select found)'};
                 tool.FoundDropdown.ItemsData = [];
                 return
             end
