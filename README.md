@@ -20,7 +20,10 @@ the path.
 | `RecoverSpikesTool.m` | Companion (Curation → Tools) that re-detects spikes the sorter missed by template-matching a cluster's mean waveform against the raw trace. |
 | `PETHTool.m` | Companion (main app → Tools) that shows peri-event time histograms of the selected clusters aligned to loaded behavioural events. |
 | `LoadEvents.m` | Reader for an events file (`events.mat`, or long `events.tsv`/`.csv`) of alignment times in recording seconds. |
+| `DatasetBrowser.m` | Companion (main app → Tools, or standalone) that browses a dataset table by unit or recording, filters/sorts it, and opens an entry's sorting (and unit) in the app. |
+| `LoadDataset.m` | Reader for a dataset table (`dataset.tsv`/`.csv`, one row per unit) — returns the table plus column info. |
 | `LoadSpikesPhy.m` | Reader for a Phy export folder (`params.py`, `spike_*.npy`, `pc_features.npy`, `cluster_*.tsv`), extracting one waveform per spike from the raw data channel. |
+| `LoadSpikesOnline.m` | Reader for an online-sorted REX session (`<tag>_REX.mat`) — spike times only, no raw trace or waveforms. |
 | `addons/*.m` | Drop-in scripts exposed under Options → Run script. |
 | `addons/add_cs_cluster.m` | Injects the P-sort complex-spike train into a Phy folder as its own cluster (see below). |
 
@@ -233,6 +236,41 @@ density function (Gaussian, mean ± SEM shading) per condition label (e.g. sacca
 direction), which reads better than overlaid bars. Change the cluster selection
 in the main window and click **Refresh**. A long `events.tsv`/`.csv` (columns
 `event`, `time_s`, optional `condition`) is also accepted via **Load events…**.
+
+## Dataset browser (main app → Tools → Dataset browser)
+
+Open the **Dataset browser** to work through a whole dataset instead of one folder
+at a time. Launch it two ways: from an open app (**Tools → Dataset browser**), or
+**standalone** by running `DatasetBrowser` — the first time you open an entry
+it launches a SpikeVisualizationApp for it and reuses that window afterwards. It
+reads a dataset table (default `D:\CB paper\0-data\dataset.tsv`, one row per unit)
+and shows it two ways — **Units** (one row per unit) or
+**Recordings** (aggregated per `recording_tag`, with a unit count). Filter by
+region / task / bombcell / purkinje, type in the **Search** box (matches
+`recording_tag` and `unit`), and click a column header to sort.
+
+**Open selected** (or double-click a row) loads that entry into the main app:
+
+- a **recording** loads `<sortings root>\<recording_tag>\phy_postmerge`;
+- a **unit** loads the sorting, selects that unit's cluster (resolved from its
+  `merged_label` via `final_labels.tsv`) and opens the CurationTool on it — the
+  main cluster table is still there to add other units of the recording.
+
+On first use the browser asks you to confirm the **sortings root** (defaulting to
+`…\curation_all`) and remembers it; change it later with **Sortings root…**. The
+currently-loaded recording is highlighted; rows with no sorting folder are greyed
+out. A tag that has no Phy folder but does have an online (REX) session falls back
+to loading that session spikes-only (see below).
+
+## Spikes-only (online-sorted) sources
+
+Some units were sorted **online** (REX) and have **only spike times** — no raw
+trace and no waveforms. Open such a session with **Load file (.mat)…** and pick a
+`<tag>_REX.mat` (or let the Dataset browser do it). The app detects the missing
+waveforms/trace and hides the waveform, mean, PC-feature and raw-trace panels,
+reflowing to show the **ISI** and **autocorrelogram** (and amplitude drift when
+available) — everything that works from spike times alone. The same happens for
+any Phy folder whose `data.dat` is absent.
 
 ## Saving
 

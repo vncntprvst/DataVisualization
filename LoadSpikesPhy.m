@@ -86,8 +86,15 @@ function spikes = LoadSpikesPhy(phyDir, options)
     % --- raw data + waveform extraction ---
     numSamples = NaN;
     if isfile(spikes.datPath)
-        fileBytes = dir(spikes.datPath).bytes;
-        numSamples = fileBytes / 2 / spikes.numChannels;   % int16 = 2 bytes
+        totalInt16 = dir(spikes.datPath).bytes / 2;   % int16 = 2 bytes
+        % Some exports declare the wrong n_channels_dat in params.py (e.g. a
+        % 2-channel ch0-real/ch1-dup file labelled 1 channel). Reading it with
+        % the wrong count interleaves the channels, so waveforms turn to noise
+        % and spike markers land at the wrong time. Infer the true count from
+        % where the spikes fall and how sharply they align.
+        spikes.numChannels = inferChannelCount(spikes.datPath, totalInt16, ...
+            spikes.numChannels, spikes.spikeTimes, spikes.clusters);
+        numSamples = floor(totalInt16 / spikes.numChannels);
     end
     spikes.numSamples = numSamples;
     spikes.waveformWindow = [options.PreSamples options.PostSamples];
@@ -147,6 +154,57 @@ function waveforms = extractWaveforms(datPath, numSamples, numChannels, ...
         valid = idx >= 1 & idx <= numSamples;
         waveforms(k, valid) = channelData(idx(valid));
     end
+end
+
+function nCh = inferChannelCount(datPath, totalInt16, nChParam, spikeTimes, clusters)
+%INFERCHANNELCOUNT Best channel count for a flat int16 file, cross-checked
+%   against the spikes. Trusts params unless another count both fits the spike
+%   range and aligns the waveforms far more sharply (params can be wrong).
+    nCh = nChParam;
+    maxSt = max(spikeTimes);
+    if isempty(maxSt) || maxSt <= 0
+        return
+    end
+    % Candidate counts whose per-channel length still contains every spike.
+    cand = unique([nChParam, 1, 2, round(totalInt16 / maxSt)]);
+    cand = cand(cand >= 1 & cand <= 8 & floor(totalInt16 ./ cand) >= maxSt);
+    if numel(cand) <= 1
+        if ~isempty(cand)
+            nCh = cand(1);
+        end
+        return
+    end
+    % Pick the count under which the dominant cluster's troughs line up best
+    % (a wrong count interleaves channels -> troughs scatter at random phases).
+    c0 = mode(clusters);
+    s0 = spikeTimes(clusters == c0);
+    bestScore = -inf;
+    for k = 1:numel(cand)
+        ns = floor(totalInt16 / cand(k));
+        score = alignmentScore(datPath, cand(k), ns, s0);
+        if score > bestScore
+            bestScore = score;
+            nCh = cand(k);
+        end
+    end
+end
+
+function score = alignmentScore(datPath, nCh, ns, times)
+%ALIGNMENTSCORE Fraction of waveform troughs within +/-2 samples of their
+%   median position (high for a correctly-read channel, low for interleaved).
+    score = -inf;
+    times = times(times > 50 & times < ns - 50);
+    if numel(times) < 20
+        return
+    end
+    times = times(round(linspace(1, numel(times), min(200, numel(times)))));
+    map = memmapfile(datPath, Format={'int16', [nCh ns], 'raw'});
+    troughs = zeros(numel(times), 1);
+    for i = 1:numel(times)
+        w = single(map.Data.raw(1, times(i) - 40:times(i) + 40));
+        [~, troughs(i)] = min(w);
+    end
+    score = mean(abs(troughs - median(troughs)) <= 2);
 end
 
 function clusterTable = readClusterTables(phyDir, clusterIds)

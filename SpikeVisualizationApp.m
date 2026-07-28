@@ -48,9 +48,12 @@ classdef SpikeVisualizationApp < handle
         FeatureAxes            matlab.ui.control.UIAxes
         TraceAxes              matlab.ui.control.UIAxes
         TraceSlider            matlab.ui.control.Slider
+        PlotGrid               matlab.ui.container.GridLayout   % host of the plot axes
+        NavGrid                matlab.ui.container.GridLayout   % trace navigation row
         InfoLabel              matlab.ui.control.Label
         CurateTool                         % CurationTool handle (companion)
         PETHWindow                         % PETHTool handle (companion)
+        BrowserWindow                      % DatasetBrowser handle (companion)
 
         Traces = []            % memmapfile of the raw data, lazily opened
         TraceCenter double = NaN
@@ -119,6 +122,9 @@ classdef SpikeVisualizationApp < handle
             if ~isempty(app.PETHWindow) && isvalid(app.PETHWindow)
                 delete(app.PETHWindow);
             end
+            if ~isempty(app.BrowserWindow) && isvalid(app.BrowserWindow)
+                delete(app.BrowserWindow);
+            end
             if isvalid(app.UIFigure)
                 delete(app.UIFigure);
             end
@@ -170,6 +176,7 @@ classdef SpikeVisualizationApp < handle
             counts = arrayfun(@(c) sum(app.Spikes.clusters == c), ids);
             [~, best] = max(counts);
             app.setSelectedClusters(ids(best));
+            app.positionPlots();        % show/hide panels for this source
             app.refreshAll();
             app.setInfo(sprintf("%s  |  %d clusters, %d spikes, %.0f kHz, %.0f s", ...
                 app.Spikes.name, numel(ids), numel(app.Spikes.clusters), ...
@@ -180,6 +187,52 @@ classdef SpikeVisualizationApp < handle
 
     % ------------------------------------------------------------------ views
     methods (Access = private)
+        function positionPlots(app)
+            %POSITIONPLOTS Lay out (and show/hide) the plot panels for the loaded
+            %   source. Waveform-derived panels (overlay, mean, PC features) and
+            %   the raw-trace strip are hidden for spikes-only sources (e.g.
+            %   online-sorted units with no usable raw trace); ISI, correlograms
+            %   and amplitude drift always work from spike times alone.
+            hasWf = isfield(app.Spikes, "waveforms") && ~isempty(app.Spikes.waveforms);
+            hasTrace = isfield(app.Spikes, "datPath") ...
+                && isfile(string(app.Spikes.datPath));
+            hasAmp = isfield(app.Spikes, "amplitudePP") ...
+                && any(app.Spikes.amplitudePP ~= 0);
+            g = app.PlotGrid;
+
+            if hasWf
+                app.MeanAxes.Layout.Row = [1 2];      app.MeanAxes.Layout.Column = 1;
+                app.ISIAxes.Layout.Row = [1 2];       app.ISIAxes.Layout.Column = 2;
+                app.AmplitudeAxes.Layout.Row = [1 2]; app.AmplitudeAxes.Layout.Column = 3;
+                app.WaveformAxes.Layout.Row = [3 4];  app.WaveformAxes.Layout.Column = 1;
+                app.FeatureAxes.Layout.Row = [3 4];   app.FeatureAxes.Layout.Column = 2;
+                app.CorrLayout.Layout.Row = [3 4];    app.CorrLayout.Layout.Column = 3;
+                setVisible([app.MeanAxes app.WaveformAxes app.FeatureAxes ...
+                    app.AmplitudeAxes], true);
+            else
+                % Spikes-only: fill the panel area with ISI | drift | correlograms.
+                setVisible([app.MeanAxes app.WaveformAxes app.FeatureAxes], false);
+                app.CorrLayout.Layout.Row = [1 4];    app.CorrLayout.Layout.Column = 3;
+                if hasAmp
+                    app.ISIAxes.Layout.Row = [1 4];       app.ISIAxes.Layout.Column = 1;
+                    app.AmplitudeAxes.Layout.Row = [1 4]; app.AmplitudeAxes.Layout.Column = 2;
+                    setVisible(app.AmplitudeAxes, true);
+                else
+                    app.ISIAxes.Layout.Row = [1 4];       app.ISIAxes.Layout.Column = [1 2];
+                    setVisible(app.AmplitudeAxes, false);
+                end
+            end
+
+            setVisible(app.TraceAxes, hasTrace);
+            app.NavGrid.Visible = matlab.lang.OnOffSwitchState(hasTrace);
+            if hasTrace
+                g.RowHeight = {"1x", "1x", "1x", "1x", "1.4x", 30};
+                app.TraceAxes.Layout.Row = 5; app.TraceAxes.Layout.Column = [1 3];
+            else
+                g.RowHeight = {"1x", "1x", "1x", "1x", 0, 0};
+            end
+        end
+
         function refreshAll(app)
             app.plotTrace();            % sets the trace window, needed for scope
             app.recomputeHighlight();
@@ -1008,6 +1061,62 @@ classdef SpikeVisualizationApp < handle
             cids = app.selectedClusters();
         end
 
+        function setSelectedClusterIds(app, ids)
+            %SETSELECTEDCLUSTERIDS Select the given cluster ids and refresh views.
+            %   Public wrapper used by the DatasetBrowser to focus a unit
+            %   after loading its sorting.
+            arguments
+                app
+                ids (1, :) double
+            end
+            app.setSelectedClusters(ids);
+            app.refreshAll();
+        end
+
+        function openCuration(app, ids)
+            %OPENCURATION Open (or replace) the CurationTool on the given clusters.
+            %   Public entry point so a companion (e.g. the DatasetBrowser)
+            %   can bring up the curation view for a chosen unit. Skips silently
+            %   for spikes-only sources, which have no waveforms / PC features.
+            arguments
+                app
+                ids (1, :) double
+            end
+            if ~isfield(app.Spikes, "waveforms") || isempty(app.Spikes.waveforms)
+                return   % nothing for the CurationTool to show
+            end
+            if isempty(ids)
+                ids = app.selectedClusters();
+            end
+            if isempty(ids)
+                return
+            end
+            if ~isempty(app.CurateTool) && isvalid(app.CurateTool)
+                delete(app.CurateTool);
+            end
+            app.CurateTool = CurationTool(app, ids);
+        end
+
+        function refreshCompanions(app)
+            %REFRESHCOMPANIONS Bring open companion windows in line with the data
+            %   currently loaded. Called after a DatasetBrowser reload, since
+            %   setData does not touch already-open tools. The CurationTool is
+            %   bound to a now-defunct cluster set, so it is closed; the PETH
+            %   window is re-pointed at the new events and refreshed.
+            if ~isempty(app.CurateTool) && isvalid(app.CurateTool)
+                delete(app.CurateTool);
+            end
+            if ~isempty(app.PETHWindow) && isvalid(app.PETHWindow) ...
+                    && isfield(app.Spikes, "phyDir")
+                try
+                    delete(app.PETHWindow);
+                    app.PETHWindow = PETHTool(app);
+                catch
+                    % a stale PETH window is non-fatal; leave it closed
+                end
+            end
+        end
+
         function [uv, firstSample] = traceSamples(app, firstSample, lastSample)
             %TRACESAMPLES Data-channel samples (microvolts) over [first last].
             uv = [];
@@ -1182,10 +1291,12 @@ classdef SpikeVisualizationApp < handle
                 app.setInfo("Select one or more clusters to curate.");
                 return
             end
-            if ~isempty(app.CurateTool) && isvalid(app.CurateTool)
-                delete(app.CurateTool);
+            if ~isfield(app.Spikes, "waveforms") || isempty(app.Spikes.waveforms)
+                app.setInfo("Curation needs waveforms / PC features " + ...
+                    "(not available for spikes-only sources).");
+                return
             end
-            app.CurateTool = CurationTool(app, cids);
+            app.openCuration(cids);
         end
 
         function mergeSelected(app)
@@ -1397,6 +1508,18 @@ classdef SpikeVisualizationApp < handle
             tools = uimenu(app.UIFigure, Text="Tools");
             uimenu(tools, Text="PETH / event alignment...", ...
                 MenuSelectedFcn=@(~, ~) app.launchPETH());
+            uimenu(tools, Text="Dataset browser...", ...
+                MenuSelectedFcn=@(~, ~) app.launchDatasetBrowser());
+        end
+
+        function launchDatasetBrowser(app)
+            %LAUNCHDATASETBROWSER Open the dataset browser (loads sortings itself,
+            %   so it needs no sorting loaded first).
+            if ~isempty(app.BrowserWindow) && isvalid(app.BrowserWindow)
+                figure(app.BrowserWindow.figureHandle());
+                return
+            end
+            app.BrowserWindow = DatasetBrowser(app);
         end
 
         function launchPETH(app)
@@ -1665,6 +1788,7 @@ classdef SpikeVisualizationApp < handle
             grid.Layout.Column = 2;
             % Rows 1-2: top panels; rows 3-4: bottom panels; 5: trace; 6: nav.
             grid.RowHeight = {"1x", "1x", "1x", "1x", "1.4x", 30};
+            app.PlotGrid = grid;
 
             % Top panels (two rows tall): Mean | ISI | Amplitude.
             app.MeanAxes = uiaxes(grid);
@@ -1694,6 +1818,7 @@ classdef SpikeVisualizationApp < handle
             nav.Layout.Row = 6; nav.Layout.Column = [1 3];
             nav.ColumnWidth = {130, "1x", 130};
             nav.Padding = [0 0 0 0];
+            app.NavGrid = nav;
             uibutton(nav, Text="< Prev spike", ...
                 ButtonPushedFcn=@(~, ~) app.jumpSpike(-1));
             app.TraceSlider = uislider(nav, Limits=[0 1], Value=0.5, ...
@@ -1732,12 +1857,17 @@ classdef SpikeVisualizationApp < handle
             if isequal(f, 0)
                 return
             end
+            fp = string(fullfile(d, f));
             try
-                model = load(fullfile(d, f));
-                app.setData(model);
+                vars = string({whos("-file", fp).name});
+                if ismember("allspk", vars)
+                    app.setData(LoadSpikesOnline(fp));   % REX online session (spikes only)
+                else
+                    app.setData(load(fp));
+                end
             catch err
                 app.setInfo("Could not load as a spike model (needs clusters/" + ...
-                    "spikeTimes/waveforms fields): " + err.message);
+                    "spikeTimes/waveforms, or a REX allspk file): " + err.message);
             end
         end
     end
@@ -1760,6 +1890,16 @@ function name = addonDisplayName(file)
     words = split(string(base), "_");
     words(1) = upper(extractBefore(words(1), 2)) + extractAfter(words(1), 1);
     name = join(words, " ");
+end
+
+function setVisible(handles, tf)
+    %SETVISIBLE Toggle a graphics handle (or array) on/off, ignoring invalids.
+    state = matlab.lang.OnOffSwitchState(logical(tf));
+    for h = reshape(handles, 1, [])
+        if isvalid(h)
+            h.Visible = state;
+        end
+    end
 end
 
 function s = missingToEmpty(s)
@@ -1801,7 +1941,7 @@ function m = normalizeModel(model)
         m.amplitudePP = m.wfMaxADC - m.wfMinADC;
     else
         [m.wfMinADC, m.wfMaxADC] = deal(zeros(numel(m.clusters), 1));
-        if isfield(m, "amplitudes")
+        if isfield(m, "amplitudes") && ~isempty(m.amplitudes)
             m.amplitudePP = double(m.amplitudes(:));
         else
             m.amplitudePP = zeros(numel(m.clusters), 1);
@@ -1810,10 +1950,14 @@ function m = normalizeModel(model)
 
     % Microvolts per ADC count. These exports declare gainToUV as ADC counts
     % per microvolt (dividing yields physiological amplitudes), so invert it.
+    % Some recordings carry a broken gain that yields absurd voltages; when the
+    % result is non-physiological, fall back to raw ADC units instead.
+    m.uvPerADC = 1;
     if isfield(m, "gainToUV") && isfinite(m.gainToUV) && m.gainToUV > 0
-        m.uvPerADC = 1 / m.gainToUV;
-    else
-        m.uvPerADC = 1;
+        uv = 1 / m.gainToUV;
+        if uv >= 1e-4 && uv <= 5      % plausible microvolts-per-count range
+            m.uvPerADC = uv;
+        end
     end
 
     if ~isfield(m, "waveformWindow")
@@ -1832,7 +1976,16 @@ function m = normalizeModel(model)
             end
         end
     end
-    if ~isfield(m, "numSamples"), m.numSamples = NaN; end
+    % Recording length: from the data file if known, else inferred from the
+    % last spike so ISI / drift / time-window still have a sensible duration
+    % for spikes-only (online-sorted, no raw trace) sources.
+    if ~isfield(m, "numSamples") || isempty(m.numSamples) || ~isfinite(m.numSamples)
+        if ~isempty(m.spikeTimes)
+            m.numSamples = max(m.spikeTimes);
+        else
+            m.numSamples = NaN;
+        end
+    end
     if ~isfield(m, "numChannels"), m.numChannels = 1; end
     if ~isfield(m, "dataChannel"), m.dataChannel = 0; end
     if ~isfield(m, "samplingRate"), m.samplingRate = 30000; end
