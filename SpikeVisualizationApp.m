@@ -39,6 +39,7 @@ classdef SpikeVisualizationApp < handle
         UIFigure               matlab.ui.Figure
         ClusterTable           matlab.ui.control.Table
         ClusterRowIds double = []   % cluster id per row of ClusterTable
+        ClusterSortBy string = "id" % "id" | "count" | "label"
         ClassTable             matlab.ui.control.Table
         WaveformAxes           matlab.ui.control.UIAxes
         MeanAxes               matlab.ui.control.UIAxes
@@ -1163,18 +1164,35 @@ classdef SpikeVisualizationApp < handle
             app.loadPhyFolder(string(folder));
         end
 
+        function setClusterSort(app, sortBy)
+            app.ClusterSortBy = sortBy;
+            app.updateClusterList();
+        end
+
         function updateClusterList(app)
             ids = app.Spikes.clusterIds;
+            counts = arrayfun(@(c) sum(app.Spikes.clusters == c), ids);
+            labels = strings(numel(ids), 1);
+            for k = 1:numel(ids)
+                row = app.Classification.ClusterID == ids(k);
+                if any(row)
+                    labels(k) = app.Classification.Label(find(row, 1));
+                end
+            end
+            switch app.ClusterSortBy   % row order in the table (colours unchanged)
+                case "count"
+                    [~, ord] = sort(counts, "descend");
+                case "label"
+                    [~, ord] = sort(labels);
+                otherwise
+                    ord = 1:numel(ids);
+            end
+            ids = ids(ord); counts = counts(ord); labels = labels(ord);
+
             keptSelection = app.selectedClusters();
             data = cell(numel(ids), 4);
             for k = 1:numel(ids)
-                n = sum(app.Spikes.clusters == ids(k));
-                label = "";
-                row = app.Classification.ClusterID == ids(k);
-                if any(row)
-                    label = app.Classification.Label(find(row, 1));
-                end
-                data(k, :) = {'', ids(k), n, char(label)};
+                data(k, :) = {'', ids(k), counts(k), char(labels(k))};
             end
             app.ClusterRowIds = ids;
             app.ClusterTable.Data = data;
@@ -1220,7 +1238,7 @@ classdef SpikeVisualizationApp < handle
     methods (Access = private)
         function buildUI(app)
             app.UIFigure = uifigure(Name="SpikeVisualizationApp", ...
-                Position=[80 80 1400 860], ...
+                Position=[60 40 1440 1000], ...
                 WindowScrollWheelFcn=@(s, e) app.onScroll(s, e), ...
                 WindowKeyPressFcn=@(s, e) app.onKey(s, e));
             outer = uigridlayout(app.UIFigure, [2 2]);
@@ -1421,10 +1439,17 @@ classdef SpikeVisualizationApp < handle
         function buildClusterSection(app, panel, row)
             g = uigridlayout(panel, [2 1]);
             g.Layout.Row = row;
-            g.RowHeight = {16, "1x"};
+            g.RowHeight = {20, "1x"};
             g.Padding = [0 0 0 0];
             g.RowSpacing = 2;
-            uilabel(g, Text="Clusters", FontWeight="bold");
+            header = uigridlayout(g, [1 3]);
+            header.Padding = [0 0 0 0];
+            header.ColumnWidth = {"fit", "fit", "1x"};
+            uilabel(header, Text="Clusters", FontWeight="bold");
+            uilabel(header, Text="sort:", HorizontalAlignment="right");
+            uidropdown(header, Items=["ID", "n", "Label"], ...
+                ItemsData=["id", "count", "label"], Value="id", ...
+                ValueChangedFcn=@(s, ~) app.setClusterSort(s.Value));
             app.ClusterTable = uitable(g, ...
                 ColumnName={'', 'ID', 'n', 'Label'}, ...
                 ColumnWidth={24, 34, 55, 'auto'}, ...
@@ -1503,39 +1528,69 @@ classdef SpikeVisualizationApp < handle
         end
 
         function buildPlots(app, outer)
-            grid = uigridlayout(outer, [5 3]);
+            grid = uigridlayout(outer, [6 3]);
             grid.Layout.Row = 1;
             grid.Layout.Column = 2;
-            grid.RowHeight = {"1x", "1x", "1x", "1.3x", 28};
+            % Rows 1-2: top panels; rows 3-4: bottom panels; 5: trace; 6: nav.
+            grid.RowHeight = {"1x", "1x", "1x", "1x", "1.4x", 30};
 
-            % Top row: Mean | ISI | Amplitude.
+            % Top panels (two rows tall): Mean | ISI | Amplitude.
             app.MeanAxes = uiaxes(grid);
-            app.MeanAxes.Layout.Row = 1; app.MeanAxes.Layout.Column = 1;
+            app.MeanAxes.Layout.Row = [1 2]; app.MeanAxes.Layout.Column = 1;
             app.ISIAxes = uiaxes(grid);
-            app.ISIAxes.Layout.Row = 1; app.ISIAxes.Layout.Column = 2;
+            app.ISIAxes.Layout.Row = [1 2]; app.ISIAxes.Layout.Column = 2;
             app.AmplitudeAxes = uiaxes(grid);
-            app.AmplitudeAxes.Layout.Row = 1; app.AmplitudeAxes.Layout.Column = 3;
+            app.AmplitudeAxes.Layout.Row = [1 2]; app.AmplitudeAxes.Layout.Column = 3;
 
-            % Bottom two-row panels: Waveforms (under Mean) | Features |
-            % correlogram matrix (needs the extra height for several clusters).
+            % Bottom panels (two rows tall): Waveforms | Features | correlograms.
             app.WaveformAxes = uiaxes(grid);
-            app.WaveformAxes.Layout.Row = [2 3]; app.WaveformAxes.Layout.Column = 1;
+            app.WaveformAxes.Layout.Row = [3 4]; app.WaveformAxes.Layout.Column = 1;
             app.FeatureAxes = uiaxes(grid);
-            app.FeatureAxes.Layout.Row = [2 3]; app.FeatureAxes.Layout.Column = 2;
+            app.FeatureAxes.Layout.Row = [3 4]; app.FeatureAxes.Layout.Column = 2;
             app.CorrLayout = uigridlayout(grid, [1 1]);
-            app.CorrLayout.Layout.Row = [2 3]; app.CorrLayout.Layout.Column = 3;
+            app.CorrLayout.Layout.Row = [3 4]; app.CorrLayout.Layout.Column = 3;
             app.CorrLayout.Padding = [2 2 2 2];
             app.CorrLayout.RowSpacing = 2; app.CorrLayout.ColumnSpacing = 2;
 
             app.TraceAxes = uiaxes(grid);
-            app.TraceAxes.Layout.Row = 4; app.TraceAxes.Layout.Column = [1 3];
+            app.TraceAxes.Layout.Row = 5; app.TraceAxes.Layout.Column = [1 3];
             addlistener(app.TraceAxes, "XLim", "PostSet", ...
                 @(~, ~) app.onTraceXLimChanged());
 
-            app.TraceSlider = uislider(grid, Limits=[0 1], Value=0.5, ...
+            % Navigation row: Prev spike | slider | Next spike.
+            nav = uigridlayout(grid, [1 3]);
+            nav.Layout.Row = 6; nav.Layout.Column = [1 3];
+            nav.ColumnWidth = {130, "1x", 130};
+            nav.Padding = [0 0 0 0];
+            uibutton(nav, Text="< Prev spike", ...
+                ButtonPushedFcn=@(~, ~) app.jumpSpike(-1));
+            app.TraceSlider = uislider(nav, Limits=[0 1], Value=0.5, ...
                 MajorTicks=[], ValueChangedFcn=@(s, e) app.onTraceSlider(s, e));
-            app.TraceSlider.Layout.Row = 5;
-            app.TraceSlider.Layout.Column = [1 3];
+            uibutton(nav, Text="Next spike >", ...
+                ButtonPushedFcn=@(~, ~) app.jumpSpike(1));
+        end
+
+        function jumpSpike(app, direction)
+            %JUMPSPIKE Centre the trace on the prev/next spike of selected clusters.
+            if ~app.ensureTraces() || isnan(app.TraceCenter)
+                return
+            end
+            st = sort(app.Spikes.spikeTimes( ...
+                ismember(app.Spikes.clusters, app.selectedClusters())));
+            if isempty(st)
+                return
+            end
+            if direction > 0
+                target = st(find(st > app.TraceCenter + 1, 1, "first"));
+            else
+                target = st(find(st < app.TraceCenter - 1, 1, "last"));
+            end
+            if isempty(target)
+                return
+            end
+            app.TraceCenter = double(target);   % keep the same window length
+            app.clampTraceCenter();
+            app.updateTrace();
         end
 
         function loadFileDialog(app)

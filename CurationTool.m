@@ -35,9 +35,14 @@ classdef CurationTool < handle
         WaveTimeMs double      % 1-by-nSamples waveform sample times, ms
 
         SelMask logical        % current spike selection (over shown spikes)
-        SelSource string = ""  % "isi" | "pc" | "line"
+        SelSource string = ""  % "isi" | "pc" | "line" | "found"
         SelectedRange double = []   % [lo hi] ms of the circled ISI bars
         LineSegs cell = {}     % placed waveform lines; spikes must cross ALL
+        FoundLabels double = []      % k-means labels from Find cluster ([] = none)
+
+        ClusterMethod string = "kmeans"   % "kmeans" | "gmm"
+        ClusterK = "auto"                 % "auto" or a positive integer
+        SettingsMenus struct = struct()
 
         UIFigure               matlab.ui.Figure
         ISIAxes                matlab.ui.control.UIAxes
@@ -45,7 +50,7 @@ classdef CurationTool < handle
         WaveAxes               matlab.ui.control.UIAxes
         PCDropdown             matlab.ui.control.DropDown
         MoveDropdown           matlab.ui.control.DropDown
-        MergeDropdown          matlab.ui.control.DropDown
+        FoundDropdown          matlab.ui.control.DropDown
         InfoLabel              matlab.ui.control.Label
     end
 
@@ -143,13 +148,13 @@ classdef CurationTool < handle
         end
 
         function clearLines(tool)
-            %CLEARLINES Remove all placed waveform lines and their selection.
+            %CLEARLINES Remove placed waveform lines and any found clustering.
             tool.LineSegs = {};
-            if tool.SelSource == "line"
-                tool.SelMask = false(numel(tool.GlobalIdx), 1);
-                tool.SelSource = "";
-            end
-            tool.setInfo("Cleared waveform lines.");
+            tool.FoundLabels = [];
+            tool.updateFoundDropdown();
+            tool.SelMask = false(numel(tool.GlobalIdx), 1);
+            tool.SelSource = "";
+            tool.setInfo("Cleared lines and found clusters.");
             tool.refreshAll();
         end
 
@@ -192,13 +197,8 @@ classdef CurationTool < handle
         end
 
         function newId = mergeShown(tool)
-            %MERGESHOWN Merge the shown clusters (plus the dropdown target).
-            targets = tool.ClusterIds(:);
-            if ~isempty(tool.MergeDropdown.ItemsData) ...
-                    && ~isempty(tool.MergeDropdown.Value)
-                targets = [targets; tool.MergeDropdown.Value];
-            end
-            targets = unique(targets);
+            %MERGESHOWN Merge all the shown clusters into one.
+            targets = unique(tool.ClusterIds(:));
             newId = tool.App.applyMerge(targets);
             if ~isempty(newId)
                 tool.ClusterIds = newId;
@@ -206,6 +206,31 @@ classdef CurationTool < handle
                 tool.setInfo(sprintf("Merged %s into cluster %d.", ...
                     num2str(targets'), newId));
             end
+        end
+
+        function findClusters(tool)
+            %FINDCLUSTERS Auto-split the shown spikes across PC features.
+            %   Colours the scatter by the found clusters (overriding the source
+            %   clusters); pick one in the Found dropdown to select/move it.
+            X = tool.Scores(:, 1:min(3, size(tool.Scores, 2)));
+            if size(X, 1) < 10
+                tool.setInfo("Too few spikes to cluster.");
+                return
+            end
+            k = tool.resolveK(X);
+            tool.setInfo(sprintf("Finding %d clusters (%s)...", k, tool.ClusterMethod));
+            drawnow;
+            tool.FoundLabels = tool.runClustering(X, k);
+            tool.SelMask = false(numel(tool.GlobalIdx), 1);
+            tool.SelSource = "found";
+            tool.SelectedRange = [];
+            tool.LineSegs = {};
+            tool.pickBestView(X);
+            tool.updateFoundDropdown();
+            tool.FoundDropdown.Value = tool.FoundDropdown.ItemsData{1};   % (all)
+            tool.setInfo(sprintf("Found %d clusters (%s). Pick one in 'Found' " + ...
+                "to select it, then Move.", k, tool.ClusterMethod));
+            tool.refreshAll();
         end
     end
 
@@ -250,6 +275,86 @@ classdef CurationTool < handle
             tool.Scores = sc;
 
             tool.SelMask = false(numel(tool.GlobalIdx), 1);
+            tool.FoundLabels = [];
+        end
+
+        function k = resolveK(tool, X)
+            if ~isequal(tool.ClusterK, "auto")
+                k = double(tool.ClusterK);
+                return
+            end
+            Xs = X(tool.subsample((1:size(X, 1))', 5000), :);   % keep it fast
+            kMax = min(8, floor(size(Xs, 1) / 20));
+            if kMax < 2
+                k = 2;
+                return
+            end
+            clustName = tool.ClusterMethod;
+            if clustName == "gmm"
+                clustName = "gmdistribution";
+            end
+            try
+                % Calinski-Harabasz is O(n) (silhouette would be O(n^2)).
+                ev = evalclusters(Xs, char(clustName), "CalinskiHarabasz", ...
+                    KList=2:kMax);
+                k = ev.OptimalK;
+            catch
+                k = 2;   % fall back if evaluation fails
+            end
+            if isnan(k) || k < 2
+                k = 2;
+            end
+        end
+
+        function labels = runClustering(tool, X, k)
+            if tool.ClusterMethod == "gmm"
+                try
+                    gm = fitgmdist(X, k, RegularizationValue=1e-5, ...
+                        Replicates=3, Options=statset(MaxIter=300));
+                    labels = cluster(gm, X);
+                    return
+                catch
+                    % fall through to k-means if the mixture fails to fit
+                end
+            end
+            labels = kmeans(X, k, Replicates=3);
+        end
+
+        function pickBestView(tool, X)
+            %PICKBESTVIEW Show the 2-D PC projection that best separates the
+            %   found clusters (auto-switches the PC dropdown if a better view
+            %   than the current one exists).
+            pairs = [1 2; 1 3; 2 3];
+            names = ["PC1 vs PC2", "PC1 vs PC3", "PC2 vs PC3"];
+            sub = tool.subsample((1:size(X, 1))', 3000);   % silhouette is O(n^2)
+            Xs = X(sub, :);
+            labs = tool.FoundLabels(sub);
+            score = -inf(1, size(pairs, 1));
+            for p = 1:size(pairs, 1)
+                if max(pairs(p, :)) > size(X, 2)
+                    continue
+                end
+                try
+                    score(p) = mean(silhouette(Xs(:, pairs(p, :)), labs));
+                catch
+                    score(p) = -inf;
+                end
+            end
+            [~, best] = max(score);
+            tool.PCDropdown.Value = names(best);
+        end
+
+        function selectFound(tool, g)
+            if isempty(tool.FoundLabels)
+                return
+            end
+            if isempty(g)
+                tool.SelMask = false(numel(tool.GlobalIdx), 1);   % (all found)
+            else
+                tool.SelMask = tool.FoundLabels == g;
+            end
+            tool.SelSource = "found";
+            tool.refreshAll();
         end
 
         function recomputeLineSelection(tool)
@@ -273,9 +378,10 @@ classdef CurationTool < handle
             tool.SelSource = "";
             tool.SelectedRange = [];
             tool.LineSegs = {};
+            tool.FoundLabels = [];
             tool.computeData();
             tool.updateMoveDropdown();
-            tool.updateMergeDropdown();
+            tool.updateFoundDropdown();
             tool.UIFigure.Name = tool.windowName();
             tool.refreshAll();
         end
@@ -292,10 +398,12 @@ classdef CurationTool < handle
 
         function buildUI(tool)
             tool.UIFigure = uifigure(Name=tool.windowName(), ...
-                Position=[140 140 1200 620]);
-            outer = uigridlayout(tool.UIFigure, [3 1]);
-            outer.RowHeight = {"1x", 36, 20};
+                Position=[120 120 1220 660]);
+            tool.buildSettingsMenu();
+            outer = uigridlayout(tool.UIFigure, [4 1]);
+            outer.RowHeight = {"1x", 34, 34, 18};
             outer.Padding = [6 6 6 6];
+            outer.RowSpacing = 4;
 
             axesRow = uigridlayout(outer, [1 3]);
             axesRow.Layout.Row = 1;
@@ -304,35 +412,78 @@ classdef CurationTool < handle
             tool.PCAxes = uiaxes(axesRow);
             tool.WaveAxes = uiaxes(axesRow);
 
-            btnRow = uigridlayout(outer, [1 9]);
-            btnRow.Layout.Row = 2;
-            btnRow.Padding = [0 0 0 0];
-            uibutton(btnRow, Text="Circle ISI bars", ...
+            % Row A: selection tools.
+            rowA = uigridlayout(outer, [1 5]);
+            rowA.Layout.Row = 2;
+            rowA.Padding = [0 0 0 0];
+            uibutton(rowA, Text="Circle ISI bars", ...
                 ButtonPushedFcn=@(~, ~) tool.circleISI());
-            uibutton(btnRow, Text="Lasso PC features", ...
+            uibutton(rowA, Text="Lasso PC features", ...
                 ButtonPushedFcn=@(~, ~) tool.lassoPC());
-            uibutton(btnRow, Text="Line select (add)", ...
+            uibutton(rowA, Text="Line select (add)", ...
                 ButtonPushedFcn=@(~, ~) tool.lineSelect());
-            uibutton(btnRow, Text="Clear lines", ...
+            uibutton(rowA, Text="Clear lines/found", ...
                 ButtonPushedFcn=@(~, ~) tool.clearLines());
-            tool.PCDropdown = uidropdown(btnRow, ...
+            uibutton(rowA, Text="Find clusters", BackgroundColor=[0.9 0.9 1], ...
+                ButtonPushedFcn=@(~, ~) tool.findClusters());
+
+            % Row B: view, found selection, and actions.
+            rowB = uigridlayout(outer, [1 5]);
+            rowB.Layout.Row = 3;
+            rowB.Padding = [0 0 0 0];
+            tool.PCDropdown = uidropdown(rowB, ...
                 Items=["PC1 vs PC2", "PC1 vs PC3", "PC2 vs PC3"], ...
                 ValueChangedFcn=@(~, ~) tool.refreshPC());
-            tool.MoveDropdown = uidropdown(btnRow, Items={'(new cluster)'});
-            uibutton(btnRow, Text="Move selected", ...
-                BackgroundColor=[1 0.85 0.85], ...
+            tool.FoundDropdown = uidropdown(rowB, Items={'(found: none)'}, ...
+                ValueChangedFcn=@(s, ~) tool.selectFound(s.Value));
+            tool.MoveDropdown = uidropdown(rowB, Items={'(new cluster)'});
+            uibutton(rowB, Text="Move selected", BackgroundColor=[1 0.85 0.85], ...
                 ButtonPushedFcn=@(~, ~) tool.moveSelected());
-            tool.MergeDropdown = uidropdown(btnRow, Items={'(none)'});
-            uibutton(btnRow, Text="Merge shown", BackgroundColor=[0.85 1 0.85], ...
+            uibutton(rowB, Text="Merge shown", BackgroundColor=[0.85 1 0.85], ...
                 ButtonPushedFcn=@(~, ~) tool.mergeShown());
 
             tool.InfoLabel = uilabel(outer, Text="", FontColor=[0.2 0.2 0.2]);
-            tool.InfoLabel.Layout.Row = 3;
+            tool.InfoLabel.Layout.Row = 4;
 
             tool.updateMoveDropdown();
-            tool.updateMergeDropdown();
-            tool.setInfo("Select spikes by circling ISI bars, lassoing PC " + ...
-                "features, or drawing a line across the waveforms.");
+            tool.updateFoundDropdown();
+            tool.setInfo("Select spikes (circle ISI / lasso PC / line), or " + ...
+                "Find clusters to auto-split, then Move or Merge.");
+        end
+
+        function buildSettingsMenu(tool)
+            m = uimenu(tool.UIFigure, Text="Settings");
+            method = uimenu(m, Text="Find-cluster method");
+            tool.SettingsMenus.kmeans = uimenu(method, Text="k-means", ...
+                Checked="on", MenuSelectedFcn=@(~, ~) tool.setMethod("kmeans"));
+            tool.SettingsMenus.gmm = uimenu(method, Text="Gaussian mixture", ...
+                MenuSelectedFcn=@(~, ~) tool.setMethod("gmm"));
+            num = uimenu(m, Text="Number of clusters");
+            tool.SettingsMenus.auto = uimenu(num, Text="Auto (estimate)", ...
+                Checked="on", MenuSelectedFcn=@(~, ~) tool.setClusterK("auto"));
+            tool.SettingsMenus.fixed = gobjects(1, 7);
+            for kk = 2:8
+                tool.SettingsMenus.fixed(kk-1) = uimenu(num, Text=string(kk), ...
+                    MenuSelectedFcn=@(~, ~) tool.setClusterK(kk));
+            end
+        end
+
+        function setMethod(tool, method)
+            tool.ClusterMethod = method;
+            tool.SettingsMenus.kmeans.Checked = ...
+                matlab.lang.OnOffSwitchState(method == "kmeans");
+            tool.SettingsMenus.gmm.Checked = ...
+                matlab.lang.OnOffSwitchState(method == "gmm");
+        end
+
+        function setClusterK(tool, k)
+            tool.ClusterK = k;
+            tool.SettingsMenus.auto.Checked = ...
+                matlab.lang.OnOffSwitchState(isequal(k, "auto"));
+            for kk = 2:8
+                tool.SettingsMenus.fixed(kk-1).Checked = ...
+                    matlab.lang.OnOffSwitchState(isequal(k, kk));
+            end
         end
 
         function updateMoveDropdown(tool)
@@ -341,16 +492,15 @@ classdef CurationTool < handle
             tool.MoveDropdown.ItemsData = [{[]}; num2cell(ids(:))];
         end
 
-        function updateMergeDropdown(tool)
-            others = setdiff(tool.App.Spikes.clusterIds, tool.ClusterIds);
-            if isempty(others)
-                tool.MergeDropdown.Items = {'(also merge with...)'};
-                tool.MergeDropdown.ItemsData = [];
-            else
-                tool.MergeDropdown.Items = ["(also merge with...)"; ...
-                    "cluster " + string(others(:))];
-                tool.MergeDropdown.ItemsData = [{[]}; num2cell(others(:))];
+        function updateFoundDropdown(tool)
+            if isempty(tool.FoundLabels)
+                tool.FoundDropdown.Items = {'(found: none)'};
+                tool.FoundDropdown.ItemsData = [];
+                return
             end
+            g = unique(tool.FoundLabels);
+            tool.FoundDropdown.Items = ["(all found)"; "found " + string(g(:))];
+            tool.FoundDropdown.ItemsData = [{[]}; num2cell(g(:))];
         end
 
         function circleISI(tool)
@@ -422,6 +572,27 @@ classdef CurationTool < handle
             end
         end
 
+        function [masks, colors, names] = colorGroups(tool)
+            %COLORGROUPS Groups for colouring: found clusters if a Find has run,
+            %   otherwise the source clusters.
+            if ~isempty(tool.FoundLabels)
+                g = unique(tool.FoundLabels);
+                masks = arrayfun(@(v) tool.FoundLabels == v, g, ...
+                    UniformOutput=false);
+                colors = foundPalette(numel(g));
+                names = "found " + string(g(:));
+            else
+                cids = tool.ClusterIds;
+                masks = arrayfun(@(c) tool.ClusterOf == c, cids, ...
+                    UniformOutput=false);
+                colors = zeros(numel(cids), 3);
+                for k = 1:numel(cids)
+                    colors(k, :) = tool.App.clusterColor(cids(k));
+                end
+                names = "cluster " + string(cids(:));
+            end
+        end
+
         function refreshPC(tool)
             ax = tool.PCAxes;
             cla(ax);
@@ -429,21 +600,19 @@ classdef CurationTool < handle
             [ax1, ax2] = tool.pcColumns();
             x = tool.Scores(:, ax1);
             y = tool.Scores(:, ax2);
-            handles = gobjects(1, numel(tool.ClusterIds));
-            for k = 1:numel(tool.ClusterIds)
-                m = tool.ClusterOf == tool.ClusterIds(k);
-                handles(k) = scatter(ax, x(m), y(m), 6, ...
-                    tool.App.clusterColor(tool.ClusterIds(k)), "filled", ...
-                    MarkerFaceAlpha=0.35);
+            [masks, colors, names] = tool.colorGroups();
+            handles = gobjects(1, numel(masks));
+            for k = 1:numel(masks)
+                handles(k) = scatter(ax, x(masks{k}), y(masks{k}), 6, ...
+                    colors(k, :), "filled", MarkerFaceAlpha=0.35);
             end
             if any(tool.SelMask)
                 scatter(ax, x(tool.SelMask), y(tool.SelMask), 14, ...
                     tool.SelectColor, "o", LineWidth=0.75);
             end
             hold(ax, "off");
-            if numel(tool.ClusterIds) > 1
-                legend(ax, handles, "cluster " + string(tool.ClusterIds), ...
-                    Location="best", Box="off");
+            if numel(names) > 1
+                legend(ax, handles, names, Location="best", Box="off");
             end
             labels = tool.PCDropdown.Value;
             title(ax, "PC features  (" + labels + ")");
@@ -458,11 +627,11 @@ classdef CurationTool < handle
             cla(ax);
             hold(ax, "on");
             t = tool.WaveTimeMs;
-            for cid = tool.ClusterIds
-                ci = tool.subsample(find(tool.ClusterOf == cid), tool.MaxWaveformsToPlot);
+            [masks, colors] = tool.colorGroups();
+            for k = 1:numel(masks)
+                ci = tool.subsample(find(masks{k}), tool.MaxWaveformsToPlot);
                 if ~isempty(ci)
-                    plot(ax, t, tool.WaveUV(ci, :)', ...
-                        Color=[tool.App.clusterColor(cid) 0.15]);
+                    plot(ax, t, tool.WaveUV(ci, :)', Color=[colors(k, :) 0.15]);
                 end
             end
             sel = tool.subsample(find(tool.SelMask), tool.MaxWaveformsToPlot);
@@ -511,6 +680,14 @@ classdef CurationTool < handle
 end
 
 % =========================================================================
+function pal = foundPalette(k)
+    %FOUNDPALETTE k well-separated colours for found clusters (golden-angle).
+    pal = zeros(k, 3);
+    for i = 1:k
+        pal(i, :) = hsv2rgb([mod((i - 1) * 0.6180339887, 1), 0.7, 0.85]);
+    end
+end
+
 function mask = spikesCrossingLine(waveformsUV, timeMs, p1, p2)
     %SPIKESCROSSINGLINE Which waveforms intersect the segment p1->p2.
     %   waveformsUV is nSpikes-by-nSamples (microvolts) sampled at timeMs.

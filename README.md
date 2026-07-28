@@ -74,7 +74,8 @@ The plot panels are Mean ± SD (top-left) with the Waveforms overlay beneath it
 (its title reports how many of the total are drawn), the ISI histogram (log x
 axis) top-middle, Amplitude-vs-time (drift) top-right, a per-cluster PCA feature
 scatter, and a **correlogram matrix** — all for the selected cluster(s) — plus a
-raw-data excerpt.
+raw-data excerpt. The cluster table can be sorted by ID, spike count, or label
+(the **sort** dropdown in its header).
 
 The correlogram matrix shows one small plot per ordered pair of selected
 clusters: the diagonal is each cluster's autocorrelogram (in its colour) and the
@@ -101,7 +102,9 @@ reloads. `add_cs_cluster` (Add CS cluster) ships as the first such add-on.
 * **Zoom / pan the time axis:** `Ctrl` + mouse wheel zooms; the wheel alone pans.
   Left/Right arrows pan, Up/Down arrows zoom. The axes zoom/pan toolbar works too
   (it reloads the excerpt for the new limits). The slider jumps anywhere in the
-  recording. The voltage axis stays fixed while you pan.
+  recording, and **Prev/Next spike** jump the window (same length) to the
+  previous/next spike of the selected cluster(s). The voltage axis stays fixed
+  while you pan.
 * **Threshold lines:** *Add threshold* drops a draggable horizontal red line
   (drag it to a voltage level; press *Delete* to remove it, or *Clear
   thresholds*). Every spike whose waveform crosses **all** threshold lines is
@@ -116,7 +119,7 @@ reloads. `add_cs_cluster` (Add CS cluster) ships as the first such add-on.
    linked panels — ISI histogram, PC features (joint PCA), and waveforms — each
    overlaying every selected cluster in its own colour, so you can compare two
    clusters before merging. The current selection is shown in black.
-2. Select spikes any of three ways (the selection shows in all three panels):
+2. Select spikes any of these ways (the selection shows in all three panels):
    * **Circle ISI bars** – freehand over the bars close to 0 in the (log) ISI
      histogram; selects the spikes taking part in those short intervals.
    * **Lasso PC features** – freehand in the scatter (temporal PCA of the ch0
@@ -125,7 +128,14 @@ reloads. `add_cs_cluster` (Add CS cluster) ships as the first such add-on.
    * **Line select (add)** – draw a line across the waveform panel; selects
      **every** shown spike whose waveform crosses that line, not only the ones
      drawn. Click it again to place more lines — a spike must cross **all** of
-     them (a corridor). **Clear lines** removes them.
+     them (a corridor).
+   * **Find clusters** – automatically split the shown spikes across the PC
+     features. It recolours the scatter and waveforms by the found sub-clusters
+     (and auto-switches to the PC projection that separates them best), then you
+     pick one in the **Found** dropdown to select it. Method (k-means / Gaussian
+     mixture) and number of clusters (auto-estimated, or 2–8) are set in the
+     widget's **Settings** menu.
+   * **Clear lines/found** resets placed lines and any found clustering.
 3. **Move selected → [destination]** – reassign exactly the selected spikes to
    the cluster chosen in the dropdown (any existing cluster, or **(new cluster)**
    to split them off). This is how you merge just the selected spikes into
