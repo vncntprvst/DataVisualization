@@ -28,6 +28,9 @@ classdef DatasetBrowser < handle
         SortingsRoot string = ""   % <root>\<recording_tag>\phy_postmerge
         LoadedTag string = ""      % recording_tag currently loaded (for highlight)
 
+        UserColumns string = string.empty   % user-chosen Units columns ([] = preset)
+        ColPicker      matlab.ui.Figure       % the column-chooser window
+
         UIFigure       matlab.ui.Figure
         DatasetLabel   matlab.ui.control.Label
         RootLabel      matlab.ui.control.Label
@@ -45,8 +48,8 @@ classdef DatasetBrowser < handle
         DefaultRoot = "D:\CB paper\1-analyses\spikesort_cluster\curation_all"
         DefaultDataset = "D:\CB paper\0-data\dataset.tsv"
         ProcessedRoot = "D:\CB paper\0-data\SLData\processed"   % REX online sessions
-        % Filter bar: {display label, column name}.
-        FilterCols = ["region", "task", "bombcell_label", "purkinje_flag"]
+        % Filter-bar columns (display labels come from filterLabel).
+        FilterCols = ["region", "task", "bombcell_label", "c4_celltype"]
         % Preferred column order for the Units view (intersected with what's there).
         UnitsPreset = ["recording_tag", "unit", "region", "task", ...
             "bombcell_label", "single_unit", "snr", "isi_viol_2p0_pct", ...
@@ -72,6 +75,9 @@ classdef DatasetBrowser < handle
         end
 
         function delete(tool)
+            if ~isempty(tool.ColPicker) && isvalid(tool.ColPicker)
+                delete(tool.ColPicker);
+            end
             if ~isempty(tool.UIFigure) && isvalid(tool.UIFigure)
                 delete(tool.UIFigure);
             end
@@ -98,9 +104,9 @@ classdef DatasetBrowser < handle
             controls.Padding = [0 0 0 0];
             controls.RowSpacing = 4;
 
-            barA = uigridlayout(controls, [1 6]);
+            barA = uigridlayout(controls, [1 7]);
             barA.Layout.Row = 1;
-            barA.ColumnWidth = {120, "1x", 120, "1x", 80, 130};
+            barA.ColumnWidth = {120, "1x", 120, "1x", 95, 80, 130};
             barA.Padding = [0 0 0 0];
             uibutton(barA, Text="Load dataset...", ...
                 ButtonPushedFcn=@(~, ~) tool.loadDatasetDialog());
@@ -109,6 +115,8 @@ classdef DatasetBrowser < handle
             uibutton(barA, Text="Sortings root...", ...
                 ButtonPushedFcn=@(~, ~) tool.chooseRootDialog());
             tool.RootLabel = uilabel(barA, Text="", FontColor=[0.3 0.3 0.3]);
+            uibutton(barA, Text="Columns...", ...
+                ButtonPushedFcn=@(~, ~) tool.chooseColumnsDialog());
             uilabel(barA, Text="Granularity", HorizontalAlignment="right");
             tool.GranDropdown = uidropdown(barA, ...
                 Items=["Units", "Recordings"], ItemsData=["units", "recordings"], ...
@@ -242,8 +250,27 @@ classdef DatasetBrowser < handle
                 tool.OpenButton.Enable = "on";
                 tool.GranDropdown.Enable = "on";
             end
+            tool.loadStoredColumns();
             tool.populateFilters();
             tool.applyFilters();
+        end
+
+        function loadStoredColumns(tool)
+            %LOADSTOREDCOLUMNS Restore this dataset's chosen Units columns, if any.
+            tool.UserColumns = string.empty;
+            key = tool.colsPrefName();
+            if key ~= "" && ispref(tool.PrefGroup, key)
+                stored = string(getpref(tool.PrefGroup, key));
+                tool.UserColumns = intersect(stored, tool.Dataset.vars, "stable");
+            end
+        end
+
+        function key = colsPrefName(tool)
+            key = "";
+            if isfield(tool.Dataset, "source")
+                [~, base] = fileparts(string(tool.Dataset.source));
+                key = "cols_" + string(matlab.lang.makeValidName(base));
+            end
         end
 
         function populateFilters(tool)
@@ -343,10 +370,79 @@ classdef DatasetBrowser < handle
             if tool.RowKind == "recordings"
                 vars = string(tool.ViewTable.Properties.VariableNames);
             else
+                vars = tool.unitsDisplayVars();
+            end
+        end
+
+        function vars = unitsDisplayVars(tool)
+            %UNITSDISPLAYVARS Columns shown in the Units view: the user's chosen
+            %   set if any, else the built-in preset (both intersected with what
+            %   the dataset actually has).
+            if ~isempty(tool.UserColumns)
+                vars = intersect(tool.UserColumns, tool.Dataset.vars, "stable");
+            else
                 vars = intersect(tool.UnitsPreset, tool.Dataset.vars, "stable");
-                if isempty(vars)
-                    vars = tool.Dataset.vars;
-                end
+            end
+            if isempty(vars)
+                vars = tool.Dataset.vars;
+            end
+        end
+
+        function chooseColumnsDialog(tool)
+            %CHOOSECOLUMNSDIALOG Pick which columns the Units view shows; the
+            %   choice is remembered per dataset.
+            if isempty(tool.RawTable)
+                tool.setInfo("Load a dataset first.");
+                return
+            end
+            if ~isempty(tool.ColPicker) && isvalid(tool.ColPicker)
+                figure(tool.ColPicker);
+                return
+            end
+            allVars = tool.Dataset.vars;
+            current = intersect(tool.unitsDisplayVars(), allVars, "stable");
+            f = uifigure(Name="Choose Units columns", Position=[260 220 300 420]);
+            tool.ColPicker = f;
+            gl = uigridlayout(f, [3 2]);
+            gl.RowHeight = {"fit", "1x", 30};
+            gl.ColumnWidth = {"1x", "1x"};
+            hint = uilabel(gl, Text="Select the columns to show (Units view):");
+            hint.Layout.Row = 1; hint.Layout.Column = [1 2];
+            lb = uilistbox(gl, Items=cellstr(allVars), Multiselect="on", ...
+                Value=cellstr(current));
+            lb.Layout.Row = 2; lb.Layout.Column = [1 2];
+            ab = uibutton(gl, Text="Apply", BackgroundColor=[0.85 0.9 1], ...
+                ButtonPushedFcn=@(~, ~) tool.applyColumns(lb));
+            ab.Layout.Row = 3; ab.Layout.Column = 1;
+            rb = uibutton(gl, Text="Reset to default", ...
+                ButtonPushedFcn=@(~, ~) tool.resetColumns());
+            rb.Layout.Row = 3; rb.Layout.Column = 2;
+        end
+
+        function applyColumns(tool, lb)
+            sel = string(lb.Value);
+            tool.UserColumns = intersect(tool.Dataset.vars, sel, "stable");
+            key = tool.colsPrefName();
+            if key ~= "" && ~isempty(tool.UserColumns)
+                setpref(tool.PrefGroup, key, cellstr(tool.UserColumns));
+            end
+            tool.closeColPicker();
+            tool.renderTable();
+        end
+
+        function resetColumns(tool)
+            tool.UserColumns = string.empty;
+            key = tool.colsPrefName();
+            if key ~= "" && ispref(tool.PrefGroup, key)
+                rmpref(tool.PrefGroup, key);
+            end
+            tool.closeColPicker();
+            tool.renderTable();
+        end
+
+        function closeColPicker(tool)
+            if ~isempty(tool.ColPicker) && isvalid(tool.ColPicker)
+                delete(tool.ColPicker);
             end
         end
 
@@ -554,7 +650,8 @@ end
 % =========================================================================
 function s = filterLabel(col)
     map = struct(region="Region", task="Task", ...
-        bombcell_label="Bombcell", purkinje_flag="Purkinje");
+        bombcell_label="Classification", c4_celltype="Cell type", ...
+        purkinje_flag="Purkinje");
     if isfield(map, col)
         s = map.(col);
     else

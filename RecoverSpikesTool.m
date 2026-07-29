@@ -9,11 +9,13 @@ classdef RecoverSpikesTool < handle
     %   within a time window, keeps threshold-crossing events whose shape
     %   correlates with the template above a cutoff and that are not within the
     %   refractory period of any existing spike, previews them on the amplitude
-    %   and raw-trace panels, and (on Accept) adds them to the cluster.
+    %   and raw-trace panels, and (on Accept) adds them to a cluster.
     %
-    %   Detection threshold (microvolts) and correlation cutoff are adjustable;
-    %   lower the threshold to catch smaller spikes, raise the correlation to
-    %   stay specific to the cluster's shape.
+    %   Raw trace: scroll to pan, Ctrl+scroll (or up/down arrows) to zoom. Drag
+    %   the red threshold line to set the detection level (the "thr uV" field
+    %   tracks it, and editing the field moves the line). Accept adds the
+    %   candidates to the target cluster, or to a brand-new cluster when the
+    %   "new cluster" box is ticked.
     %
     %   See also CurationTool, SpikeVisualizationApp.
 
@@ -29,7 +31,13 @@ classdef RecoverSpikesTool < handle
         StopField              matlab.ui.control.NumericEditField
         ThreshField            matlab.ui.control.NumericEditField
         CorrField              matlab.ui.control.NumericEditField
+        NewClusterBox          matlab.ui.control.CheckBox
         InfoLabel              matlab.ui.control.Label
+
+        ThresholdLine = images.roi.Line.empty   % draggable detection level
+        SuppressLineEvents logical = false
+        TraceCenterSec double = NaN              % raw-trace pan/zoom state
+        TraceHalfSec double = 0.125
 
         CandTimes double = []   % candidate spike sample times
         CandAmp double = []     % candidate peak-to-peak, microvolts
@@ -57,14 +65,21 @@ classdef RecoverSpikesTool < handle
                 delete(tool.UIFigure);
             end
         end
+
+        function f = figureHandle(tool)
+            f = tool.UIFigure;
+        end
     end
 
     methods (Access = private)
         function buildUI(tool)
             tool.UIFigure = uifigure(Name="Recover missing spikes", ...
-                Position=[180 120 1000 640]);
+                Position=[180 120 1040 640], ...
+                WindowScrollWheelFcn=@(~, e) tool.onScroll(e), ...
+                WindowKeyPressFcn=@(~, e) tool.onKey(e));
             g = uigridlayout(tool.UIFigure, [4 1]);
-            g.RowHeight = {"1x", "1x", 34, 18};
+            g.RowHeight = {"1x", "1x", 32, 18};
+            g.RowSpacing = 6;
             g.Padding = [6 6 6 6];
 
             tool.AmpAxes = uiaxes(g);
@@ -72,11 +87,12 @@ classdef RecoverSpikesTool < handle
             tool.TraceAxes = uiaxes(g);
             tool.TraceAxes.Layout.Row = 2;
 
-            ctl = uigridlayout(g, [1 12]);
+            ctl = uigridlayout(g, [1 14]);
             ctl.Layout.Row = 3;
             ctl.Padding = [0 0 0 0];
-            ctl.ColumnWidth = {"fit", 60, "fit", 55, "fit", 55, "fit", 55, ...
-                "fit", 90, 80, 80};
+            ctl.ColumnSpacing = 5;
+            ctl.ColumnWidth = {"fit", 55, "fit", 55, "fit", 55, "fit", 55, ...
+                "fit", 55, 65, 65, 100, 55};
 
             ids = tool.Curate.shownClusters();
             uilabel(ctl, Text="cluster", HorizontalAlignment="right");
@@ -90,7 +106,8 @@ classdef RecoverSpikesTool < handle
             tool.StopField = uieditfield(ctl, "numeric", Value=w(2));
             uilabel(ctl, Text="thr uV", HorizontalAlignment="right");
             tool.ThreshField = uieditfield(ctl, "numeric", ...
-                Value=tool.defaultThreshold(tool.defaultTarget(ids)));
+                Value=tool.defaultThreshold(tool.defaultTarget(ids)), ...
+                ValueChangedFcn=@(~, ~) tool.onThreshFieldChanged());
             uilabel(ctl, Text="min corr", HorizontalAlignment="right");
             tool.CorrField = uieditfield(ctl, "numeric", Value=0.8, ...
                 Limits=[0 1]);
@@ -98,6 +115,7 @@ classdef RecoverSpikesTool < handle
                 ButtonPushedFcn=@(~, ~) tool.detect());
             uibutton(ctl, Text="Accept", BackgroundColor=[0.85 1 0.85], ...
                 ButtonPushedFcn=@(~, ~) tool.accept());
+            tool.NewClusterBox = uicheckbox(ctl, Text="new cluster");
             uibutton(ctl, Text="Clear", ...
                 ButtonPushedFcn=@(~, ~) tool.clearCandidates());
 
@@ -133,9 +151,122 @@ classdef RecoverSpikesTool < handle
             end
         end
 
+        function p = currentPolarity(tool)
+            %CURRENTPOLARITY Sign of the target template's dominant deflection.
+            s = tool.App.Spikes;
+            cid = tool.targetCluster();
+            idx = s.clusters == cid;
+            p = -1;
+            if any(idx) && ~isempty(s.waveforms)
+                template = mean(double(s.waveforms(idx, :)), 1);
+                [~, tPeak] = max(abs(template));
+                p = sign(template(tPeak));
+                if p == 0
+                    p = -1;
+                end
+            end
+        end
+
         function onTargetChanged(tool)
             tool.ThreshField.Value = tool.defaultThreshold(tool.targetCluster());
+            tool.TraceCenterSec = tool.StartField.Value;
             tool.clearCandidates();
+        end
+
+        % ------------------------------------------------- trace pan / zoom
+        function d = traceDurSec(tool)
+            s = tool.App.Spikes;
+            d = s.numSamples / s.samplingRate;
+        end
+
+        function onScroll(tool, event)
+            if isnan(tool.TraceCenterSec)
+                return
+            end
+            if any(strcmp(tool.UIFigure.CurrentModifier, "control"))
+                tool.zoomTrace(1.25 ^ event.VerticalScrollCount);
+            else
+                tool.panTrace(0.2 * event.VerticalScrollCount);
+            end
+        end
+
+        function onKey(tool, event)
+            if isnan(tool.TraceCenterSec)
+                return
+            end
+            switch event.Key
+                case "leftarrow"
+                    tool.panTrace(-0.25);
+                case "rightarrow"
+                    tool.panTrace(0.25);
+                case {"uparrow", "add", "equal"}
+                    tool.zoomTrace(1 / 1.25);
+                case {"downarrow", "subtract", "hyphen"}
+                    tool.zoomTrace(1.25);
+            end
+        end
+
+        function zoomTrace(tool, factor)
+            tool.TraceHalfSec = min(5, max(0.005, tool.TraceHalfSec * factor));
+            tool.clampCenter();
+            tool.plotTrace();
+        end
+
+        function panTrace(tool, fractionOfWindow)
+            tool.TraceCenterSec = tool.TraceCenterSec + ...
+                fractionOfWindow * 2 * tool.TraceHalfSec;
+            tool.clampCenter();
+            tool.plotTrace();
+        end
+
+        function clampCenter(tool)
+            dur = tool.traceDurSec();
+            h = tool.TraceHalfSec;
+            tool.TraceCenterSec = min(max(tool.TraceCenterSec, h), max(h, dur - h));
+        end
+
+        % ------------------------------------------------- threshold line
+        function drawThresholdLine(tool)
+            ax = tool.TraceAxes;
+            tool.SuppressLineEvents = true;
+            if ~isempty(tool.ThresholdLine) && isvalid(tool.ThresholdLine)
+                delete(tool.ThresholdLine);
+            end
+            tool.ThresholdLine = images.roi.Line.empty;
+            if isvalid(ax)
+                yv = tool.currentPolarity() * tool.ThreshField.Value;
+                xl = xlim(ax);
+                roi = images.roi.Line(ax, Position=[xl(1) yv; xl(2) yv], ...
+                    Color=[0.85 0 0], LineWidth=1, MarkerSize=0.1);
+                addlistener(roi, "MovingROI", @(src, ~) tool.constrainThreshLine(src));
+                addlistener(roi, "ROIMoved", @(~, ~) tool.onThreshLineMoved());
+                tool.ThresholdLine = roi;
+            end
+            tool.SuppressLineEvents = false;
+        end
+
+        function constrainThreshLine(tool, roi)
+            if tool.SuppressLineEvents
+                return
+            end
+            ym = mean(roi.Position(:, 2));
+            xl = xlim(tool.TraceAxes);
+            roi.Position = [xl(1) ym; xl(2) ym];   % keep it horizontal
+        end
+
+        function onThreshLineMoved(tool)
+            if tool.SuppressLineEvents || isempty(tool.ThresholdLine) ...
+                    || ~isvalid(tool.ThresholdLine)
+                return
+            end
+            ym = mean(tool.ThresholdLine.Position(:, 2));
+            tool.ThreshField.Value = max(1, round(abs(ym)));
+            tool.detect();
+        end
+
+        function onThreshFieldChanged(tool)
+            tool.drawThresholdLine();
+            tool.detect();
         end
 
         function detect(tool)
@@ -201,6 +332,9 @@ classdef RecoverSpikesTool < handle
 
             tool.CandTimes = spkTimes;
             tool.CandAmp = amp;
+            if ~isempty(spkTimes)
+                tool.TraceCenterSec = spkTimes(1) / fs;   % focus on the recovered spikes
+            end
             tool.refreshPlots();
             tool.setInfo(sprintf("%d new candidates in %.1f-%.1f s " + ...
                 "(thr %.0f uV, corr>=%.2f). Review, then Accept.", numel(spkTimes), ...
@@ -214,12 +348,32 @@ classdef RecoverSpikesTool < handle
                 return
             end
             n = numel(tool.CandTimes);
-            cid = tool.targetCluster();
+            if tool.NewClusterBox.Value
+                cid = max(tool.App.Spikes.clusterIds) + 1;   % fresh cluster id
+                suffix = " (new cluster)";
+            else
+                cid = tool.targetCluster();
+                suffix = "";
+            end
             tool.App.addSpikes(tool.CandTimes, cid);
             tool.CandTimes = [];
             tool.CandAmp = [];
+            tool.refreshDropdown();
             tool.refreshPlots();
-            tool.setInfo(sprintf("Accepted %d spikes into cluster %d.", n, cid));
+            tool.setInfo(sprintf("Accepted %d spikes into cluster %d%s.", ...
+                n, cid, suffix));
+        end
+
+        function refreshDropdown(tool)
+            % Keep the target list in step with the sorting (e.g. after a new
+            % cluster was added), preserving the current selection if possible.
+            ids = unique(tool.App.Spikes.clusters);
+            keep = tool.TargetDropdown.Value;
+            tool.TargetDropdown.Items = string(ids(:));
+            tool.TargetDropdown.ItemsData = ids(:);
+            if ismember(keep, ids)
+                tool.TargetDropdown.Value = keep;
+            end
         end
 
         function clearCandidates(tool)
@@ -260,15 +414,16 @@ classdef RecoverSpikesTool < handle
             cla(ax);
             s = tool.App.Spikes;
             fs = s.samplingRate;
-            % Focus on the first candidate (else the window start) so recovered
-            % spikes are visible.
-            if ~isempty(tool.CandTimes)
-                centre = tool.CandTimes(1) / fs;
-            else
-                centre = tool.StartField.Value;
+            if isnan(tool.TraceCenterSec)
+                if ~isempty(tool.CandTimes)
+                    tool.TraceCenterSec = tool.CandTimes(1) / fs;
+                else
+                    tool.TraceCenterSec = tool.StartField.Value;
+                end
             end
-            [tSec, uv] = tool.App.traceExcerpt(centre, 0.25);
+            [tSec, uv] = tool.App.traceExcerpt(tool.TraceCenterSec, tool.TraceHalfSec);
             if isempty(tSec)
+                tool.ThresholdLine = images.roi.Line.empty;
                 title(ax, "Raw trace unavailable");
                 return
             end
@@ -288,10 +443,12 @@ classdef RecoverSpikesTool < handle
                     MarkerSize=7, LineWidth=1, LineStyle="none");
             end
             hold(ax, "off");
-            title(ax, "Raw trace (^ existing, x recovered)");
+            title(ax, "Raw trace (^ existing, x recovered)  -  " + ...
+                "scroll to pan, Ctrl+scroll to zoom, drag the red line for thr");
             xlabel(ax, "Time (s)");
             ylabel(ax, "Voltage (\muV)");
-            axis(ax, "tight");
+            xlim(ax, [tSec(1) tSec(end)]);
+            tool.drawThresholdLine();
         end
 
         function setInfo(tool, msg)

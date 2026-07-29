@@ -176,10 +176,13 @@ time window whose shape correlates with the template above a cutoff and that are
 **not** within the refractory period of any existing spike, and previews them
 (black ×) on the amplitude-vs-time and raw-trace panels. Lower the detection
 threshold (µV) to catch smaller spikes; raise the correlation to stay specific to
-the cluster's shape. **Accept** adds them to the cluster (undoable). Because the
-already-sorted spikes are deduped out, in a window where the unit was under-sorted
-the recovered events are its missing spikes — they trace the unit's amplitude
-drift straight into its sorted spikes.
+the cluster's shape. On the raw trace, **scroll to pan, Ctrl+scroll (or up/down
+arrows) to zoom**, and **drag the red line** to set the detection threshold (the
+`thr uV` field tracks it, and editing the field moves the line). **Accept** adds
+them to the target cluster, or — with **new cluster** ticked — to a brand-new
+cluster (both undoable). Because the already-sorted spikes are deduped out, in a
+window where the unit was under-sorted the recovered events are its missing spikes
+— they trace the unit's amplitude drift straight into its sorted spikes.
 
 In the main window, **Merge selected** merges the clusters selected in the list,
 and **Realign selected** shifts each selected cluster's spike times so its mean
@@ -246,8 +249,10 @@ it launches a SpikeVisualizationApp for it and reuses that window afterwards. It
 reads a dataset table (default `D:\CB paper\0-data\dataset.tsv`, one row per unit)
 and shows it two ways — **Units** (one row per unit) or
 **Recordings** (aggregated per `recording_tag`, with a unit count). Filter by
-region / task / bombcell / purkinje, type in the **Search** box (matches
-`recording_tag` and `unit`), and click a column header to sort.
+region / task / **Classification** (`bombcell_label`) / **Cell type**
+(`c4_celltype`), type in the **Search** box (matches `recording_tag` and `unit`),
+and click a column header to sort. Use **Columns…** to choose which columns the
+Units view shows (e.g. add `in_original`); the choice is remembered per dataset.
 
 **Open selected** (or double-click a row) loads that entry into the main app:
 
