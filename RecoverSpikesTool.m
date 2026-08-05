@@ -31,6 +31,7 @@ classdef RecoverSpikesTool < handle
         StopField              matlab.ui.control.NumericEditField
         ThreshField            matlab.ui.control.NumericEditField
         CorrField              matlab.ui.control.NumericEditField
+        DedupField             matlab.ui.control.NumericEditField
         NewClusterBox          matlab.ui.control.CheckBox
         InfoLabel              matlab.ui.control.Label
 
@@ -74,9 +75,10 @@ classdef RecoverSpikesTool < handle
     methods (Access = private)
         function buildUI(tool)
             tool.UIFigure = uifigure(Name="Recover missing spikes", ...
-                Position=[180 120 1040 640], ...
+                Position=[180 120 1120 640], ...
                 WindowScrollWheelFcn=@(~, e) tool.onScroll(e), ...
-                WindowKeyPressFcn=@(~, e) tool.onKey(e));
+                WindowKeyPressFcn=@(~, e) tool.onKey(e), ...
+                CloseRequestFcn=@(~, ~) delete(tool));
             g = uigridlayout(tool.UIFigure, [4 1]);
             g.RowHeight = {"1x", "1x", 32, 18};
             g.RowSpacing = 6;
@@ -87,12 +89,12 @@ classdef RecoverSpikesTool < handle
             tool.TraceAxes = uiaxes(g);
             tool.TraceAxes.Layout.Row = 2;
 
-            ctl = uigridlayout(g, [1 14]);
+            ctl = uigridlayout(g, [1 16]);
             ctl.Layout.Row = 3;
             ctl.Padding = [0 0 0 0];
             ctl.ColumnSpacing = 5;
             ctl.ColumnWidth = {"fit", 55, "fit", 55, "fit", 55, "fit", 55, ...
-                "fit", 55, 65, 65, 100, 55};
+                "fit", 55, "fit", 55, 65, 65, 100, 55};
 
             ids = tool.Curate.shownClusters();
             uilabel(ctl, Text="cluster", HorizontalAlignment="right");
@@ -111,6 +113,11 @@ classdef RecoverSpikesTool < handle
             uilabel(ctl, Text="min corr", HorizontalAlignment="right");
             tool.CorrField = uieditfield(ctl, "numeric", Value=0.8, ...
                 Limits=[0 1]);
+            uilabel(ctl, Text="dedup ms", HorizontalAlignment="right");
+            tool.DedupField = uieditfield(ctl, "numeric", ...
+                Value=tool.RefractoryMs, Limits=[0 Inf], ...
+                Tooltip="Drop candidates within this window of any existing " + ...
+                "spike (in any cluster), to avoid duplicates");
             uibutton(ctl, Text="Detect", BackgroundColor=[0.9 0.9 1], ...
                 ButtonPushedFcn=@(~, ~) tool.detect());
             uibutton(ctl, Text="Accept", BackgroundColor=[0.85 1 0.85], ...
@@ -321,11 +328,13 @@ classdef RecoverSpikesTool < handle
             spkTimes = spkTimes(keep);
             amp = amp(keep);
 
-            % Drop anything already sorted (within the refractory of any spike).
+            % Drop anything already sorted (within the dedup window of any spike
+            % in any cluster), so accepting never creates duplicates.
+            dedup = max(1, round(fs * tool.DedupField.Value / 1000));
             existing = unique(s.spikeTimes);
             if numel(existing) >= 2 && ~isempty(spkTimes)
                 nearest = interp1(existing, existing, spkTimes, "nearest", "extrap");
-                far = abs(nearest - spkTimes) >= refr;
+                far = abs(nearest - spkTimes) >= dedup;
                 spkTimes = spkTimes(far);
                 amp = amp(far);
             end

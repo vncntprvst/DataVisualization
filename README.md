@@ -185,17 +185,24 @@ window where the unit was under-sorted the recovered events are its missing spik
 — they trace the unit's amplitude drift straight into its sorted spikes.
 
 Recovered candidates are de-duplicated against **all existing spikes in every
-cluster** (not just the target): any candidate within the 1 ms refractory of an
-already-sorted spike is dropped, so accepting them — into the target or a new
-cluster — never creates duplicates.
+cluster** (not just the target): any candidate within the **dedup ms** window of
+an already-sorted spike is dropped, so accepting them — into the target or a new
+cluster — never creates duplicates. The dedup window is adjustable (default 1 ms;
+widen it to be stricter, narrow it to keep near-coincident spikes).
+
+Companion windows close with their parent: closing the Curation window also closes
+its Time-window and Recover tools, and closing the main SpikeVisualizationApp
+window closes all of them (and the PETH window).
 
 In the main window, **Merge selected** merges the clusters selected in the list,
 **Realign selected** shifts each selected cluster's spike times so its mean
 waveform peak lines up at the same sample, then re-extracts the waveforms (use it
-when a cluster is a time-shifted duplicate of another), and **Discard selected**
+when a cluster is a time-shifted duplicate of another), **Discard selected**
 removes the selected cluster(s)' spikes from the sorting entirely (with a confirm;
-undoable, and written to disk only when you Save). Cluster labels are **SU / MU /
-Noise / Unsorted / Other** (or type any text directly in the Label column).
+undoable, and written to disk only when you Save), and **Change ID…** renumbers
+the selected cluster to an unused id — e.g. to fix a new unit that reused an id
+that belonged to a merged/discarded one. Cluster labels are **SU / MU / Noise /
+Unsorted / Other** (or type any text directly in the Label column).
 
 ## Options menu
 
@@ -282,6 +289,16 @@ added as a new row (`unit = c<id>`, carrying only its recording_tag/region/task
 plus the label/note; QC columns stay blank). The `cluster_id` column shows each
 unit's cluster id, matching the app's Clusters table. (Refresh is manual so
 opening the browser stays fast; your `dataset.tsv` is never changed.)
+
+Refresh is also **merge/discard-aware**. By comparing each recording's current
+`spike_clusters` to the app's one-time backup, it flags dataset units whose
+cluster changed (shown grey-italic with a `curation_state`): a unit whose cluster
+no longer exists reads **gone (merged/discarded)**, and a surviving cluster whose
+spike count changed reads **modified (QC stale)**. In both cases the pipeline QC
+(`bombcell_label`, `snr`, `isi_viol`, `n_spikes`, cell type…) is **blanked**,
+since those numbers no longer describe the unit — a proper merged unit's QC can
+only come from re-running the pipeline. (Flags appear after you **Save** in the
+app, then **Refresh**. `region`/`task` and any curation label/note are kept.)
 
 **Review status.** Each entry (unit or recording) carries a review state shown as
 the row colour and in the `review` column: **unverified** (grey) · **WIP**

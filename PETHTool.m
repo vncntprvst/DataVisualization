@@ -53,7 +53,8 @@ classdef PETHTool < handle
     methods (Access = private)
         function buildUI(tool)
             tool.UIFigure = uifigure(Name="PETH / event alignment", ...
-                Position=[120 120 1180 700]);
+                Position=[120 120 1180 700], ...
+                CloseRequestFcn=@(~, ~) delete(tool));
             outer = uigridlayout(tool.UIFigure, [2 2]);
             outer.RowHeight = {"1x", 20};
             outer.ColumnWidth = {250, "1x"};

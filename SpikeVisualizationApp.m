@@ -1282,6 +1282,35 @@ classdef SpikeVisualizationApp < handle
                 num2str(clusterIds'), newId));
         end
 
+        function changeClusterId(app, oldId, newId)
+            %CHANGECLUSTERID Renumber a cluster to an unused id (undoable).
+            arguments
+                app
+                oldId (1, 1) double
+                newId (1, 1) double
+            end
+            if ~ismember(oldId, app.Spikes.clusterIds) || oldId == newId
+                return
+            end
+            if ismember(newId, app.Spikes.clusterIds)
+                app.setInfo(sprintf("Cluster %d already exists — use Merge to " + ...
+                    "combine clusters.", newId));
+                return
+            end
+            app.pushUndo();
+            app.Spikes.clusters(app.Spikes.clusters == oldId) = newId;
+            app.Spikes.clusterIds = unique(app.Spikes.clusters);
+            lblRow = app.Classification.ClusterID == oldId;   % carry the label over
+            if any(lblRow)
+                app.Classification.ClusterID(lblRow) = newId;
+            end
+            app.syncClassification();
+            app.updateClusterList();
+            app.setSelectedClusters(newId);
+            app.refreshAll();
+            app.setInfo(sprintf("Changed cluster %d -> %d.", oldId, newId));
+        end
+
         function discardClusters(app, clusterIds)
             %DISCARDCLUSTERS Remove the given clusters' spikes from the sorting.
             %   Undoable; the spikes are gone from every per-spike array, so on
@@ -1356,6 +1385,28 @@ classdef SpikeVisualizationApp < handle
 
         function mergeSelected(app)
             app.applyMerge(app.selectedClusters());
+        end
+
+        function changeIdSelected(app)
+            cids = app.selectedClusters();
+            if numel(cids) ~= 1
+                app.setInfo("Select exactly one cluster to change its ID.");
+                return
+            end
+            oldId = cids(1);
+            default = max(app.Spikes.clusterIds) + 1;
+            answer = inputdlg(sprintf("New ID for cluster %d " + ...
+                "(must be unused):", oldId), "Change cluster ID", 1, ...
+                {num2str(default)});
+            if isempty(answer)
+                return
+            end
+            newId = str2double(answer{1});
+            if isnan(newId) || newId < 0 || mod(newId, 1) ~= 0
+                app.setInfo("ID must be a non-negative integer.");
+                return
+            end
+            app.changeClusterId(oldId, newId);
         end
 
         function discardSelected(app)
@@ -1542,7 +1593,8 @@ classdef SpikeVisualizationApp < handle
             app.UIFigure = uifigure(Name="SpikeVisualizationApp", ...
                 Position=[60 40 1440 1000], ...
                 WindowScrollWheelFcn=@(s, e) app.onScroll(s, e), ...
-                WindowKeyPressFcn=@(s, e) app.onKey(s, e));
+                WindowKeyPressFcn=@(s, e) app.onKey(s, e), ...
+                CloseRequestFcn=@(~, ~) delete(app));   % close children too
             outer = uigridlayout(app.UIFigure, [2 2]);
             outer.RowHeight = {"1x", 24};
             outer.ColumnWidth = {300, "1x"};
@@ -1838,9 +1890,12 @@ classdef SpikeVisualizationApp < handle
             r = uibutton(g, Text="Realign selected", ...
                 ButtonPushedFcn=@(~, ~) app.realignSelected());
             r.Layout.Row = 2; r.Layout.Column = 2;
+            ci = uibutton(g, Text="Change ID...", ...
+                ButtonPushedFcn=@(~, ~) app.changeIdSelected());
+            ci.Layout.Row = 3; ci.Layout.Column = 1;
             d = uibutton(g, Text="Discard selected", BackgroundColor=[1 0.8 0.8], ...
                 ButtonPushedFcn=@(~, ~) app.discardSelected());
-            d.Layout.Row = 3; d.Layout.Column = [1 2];
+            d.Layout.Row = 3; d.Layout.Column = 2;
         end
 
         function buildThresholdSection(app, panel, row)

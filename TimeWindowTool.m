@@ -76,7 +76,8 @@ classdef TimeWindowTool < handle
 
         function buildUI(tool)
             tool.UIFigure = uifigure(Name="Time-window split", ...
-                Position=[160 120 1000 620]);
+                Position=[160 120 1000 620], ...
+                CloseRequestFcn=@(~, ~) delete(tool));
             g = uigridlayout(tool.UIFigure, [3 1]);
             g.RowHeight = {"1x", "1x", 34};
             g.Padding = [6 6 6 6];

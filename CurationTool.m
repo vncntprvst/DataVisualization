@@ -447,7 +447,8 @@ classdef CurationTool < handle
 
         function buildUI(tool)
             tool.UIFigure = uifigure(Name=tool.windowName(), ...
-                Position=[120 110 1240 680]);
+                Position=[120 110 1240 680], ...
+                CloseRequestFcn=@(~, ~) delete(tool));   % close child tools too
             tool.buildSettingsMenu();
             outer = uigridlayout(tool.UIFigure, [4 1]);
             outer.RowHeight = {24, "1x", 78, 18};

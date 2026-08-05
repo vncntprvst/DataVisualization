@@ -59,10 +59,16 @@ classdef DatasetBrowser < handle
         % Filter-bar columns (display labels come from filterLabel).
         FilterCols = ["region", "task", "bombcell_label", "c4_celltype"]
         % Preferred column order for the Units view (intersected with what's there).
-        UnitsPreset = ["recording_tag", "unit", "cluster_id", "region", "task", ...
-            "bombcell_label", "curation_label", "curation_note", "single_unit", ...
-            "snr", "isi_viol_2p0_pct", "presence_ratio", "n_spikes", ...
-            "purkinje_flag", "cs_rate_hz"]
+        UnitsPreset = ["recording_tag", "unit", "cluster_id", "curation_state", ...
+            "region", "task", "bombcell_label", "curation_label", "curation_note", ...
+            "single_unit", "snr", "isi_viol_2p0_pct", "presence_ratio", ...
+            "n_spikes", "purkinje_flag", "cs_rate_hz"]
+        % Pipeline QC columns blanked on a merged/modified unit (can't be recomputed).
+        QCBlankCols = ["bombcell_label", "is_somatic", "single_unit", ...
+            "isi_viol_1p5_pct", "isi_viol_2p0_pct", "presence_ratio", "snr", ...
+            "n_spikes", "pct_missing", "purkinje_flag", "cs_rate_hz", ...
+            "c4_celltype", "c4_conf", "c4_in_domain", "dropped_as_NOISE", ...
+            "merged_parents", "dup_dropped", "n_members"]
         % Review states (in order) and their row background colours.
         Statuses = ["unverified", "WIP", "issue", "discard", "done"]
     end
@@ -541,6 +547,15 @@ classdef DatasetBrowser < handle
                 addStyle(tool.Table, uistyle(FontColor=[0.6 0.6 0.6]), ...
                     "row", find(missing));
             end
+            % Grey+italic rows whose cluster changed since the dataset was built
+            % (merged / discarded / modified) — their QC is stale/blanked.
+            if ismember("curation_state", string(tool.ViewTable.Properties.VariableNames))
+                flagged = find(string(tool.ViewTable.curation_state) ~= "");
+                if ~isempty(flagged)
+                    addStyle(tool.Table, uistyle(FontColor=[0.5 0.5 0.5], ...
+                        FontAngle="italic"), "row", flagged);
+                end
+            end
             % Blue marker for the row currently loaded in the app.
             lr = find(isLoaded);
             if ~isempty(lr)
@@ -594,6 +609,7 @@ classdef DatasetBrowser < handle
             end
             t.curation_label = strings(n, 1);
             t.curation_note = strings(n, 1);
+            t.curation_state = strings(n, 1);
             tool.RawTable = t;
             tool.Dataset.vars = string(t.Properties.VariableNames);
             tool.buildClusterIds();   % cheap: one ALL_UNITS.tsv read
@@ -655,6 +671,7 @@ classdef DatasetBrowser < handle
             tags = unique(string(t.recording_tag), "stable");
             added = {};
             nLabelled = 0;
+            nFlagged = 0;
             for tg = reshape(tags, 1, [])
                 cc = fullfile(tool.SortingsRoot, tg, "phy_postmerge", ...
                     "cluster_curation.csv");
@@ -687,6 +704,33 @@ classdef DatasetBrowser < handle
                         added{end + 1} = tool.makeNewUnitRow(t, tg, cid, lbl, nt); %#ok<AGROW>
                     end
                 end
+                % Flag dataset units whose cluster changed since the recording
+                % was first saved, by comparing the current spike_clusters to the
+                % app's one-time backup (both raw counts; the dataset's own
+                % n_spikes is a different metric and can't be compared directly).
+                [curIds, curCounts] = tool.clusterCounts(tg, false);
+                [bakIds, bakCounts] = tool.clusterCounts(tg, true);
+                if ~isempty(bakIds) && ~isempty(curIds)
+                    for rr = reshape(rowsOfTag, 1, [])
+                        cid = t.cluster_id(rr);
+                        if isnan(cid) || ~ismember(cid, bakIds)
+                            continue   % only judge clusters that existed originally
+                        end
+                        [inCur, pc] = ismember(cid, curIds);
+                        if ~inCur
+                            t.curation_state(rr) = "gone (merged/discarded)";
+                            t = tool.blankQC(t, rr);
+                            nFlagged = nFlagged + 1;
+                        else
+                            [~, pb] = ismember(cid, bakIds);
+                            if curCounts(pc) ~= bakCounts(pb)
+                                t.curation_state(rr) = "modified (QC stale)";
+                                t = tool.blankQC(t, rr);
+                                nFlagged = nFlagged + 1;
+                            end
+                        end
+                    end
+                end
             end
             if ~isempty(added)
                 t = [t; vertcat(added{:})];
@@ -694,8 +738,53 @@ classdef DatasetBrowser < handle
             tool.RawTable = t;
             tool.Dataset.vars = string(t.Properties.VariableNames);
             if addNew
-                tool.setInfo(sprintf("Refreshed from sortings: %d labelled " + ...
-                    "unit(s), %d added unit(s).", nLabelled, numel(added)));
+                tool.setInfo(sprintf("Refreshed from sortings: %d labelled, " + ...
+                    "%d added, %d flagged (merged/modified).", nLabelled, ...
+                    numel(added), nFlagged));
+            end
+        end
+
+        function [ids, counts] = clusterCounts(tool, tg, useBackup)
+            %CLUSTERCOUNTS Cluster ids and spike counts in a recording's saved
+            %   spike_clusters.npy (useBackup -> the one-time .bak.npy original).
+            %   Empty if the file is absent/unreadable.
+            ids = [];
+            counts = [];
+            name = "spike_clusters.npy";
+            if useBackup
+                name = "spike_clusters.bak.npy";
+            end
+            p = fullfile(tool.SortingsRoot, tg, "phy_postmerge", name);
+            if ~isfile(p)
+                return
+            end
+            try
+                sc = double(readNPY(p));
+                [ids, ~, g] = unique(sc);
+                counts = accumarray(g, 1);
+            catch
+                ids = [];
+                counts = [];
+            end
+        end
+
+        function t = blankQC(tool, t, r)
+            for v = tool.QCBlankCols
+                if ~ismember(v, string(t.Properties.VariableNames))
+                    continue
+                end
+                col = t.(v);
+                if isnumeric(col)
+                    t.(v)(r) = NaN;
+                elseif isstring(col)
+                    t.(v)(r) = "";
+                elseif islogical(col)
+                    t.(v)(r) = false;
+                else
+                    try %#ok<TRYNC>
+                        t.(v)(r) = missing;
+                    end
+                end
             end
         end
 
@@ -732,14 +821,14 @@ classdef DatasetBrowser < handle
         end
 
         function refreshFromDisk(tool)
-            if isempty(tool.RawTable)
+            if isempty(tool.Dataset) || ~isfield(tool.Dataset, "table")
                 tool.setInfo("Load a dataset first.");
                 return
             end
-            t = tool.RawTable;
-            t.curation_label(:) = "";   % re-derive from disk (source of truth)
-            t.curation_note(:) = "";
-            tool.RawTable = t;
+            % Rebuild from the pristine dataset so blanked QC / flags reset, then
+            % re-derive everything from the saved sortings.
+            tool.RawTable = tool.Dataset.table;
+            tool.augmentTable();
             tool.scanCuration(true);
             tool.populateFilters();
             tool.applyFilters();
