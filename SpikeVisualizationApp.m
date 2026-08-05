@@ -1281,6 +1281,61 @@ classdef SpikeVisualizationApp < handle
             app.setInfo(sprintf("Merged clusters %s into %d.", ...
                 num2str(clusterIds'), newId));
         end
+
+        function discardClusters(app, clusterIds)
+            %DISCARDCLUSTERS Remove the given clusters' spikes from the sorting.
+            %   Undoable; the spikes are gone from every per-spike array, so on
+            %   save the clusters no longer exist.
+            arguments
+                app
+                clusterIds (:, 1) double
+            end
+            clusterIds = unique(clusterIds);
+            drop = ismember(app.Spikes.clusters, clusterIds);
+            if ~any(drop)
+                return
+            end
+            app.pushUndo();
+            app.removeSpikes(~drop);
+            app.Spikes.clusterIds = unique(app.Spikes.clusters);
+            app.syncClassification();
+            app.updateClusterList();
+            if ~isempty(app.Spikes.clusterIds)
+                app.setSelectedClusters(app.Spikes.clusterIds(1));
+            end
+            app.positionPlots();
+            app.refreshAll();
+            if ~isempty(app.CurateTool) && isvalid(app.CurateTool)
+                app.CurateTool.refreshWindow();
+            end
+            app.setInfo(sprintf("Discarded cluster(s) %s (%d spikes removed).", ...
+                num2str(clusterIds'), sum(drop)));
+        end
+    end
+
+    methods (Access = private)
+        function removeSpikes(app, keep)
+            %REMOVESPIKES Keep only the masked spikes across every per-spike array.
+            keep = logical(keep(:));
+            n = numel(keep);
+            app.Spikes.spikeTimes = app.Spikes.spikeTimes(keep);
+            app.Spikes.clusters = app.Spikes.clusters(keep);
+            perSpikeRows = ["waveforms", "wfMinADC", "wfMaxADC", "amplitudePP", ...
+                "amplitudes", "templates", "isCS"];
+            for f = perSpikeRows
+                if isfield(app.Spikes, f) && size(app.Spikes.(f), 1) == n
+                    app.Spikes.(f) = app.Spikes.(f)(keep, :);
+                end
+            end
+            if isfield(app.Spikes, "pcFeatures") && size(app.Spikes.pcFeatures, 1) == n
+                app.Spikes.pcFeatures = app.Spikes.pcFeatures(keep, :, :);
+            end
+            if numel(app.HighlightIdx) == n
+                app.HighlightIdx = app.HighlightIdx(keep);
+            else
+                app.HighlightIdx = false(sum(keep), 1);
+            end
+        end
     end
 
     % ------------------------------------------------------------- curate tool
@@ -1301,6 +1356,25 @@ classdef SpikeVisualizationApp < handle
 
         function mergeSelected(app)
             app.applyMerge(app.selectedClusters());
+        end
+
+        function discardSelected(app)
+            cids = app.selectedClusters();
+            if isempty(cids)
+                app.setInfo("Select cluster(s) to discard.");
+                return
+            end
+            nSpk = sum(ismember(app.Spikes.clusters, cids));
+            msg = sprintf(["Discard cluster(s) %s?\nThis removes their %d " ...
+                "spikes from the sorting (undoable; saved only when you " ...
+                "Save)."], num2str(cids'), nSpk);
+            choice = uiconfirm(app.UIFigure, msg, "Discard clusters", ...
+                Options=["Discard", "Cancel"], DefaultOption="Cancel", ...
+                CancelOption="Cancel", Icon="warning");
+            if choice ~= "Discard"
+                return
+            end
+            app.discardClusters(cids);
         end
 
         function realignSelected(app)
@@ -1609,6 +1683,14 @@ classdef SpikeVisualizationApp < handle
             s.clusterIds = app.Spikes.clusterIds;
             s.classification = app.Classification;
             s.selection = app.selectedClusters();
+            s.highlightIdx = app.HighlightIdx;
+            % Other per-spike arrays, so add/discard stays length-consistent.
+            s.extra = struct();
+            for f = ["amplitudes", "templates", "pcFeatures", "isCS"]
+                if isfield(app.Spikes, f)
+                    s.extra.(f) = app.Spikes.(f);
+                end
+            end
         end
 
         function restoreState(app, s)
@@ -1620,9 +1702,22 @@ classdef SpikeVisualizationApp < handle
             app.Spikes.amplitudePP = s.amplitudePP;
             app.Spikes.clusterIds = s.clusterIds;
             app.Classification = s.classification;
+            if isfield(s, "extra")
+                fn = fieldnames(s.extra);
+                for i = 1:numel(fn)
+                    app.Spikes.(fn{i}) = s.extra.(fn{i});
+                end
+            end
+            if isfield(s, "highlightIdx") ...
+                    && numel(s.highlightIdx) == numel(app.Spikes.clusters)
+                app.HighlightIdx = s.highlightIdx;
+            else
+                app.HighlightIdx = false(numel(app.Spikes.clusters), 1);
+            end
             app.refreshClassTable();
             app.updateClusterList();
             app.setSelectedClusters(intersect(s.selection, app.Spikes.clusterIds));
+            app.positionPlots();
             app.refreshAll();
         end
 
@@ -1713,14 +1808,14 @@ classdef SpikeVisualizationApp < handle
         end
 
         function buildLabelSection(app, panel, row)
-            g = uigridlayout(panel, [2 4]);
+            g = uigridlayout(panel, [2 5]);
             g.Layout.Row = row;
             g.RowHeight = {16, "fit"};
             g.Padding = [0 0 0 0];
             g.RowSpacing = 2;
             title = uilabel(g, Text="Label selected", FontWeight="bold");
-            title.Layout.Row = 1; title.Layout.Column = [1 4];
-            labels = ["SU", "MU", "Noise", "Unsorted"];
+            title.Layout.Row = 1; title.Layout.Column = [1 5];
+            labels = ["SU", "MU", "Noise", "Unsorted", "Other"];
             for k = 1:numel(labels)
                 b = uibutton(g, Text=labels(k), ...
                     ButtonPushedFcn=@(~, ~) app.classifySelected(labels(k)));
@@ -1729,9 +1824,9 @@ classdef SpikeVisualizationApp < handle
         end
 
         function buildCurateSection(app, panel, row)
-            g = uigridlayout(panel, [2 2]);
+            g = uigridlayout(panel, [3 2]);
             g.Layout.Row = row;
-            g.RowHeight = {"fit", "fit"};
+            g.RowHeight = {"fit", "fit", "fit"};
             g.Padding = [0 0 0 0];
             g.RowSpacing = 4;
             curate = uibutton(g, Text="Curation", BackgroundColor=[0.85 0.9 1], ...
@@ -1743,6 +1838,9 @@ classdef SpikeVisualizationApp < handle
             r = uibutton(g, Text="Realign selected", ...
                 ButtonPushedFcn=@(~, ~) app.realignSelected());
             r.Layout.Row = 2; r.Layout.Column = 2;
+            d = uibutton(g, Text="Discard selected", BackgroundColor=[1 0.8 0.8], ...
+                ButtonPushedFcn=@(~, ~) app.discardSelected());
+            d.Layout.Row = 3; d.Layout.Column = [1 2];
         end
 
         function buildThresholdSection(app, panel, row)

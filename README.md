@@ -184,11 +184,18 @@ cluster (both undoable). Because the already-sorted spikes are deduped out, in a
 window where the unit was under-sorted the recovered events are its missing spikes
 — they trace the unit's amplitude drift straight into its sorted spikes.
 
+Recovered candidates are de-duplicated against **all existing spikes in every
+cluster** (not just the target): any candidate within the 1 ms refractory of an
+already-sorted spike is dropped, so accepting them — into the target or a new
+cluster — never creates duplicates.
+
 In the main window, **Merge selected** merges the clusters selected in the list,
-and **Realign selected** shifts each selected cluster's spike times so its mean
-waveform peak lines up at the same sample, then re-extracts the waveforms — use
-it when a cluster is a time-shifted duplicate of another, so they overlay and can
-be merged.
+**Realign selected** shifts each selected cluster's spike times so its mean
+waveform peak lines up at the same sample, then re-extracts the waveforms (use it
+when a cluster is a time-shifted duplicate of another), and **Discard selected**
+removes the selected cluster(s)' spikes from the sorting entirely (with a confirm;
+undoable, and written to disk only when you Save). Cluster labels are **SU / MU /
+Noise / Unsorted / Other** (or type any text directly in the Label column).
 
 ## Options menu
 
@@ -263,9 +270,28 @@ Units view shows (e.g. add `in_original`); the choice is remembered per dataset.
 
 On first use the browser asks you to confirm the **sortings root** (defaulting to
 `…\curation_all`) and remembers it; change it later with **Sortings root…**. The
-currently-loaded recording is highlighted; rows with no sorting folder are greyed
-out. A tag that has no Phy folder but does have an online (REX) session falls back
-to loading that session spikes-only (see below).
+row currently loaded in the app is marked with a blue **▶**; rows with no sorting
+folder are greyed out. A tag that has no Phy folder but does have an online (REX)
+session falls back to loading that session spikes-only (see below).
+
+**Curation labels & new units.** Click **Refresh** to re-read the saved sortings:
+the `curation_label` and `curation_note` columns (sortable) are filled from each
+recording's `cluster_curation.csv` — the SU/MU/good labels and notes you set in
+SpikeVisualizationApp — and any cluster you labelled that isn't a dataset unit is
+added as a new row (`unit = c<id>`, carrying only its recording_tag/region/task
+plus the label/note; QC columns stay blank). The `cluster_id` column shows each
+unit's cluster id, matching the app's Clusters table. (Refresh is manual so
+opening the browser stays fast; your `dataset.tsv` is never changed.)
+
+**Review status.** Each entry (unit or recording) carries a review state shown as
+the row colour and in the `review` column: **unverified** (grey) · **WIP**
+(yellow) · **issue** (red) · **discard** (dark) · **done** (green). Set it with the
+**Set review status** buttons (and add a free-text **note**) for the selected row;
+opening an entry auto-marks it WIP, and closing an app you opened from the browser
+stamps it modified and recolours the row. State is saved to a **sidecar file**
+next to the dataset (`<dataset>.review.tsv`) and merged back on load — your
+original `dataset.tsv` is never modified, so it is always the revert point. Tick
+**Lock** to make the browser read-only (no state is written).
 
 ## Spikes-only (online-sorted) sources
 

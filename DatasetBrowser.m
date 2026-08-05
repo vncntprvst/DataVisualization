@@ -27,6 +27,14 @@ classdef DatasetBrowser < handle
         RowKind string = "units"   % "units" | "recordings"
         SortingsRoot string = ""   % <root>\<recording_tag>\phy_postmerge
         LoadedTag string = ""      % recording_tag currently loaded (for highlight)
+        LoadedUnit string = ""     % unit label currently loaded (units view)
+        LoadedLevel string = ""    % "unit" | "recording" of the loaded entry
+
+        Locked logical = false     % when true, review state is read-only
+        StateMap                   % containers.Map: key -> struct(status,note,modified)
+        NoteField      matlab.ui.control.EditField
+        LockBox        matlab.ui.control.CheckBox
+        StatusButtons  matlab.ui.control.Button
 
         UserColumns string = string.empty   % user-chosen Units columns ([] = preset)
         ColPicker      matlab.ui.Figure       % the column-chooser window
@@ -51,9 +59,12 @@ classdef DatasetBrowser < handle
         % Filter-bar columns (display labels come from filterLabel).
         FilterCols = ["region", "task", "bombcell_label", "c4_celltype"]
         % Preferred column order for the Units view (intersected with what's there).
-        UnitsPreset = ["recording_tag", "unit", "region", "task", ...
-            "bombcell_label", "single_unit", "snr", "isi_viol_2p0_pct", ...
-            "presence_ratio", "n_spikes", "purkinje_flag", "cs_rate_hz"]
+        UnitsPreset = ["recording_tag", "unit", "cluster_id", "region", "task", ...
+            "bombcell_label", "curation_label", "curation_note", "single_unit", ...
+            "snr", "isi_viol_2p0_pct", "presence_ratio", "n_spikes", ...
+            "purkinje_flag", "cs_rate_hz"]
+        % Review states (in order) and their row background colours.
+        Statuses = ["unverified", "WIP", "issue", "discard", "done"]
     end
 
     methods
@@ -75,6 +86,9 @@ classdef DatasetBrowser < handle
         end
 
         function delete(tool)
+            if tool.appValid()
+                tool.App.figureHandle().DeleteFcn = '';   % drop our close hook
+            end
             if ~isempty(tool.ColPicker) && isvalid(tool.ColPicker)
                 delete(tool.ColPicker);
             end
@@ -104,9 +118,9 @@ classdef DatasetBrowser < handle
             controls.Padding = [0 0 0 0];
             controls.RowSpacing = 4;
 
-            barA = uigridlayout(controls, [1 7]);
+            barA = uigridlayout(controls, [1 9]);
             barA.Layout.Row = 1;
-            barA.ColumnWidth = {120, "1x", 120, "1x", 95, 80, 130};
+            barA.ColumnWidth = {120, "1x", 120, "1x", 90, 70, 55, 80, 130};
             barA.Padding = [0 0 0 0];
             uibutton(barA, Text="Load dataset...", ...
                 ButtonPushedFcn=@(~, ~) tool.loadDatasetDialog());
@@ -117,6 +131,13 @@ classdef DatasetBrowser < handle
             tool.RootLabel = uilabel(barA, Text="", FontColor=[0.3 0.3 0.3]);
             uibutton(barA, Text="Columns...", ...
                 ButtonPushedFcn=@(~, ~) tool.chooseColumnsDialog());
+            uibutton(barA, Text="Refresh", ...
+                Tooltip="Re-read saved sortings: update curation labels/notes " + ...
+                "and add units you created", ...
+                ButtonPushedFcn=@(~, ~) tool.refreshFromDisk());
+            tool.LockBox = uicheckbox(barA, Text="Lock", ...
+                Tooltip="Lock review state (no changes are saved)", ...
+                ValueChangedFcn=@(s, ~) tool.setLocked(s.Value));
             uilabel(barA, Text="Granularity", HorizontalAlignment="right");
             tool.GranDropdown = uidropdown(barA, ...
                 Items=["Units", "Recordings"], ItemsData=["units", "recordings"], ...
@@ -151,11 +172,31 @@ classdef DatasetBrowser < handle
                 SelectionChangedFcn=@(s, e) tool.onRowSelected(e), ...
                 DoubleClickedFcn=@(s, e) tool.onOpen());
 
-            right = uigridlayout(mid, [3 1]);
-            right.RowHeight = {"fit", "1x", 30};
+            right = uigridlayout(mid, [6 1]);
+            right.RowHeight = {"fit", "1x", "fit", "fit", "fit", 30};
+            right.RowSpacing = 4;
             right.Padding = [0 0 0 0];
             uilabel(right, Text="Selected entry", FontWeight="bold");
             tool.DetailArea = uitextarea(right, Editable="off", Value="");
+            uilabel(right, Text="Set review status", FontWeight="bold");
+            sb = uigridlayout(right, [1 numel(tool.Statuses)]);
+            sb.Padding = [0 0 0 0];
+            sb.ColumnSpacing = 3;
+            tool.StatusButtons = matlab.ui.control.Button.empty;
+            for k = 1:numel(tool.Statuses)
+                st = tool.Statuses(k);
+                b = uibutton(sb, Text=st, ...
+                    BackgroundColor=tool.statusColor(st), ...
+                    FontColor=tool.statusFontColor(st), ...
+                    ButtonPushedFcn=@(~, ~) tool.setStatusOfSelected(st));
+                tool.StatusButtons(k) = b;
+            end
+            noteRow = uigridlayout(right, [1 2]);
+            noteRow.Padding = [0 0 0 0];
+            noteRow.ColumnWidth = {"fit", "1x"};
+            uilabel(noteRow, Text="note", HorizontalAlignment="right");
+            tool.NoteField = uieditfield(noteRow, "text", ...
+                ValueChangedFcn=@(s, ~) tool.setNoteOfSelected(s.Value));
             tool.OpenButton = uibutton(right, Text="Open selected", ...
                 BackgroundColor=[0.85 0.9 1], ...
                 ButtonPushedFcn=@(~, ~) tool.onOpen());
@@ -239,6 +280,7 @@ classdef DatasetBrowser < handle
         function setDataset(tool, ds)
             tool.Dataset = ds;
             tool.RawTable = ds.table;
+            tool.augmentTable();   % add cluster_id + curation_label/note columns
             tool.DatasetLabel.Text = compactPath(ds.source);
             tool.DatasetLabel.Tooltip = ds.source;
             if ~ds.hasRecordingTag
@@ -251,6 +293,8 @@ classdef DatasetBrowser < handle
                 tool.GranDropdown.Enable = "on";
             end
             tool.loadStoredColumns();
+            tool.StateMap = containers.Map(KeyType="char", ValueType="any");
+            tool.loadSidecar();
             tool.populateFilters();
             tool.applyFilters();
         end
@@ -453,46 +497,486 @@ classdef DatasetBrowser < handle
                 return
             end
             vars = tool.displayVars();
-            tool.Table.Data = tool.ViewTable(:, vars);
-            removeStyle(tool.Table);
-
+            n = height(tool.ViewTable);
             tags = string(tool.ViewTable.recording_tag);
-            % Grey out rows whose sorting folder (and online fallback) is absent.
-            missing = false(numel(tags), 1);
-            for i = 1:numel(tags)
-                missing(i) = ~tool.hasSorting(tags(i));
+
+            % Per-row review status, and a marker for the row loaded in the app.
+            status = strings(n, 1);
+            for i = 1:n
+                [lvl, tg, un] = tool.entryOfRow(i);
+                status(i) = tool.getStatus(lvl, tg, un);
             end
+            isLoaded = tool.LoadedTag ~= "" & tags == tool.LoadedTag;
+            if tool.RowKind == "units" && tool.LoadedUnit ~= "" ...
+                    && ismember("unit", string(tool.ViewTable.Properties.VariableNames))
+                isLoaded = isLoaded & string(tool.ViewTable.unit) == tool.LoadedUnit;
+            end
+            marker = strings(n, 1);
+            marker(isLoaded) = "▶";
+
+            data = [table(marker, status, VariableNames=["open", "review"]), ...
+                tool.ViewTable(:, vars)];
+            tool.Table.Data = data;
+            tool.Table.ColumnName = [{''}, {'review'}, cellstr(vars(:)')];
+            tool.Table.ColumnWidth = [{26}, {78}, repmat({'auto'}, 1, numel(vars))];
+
+            removeStyle(tool.Table);
+            % Colour each row by its review status.
+            for k = 1:numel(tool.Statuses)
+                st = tool.Statuses(k);
+                rows = find(status == st);
+                if isempty(rows)
+                    continue
+                end
+                addStyle(tool.Table, uistyle(BackgroundColor=tool.statusColor(st)), ...
+                    "row", rows);
+                fc = tool.statusFontColor(st);
+                if ~isequal(fc, [0 0 0])
+                    addStyle(tool.Table, uistyle(FontColor=fc), "row", rows);
+                end
+            end
+            % Grey out rows whose sorting folder (and online fallback) is absent.
+            missing = arrayfun(@(t) ~tool.hasSorting(t), tags);
             if any(missing)
                 addStyle(tool.Table, uistyle(FontColor=[0.6 0.6 0.6]), ...
                     "row", find(missing));
             end
-            % Highlight the recording currently loaded in the app.
-            if tool.LoadedTag ~= ""
-                hit = find(tags == tool.LoadedTag);
-                if ~isempty(hit)
-                    addStyle(tool.Table, uistyle(BackgroundColor=[0.83 0.94 0.83]), ...
-                        "row", hit);
-                end
+            % Blue marker for the row currently loaded in the app.
+            lr = find(isLoaded);
+            if ~isempty(lr)
+                addStyle(tool.Table, uistyle(FontColor=[0 0.35 0.9], ...
+                    FontWeight="bold"), "cell", [lr(:), ones(numel(lr), 1)]);
             end
-            tool.setInfo(sprintf("%d rows shown (%s).", height(tool.ViewTable), ...
-                tool.RowKind));
+            lockMsg = "";
+            if tool.Locked
+                lockMsg = "  [LOCKED]";
+            end
+            tool.setInfo(sprintf("%d rows shown (%s).%s", n, tool.RowKind, lockMsg));
         end
 
         function onRowSelected(tool, ~)
             row = tool.selectedRow();
             if isempty(row)
                 tool.DetailArea.Value = "";
+                tool.NoteField.Value = "";
                 return
             end
+            [lvl, tg, un] = tool.entryOfRow(row);
+            v = tool.getEntry(tool.statusKey(lvl, tg, un));
+            head = "review: " + v.status;
+            if v.modified ~= ""
+                head = head + "   (modified " + v.modified + ")";
+            end
             vars = string(tool.ViewTable.Properties.VariableNames);
-            lines = strings(numel(vars), 1);
+            lines = strings(numel(vars) + 2, 1);
+            lines(1) = head;
+            lines(2) = "";
             for i = 1:numel(vars)
-                lines(i) = vars(i) + ": " + string(tool.ViewTable.(vars(i))(row));
+                lines(i + 2) = vars(i) + ": " + string(tool.ViewTable.(vars(i))(row));
             end
             tool.DetailArea.Value = cellstr(lines);
-            tag = string(tool.ViewTable.recording_tag(row));
+            tool.NoteField.Value = char(v.note);
             tool.OpenButton.Enable = ...
-                matlab.lang.OnOffSwitchState(tool.hasSorting(tag));
+                matlab.lang.OnOffSwitchState(tool.hasSorting(tg));
+        end
+    end
+
+    % ----------------------------------------------- curation / new units
+    methods (Access = private)
+        function augmentTable(tool)
+            %AUGMENTTABLE Add cluster_id + curation_label/note columns and fill
+            %   them from the saved sortings (existing units only; new units are
+            %   added on demand by refreshFromDisk).
+            t = tool.RawTable;
+            n = height(t);
+            if ~ismember("cluster_id", string(t.Properties.VariableNames))
+                t.cluster_id = nan(n, 1);
+            end
+            t.curation_label = strings(n, 1);
+            t.curation_note = strings(n, 1);
+            tool.RawTable = t;
+            tool.Dataset.vars = string(t.Properties.VariableNames);
+            tool.buildClusterIds();   % cheap: one ALL_UNITS.tsv read
+            % Curation labels/notes + new units are filled on demand (Refresh),
+            % to keep opening the browser fast.
+        end
+
+        function m = finalIdMap(tool)
+            %FINALIDMAP (recording_tag|merged_label) -> final cluster id, from
+            %   the aggregate ALL_UNITS.tsv (one read).
+            m = containers.Map(KeyType="char", ValueType="double");
+            p = fullfile(tool.SortingsRoot, "ALL_UNITS.tsv");
+            if ~isfile(p)
+                return
+            end
+            try
+                a = readtable(p, FileType="text", Delimiter="\t", ...
+                    VariableNamingRule="preserve", TextType="string");
+            catch
+                return
+            end
+            need = ["recording_tag", "merged_label", "final_unit_id"];
+            if ~all(ismember(need, string(a.Properties.VariableNames)))
+                return
+            end
+            for i = 1:height(a)
+                m(char(a.recording_tag(i) + "|" + a.merged_label(i))) = ...
+                    double(a.final_unit_id(i));
+            end
+        end
+
+        function buildClusterIds(tool)
+            if ~tool.Dataset.hasRecordingTag ...
+                    || ~ismember("unit", tool.Dataset.vars)
+                return
+            end
+            m = tool.finalIdMap();
+            if m.Count == 0
+                return
+            end
+            t = tool.RawTable;
+            for i = 1:height(t)
+                key = char(string(t.recording_tag(i)) + "|" + string(t.unit(i)));
+                if isKey(m, key)
+                    t.cluster_id(i) = m(key);
+                end
+            end
+            tool.RawTable = t;
+        end
+
+        function scanCuration(tool, addNew)
+            %SCANCURATION Pull per-cluster Label/Note from each recording's
+            %   cluster_curation.csv onto its unit rows; when addNew, also append
+            %   rows for labelled clusters that are not dataset units.
+            if ~tool.Dataset.hasRecordingTag
+                return
+            end
+            t = tool.RawTable;
+            tags = unique(string(t.recording_tag), "stable");
+            added = {};
+            nLabelled = 0;
+            for tg = reshape(tags, 1, [])
+                cc = fullfile(tool.SortingsRoot, tg, "phy_postmerge", ...
+                    "cluster_curation.csv");
+                if ~isfile(cc)
+                    continue
+                end
+                try
+                    C = readtable(cc, TextType="string");
+                catch
+                    continue
+                end
+                cvars = string(C.Properties.VariableNames);
+                if ~ismember("ClusterID", cvars)
+                    continue
+                end
+                rowsOfTag = find(string(t.recording_tag) == tg);
+                idsOfTag = t.cluster_id(rowsOfTag);
+                for j = 1:height(C)
+                    cid = double(C.ClusterID(j));
+                    lbl = colOrEmpty(C, "Label", j);
+                    nt = colOrEmpty(C, "Note", j);
+                    hit = rowsOfTag(idsOfTag == cid);
+                    if ~isempty(hit)
+                        t.curation_label(hit) = lbl;
+                        t.curation_note(hit) = nt;
+                        if lbl ~= ""
+                            nLabelled = nLabelled + 1;
+                        end
+                    elseif addNew && lbl ~= ""
+                        added{end + 1} = tool.makeNewUnitRow(t, tg, cid, lbl, nt); %#ok<AGROW>
+                    end
+                end
+            end
+            if ~isempty(added)
+                t = [t; vertcat(added{:})];
+            end
+            tool.RawTable = t;
+            tool.Dataset.vars = string(t.Properties.VariableNames);
+            if addNew
+                tool.setInfo(sprintf("Refreshed from sortings: %d labelled " + ...
+                    "unit(s), %d added unit(s).", nLabelled, numel(added)));
+            end
+        end
+
+        function r = makeNewUnitRow(~, t, tg, cid, lbl, nt)
+            r = t(1, :);
+            for v = string(r.Properties.VariableNames)
+                col = r.(v);
+                if isnumeric(col)
+                    r.(v)(1) = NaN;
+                elseif isstring(col)
+                    r.(v)(1) = "";
+                elseif islogical(col)
+                    r.(v)(1) = false;
+                else
+                    try %#ok<TRYNC>
+                        r.(v)(1) = missing;
+                    end
+                end
+            end
+            r.recording_tag(1) = tg;
+            tt = t(string(t.recording_tag) == tg, :);
+            if ~isempty(tt)
+                if ismember("region", string(t.Properties.VariableNames))
+                    r.region(1) = tt.region(1);
+                end
+                if ismember("task", string(t.Properties.VariableNames))
+                    r.task(1) = tt.task(1);
+                end
+            end
+            r.unit(1) = "c" + string(cid);
+            r.cluster_id(1) = cid;
+            r.curation_label(1) = lbl;
+            r.curation_note(1) = nt;
+        end
+
+        function refreshFromDisk(tool)
+            if isempty(tool.RawTable)
+                tool.setInfo("Load a dataset first.");
+                return
+            end
+            t = tool.RawTable;
+            t.curation_label(:) = "";   % re-derive from disk (source of truth)
+            t.curation_note(:) = "";
+            tool.RawTable = t;
+            tool.scanCuration(true);
+            tool.populateFilters();
+            tool.applyFilters();
+        end
+    end
+
+    % ------------------------------------------------------- review status
+    methods (Access = private)
+        function [lvl, tg, un] = entryOfRow(tool, i)
+            tg = string(tool.ViewTable.recording_tag(i));
+            if tool.RowKind == "recordings"
+                lvl = "recording";
+                un = "";
+            else
+                lvl = "unit";
+                if ismember("unit", string(tool.ViewTable.Properties.VariableNames))
+                    un = string(tool.ViewTable.unit(i));
+                else
+                    un = "";
+                end
+            end
+        end
+
+        function k = statusKey(~, lvl, tg, un)
+            k = char(string(lvl) + "|" + string(tg) + "|" + string(un));
+        end
+
+        function v = getEntry(tool, key)
+            v = struct(status="unverified", note="", modified="");
+            if ~isempty(tool.StateMap) && isKey(tool.StateMap, key)
+                s = tool.StateMap(key);
+                if isfield(s, "status") && s.status ~= ""
+                    v.status = string(s.status);
+                end
+                if isfield(s, "note")
+                    v.note = string(s.note);
+                end
+                if isfield(s, "modified")
+                    v.modified = string(s.modified);
+                end
+            end
+        end
+
+        function s = getStatus(tool, lvl, tg, un)
+            s = tool.getEntry(tool.statusKey(lvl, tg, un)).status;
+        end
+
+        function c = statusColor(~, st)
+            switch string(st)
+                case "WIP";     c = [1.00 0.93 0.55];
+                case "issue";   c = [1.00 0.72 0.72];
+                case "discard"; c = [0.32 0.32 0.32];
+                case "done";    c = [0.78 0.92 0.78];
+                otherwise;      c = [0.93 0.93 0.93];   % unverified
+            end
+        end
+
+        function c = statusFontColor(~, st)
+            if string(st) == "discard"
+                c = [1 1 1];
+            else
+                c = [0 0 0];
+            end
+        end
+
+        function applyState(tool, lvl, tg, un, statusVal, noteVal)
+            key = tool.statusKey(lvl, tg, un);
+            v = tool.getEntry(key);
+            if ~isempty(statusVal)
+                v.status = string(statusVal);
+            end
+            if ~isempty(noteVal)
+                v.note = string(noteVal);
+            end
+            v.modified = string(datetime("now", Format="yyyy-MM-dd HH:mm"));
+            tool.StateMap(key) = v;
+            tool.saveSidecar();
+        end
+
+        function setStatusOfSelected(tool, st)
+            if tool.Locked
+                tool.setInfo("Locked - untick Lock to change review status.");
+                return
+            end
+            row = tool.selectedRow();
+            if isempty(row)
+                tool.setInfo("Select a row first.");
+                return
+            end
+            [lvl, tg, un] = tool.entryOfRow(row);
+            tool.applyState(lvl, tg, un, st, []);
+            tool.renderTable();
+            tool.Table.Selection = row;
+        end
+
+        function setNoteOfSelected(tool, txt)
+            if tool.Locked
+                return
+            end
+            row = tool.selectedRow();
+            if isempty(row)
+                return
+            end
+            [lvl, tg, un] = tool.entryOfRow(row);
+            tool.applyState(lvl, tg, un, [], string(txt));
+        end
+
+        function markOpened(tool, lvl, tg, un)
+            % Opening an entry marks it WIP unless it already has a verdict.
+            if tool.Locked || tg == ""
+                return
+            end
+            if tool.getStatus(lvl, tg, un) == "unverified"
+                tool.applyState(lvl, tg, un, "WIP", []);
+            end
+        end
+
+        function markModified(tool, lvl, tg, un)
+            if tool.Locked || tg == ""
+                return
+            end
+            st = tool.getStatus(lvl, tg, un);
+            if st == "unverified"
+                st = "WIP";
+            end
+            tool.applyState(lvl, tg, un, st, []);   % refresh the modified stamp
+        end
+
+        function onAppClosed(tool)
+            if isempty(tool.UIFigure) || ~isvalid(tool.UIFigure)
+                return
+            end
+            if tool.LoadedTag ~= ""
+                tool.markModified(tool.LoadedLevel, tool.LoadedTag, tool.LoadedUnit);
+            end
+            tool.LoadedTag = "";
+            tool.LoadedUnit = "";
+            tool.LoadedLevel = "";
+            if ~isempty(tool.ViewTable)
+                tool.renderTable();
+            end
+        end
+
+        function setLocked(tool, tf)
+            tool.Locked = logical(tf);
+            en = matlab.lang.OnOffSwitchState(~tool.Locked);
+            for b = tool.StatusButtons
+                b.Enable = en;
+            end
+            if ~isempty(tool.NoteField) && isvalid(tool.NoteField)
+                tool.NoteField.Enable = en;
+            end
+            if ~isempty(tool.ViewTable)
+                tool.renderTable();
+            end
+        end
+
+        function p = sidecarPath(tool)
+            p = "";
+            if isfield(tool.Dataset, "source") && tool.Dataset.source ~= ""
+                [d, base] = fileparts(string(tool.Dataset.source));
+                p = fullfile(d, base + ".review.tsv");
+            end
+        end
+
+        function loadSidecar(tool)
+            p = tool.sidecarPath();
+            if p == "" || ~isfile(p)
+                return
+            end
+            try
+                t = readtable(p, FileType="text", Delimiter="\t", ...
+                    VariableNamingRule="preserve", TextType="string");
+            catch
+                return
+            end
+            vars = string(t.Properties.VariableNames);
+            if ~all(ismember(["level", "recording_tag", "unit", "status"], vars))
+                return
+            end
+            hasNote = ismember("note", vars);
+            hasMod = ismember("modified", vars);
+            for i = 1:height(t)
+                key = tool.statusKey(t.level(i), t.recording_tag(i), ...
+                    emptyIfMissing(t.unit(i)));
+                v.status = string(t.status(i));
+                v.note = "";
+                v.modified = "";
+                if hasNote
+                    v.note = emptyIfMissing(t.note(i));
+                end
+                if hasMod
+                    v.modified = emptyIfMissing(t.modified(i));
+                end
+                tool.StateMap(key) = v;
+            end
+        end
+
+        function saveSidecar(tool)
+            if tool.Locked
+                return
+            end
+            p = tool.sidecarPath();
+            if p == ""
+                return
+            end
+            keys = tool.StateMap.keys;
+            n = numel(keys);
+            if n == 0
+                if isfile(p)
+                    try
+                        delete(p);
+                    catch
+                    end
+                end
+                return
+            end
+            [level, tg, un, status, note, modified] = deal(strings(n, 1));
+            for i = 1:n
+                parts = split(string(keys{i}), "|");
+                level(i) = parts(1);
+                tg(i) = parts(2);
+                if numel(parts) >= 3
+                    un(i) = parts(3);
+                end
+                v = tool.StateMap(keys{i});
+                status(i) = fieldOr(v, "status");
+                note(i) = fieldOr(v, "note");
+                modified(i) = fieldOr(v, "modified");
+            end
+            T = table(level, tg, un, status, note, modified, VariableNames=...
+                ["level", "recording_tag", "unit", "status", "note", "modified"]);
+            try
+                writetable(T, p, FileType="text", Delimiter="\t");
+            catch err
+                tool.setInfo("Could not write review sidecar: " + err.message);
+            end
         end
     end
 
@@ -545,7 +1029,13 @@ classdef DatasetBrowser < handle
             if mode == "phy" && tool.RowKind == "units" ...
                     && ismember("unit", string(tool.ViewTable.Properties.VariableNames))
                 label = string(tool.ViewTable.unit(row));
-                cid = tool.resolveClusterId(tag, label);
+                cid = NaN;
+                if ismember("cluster_id", string(tool.ViewTable.Properties.VariableNames))
+                    cid = double(tool.ViewTable.cluster_id(row));
+                end
+                if isnan(cid)
+                    cid = tool.resolveClusterId(tag, label);
+                end
                 if ~isnan(cid)
                     tool.App.setSelectedClusterIds(cid);
                     tool.App.openCuration(cid);   % skips silently if no waveforms
@@ -555,7 +1045,20 @@ classdef DatasetBrowser < handle
                 end
             end
 
+            % Record what was loaded (for status + highlight) and hook the close.
             tool.LoadedTag = tag;
+            if tool.RowKind == "units" ...
+                    && ismember("unit", string(tool.ViewTable.Properties.VariableNames))
+                tool.LoadedUnit = string(tool.ViewTable.unit(row));
+                tool.LoadedLevel = "unit";
+            else
+                tool.LoadedUnit = "";
+                tool.LoadedLevel = "recording";
+            end
+            tool.markOpened(tool.LoadedLevel, tool.LoadedTag, tool.LoadedUnit);
+            if tool.appValid()
+                tool.App.figureHandle().DeleteFcn = @(~, ~) tool.onAppClosed();
+            end
             tool.renderTable();
             if mode == "online"
                 tool.setInfo("Loaded online (spikes-only) session for " + tag + ".");
@@ -656,6 +1159,30 @@ function s = filterLabel(col)
         s = map.(col);
     else
         s = string(col);
+    end
+end
+
+function s = emptyIfMissing(x)
+    if ismissing(x)
+        s = "";
+    else
+        s = string(x);
+    end
+end
+
+function s = fieldOr(v, name)
+    if isfield(v, name) && ~ismissing(v.(name))
+        s = string(v.(name));
+    else
+        s = "";
+    end
+end
+
+function s = colOrEmpty(t, name, i)
+    if ismember(name, string(t.Properties.VariableNames))
+        s = emptyIfMissing(t.(name)(i));
+    else
+        s = "";
     end
 end
 
