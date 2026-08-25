@@ -38,6 +38,8 @@ classdef DatasetBrowser < handle
 
         UserColumns string = string.empty   % user-chosen Units columns ([] = preset)
         ColPicker      matlab.ui.Figure       % the column-chooser window
+        SortVar string = ""        % displayed column the user last sorted by
+        SortDir string = "ascend"  % "ascend" | "descend"
 
         UIFigure       matlab.ui.Figure
         DatasetLabel   matlab.ui.control.Label
@@ -176,6 +178,7 @@ classdef DatasetBrowser < handle
             tool.Table = uitable(mid, ColumnSortable=true, ...
                 SelectionType="row", Multiselect="off", RowName={}, ...
                 SelectionChangedFcn=@(s, e) tool.onRowSelected(e), ...
+                DisplayDataChangedFcn=@(~, e) tool.onDisplaySort(e), ...
                 DoubleClickedFcn=@(s, e) tool.onOpen());
 
             right = uigridlayout(mid, [6 1]);
@@ -414,6 +417,29 @@ classdef DatasetBrowser < handle
             end
             agg = table(tags, nUnits, region, task, ...
                 VariableNames=["recording_tag", "n_units", "region", "task"]);
+            % Carry per-recording extras when the dataset provides them:
+            % numeric per-unit columns are summed, per-recording text columns
+            % take the first value (they are constant within a recording).
+            sumCols = intersect(["rc_proposal"], ...
+                string(t.Properties.VariableNames));
+            firstCols = intersect(["has_events", "events_sync", ...
+                "autocur_status"], string(t.Properties.VariableNames));
+            for c = sumCols
+                v = zeros(n, 1);
+                for i = 1:n
+                    rows = string(t.recording_tag) == tags(i);
+                    v(i) = sum(double(t.(c)(rows)), "omitnan");
+                end
+                agg.(c) = v;
+            end
+            for c = firstCols
+                v = strings(n, 1);
+                for i = 1:n
+                    rows = string(t.recording_tag) == tags(i);
+                    v(i) = firstValue(t, c, rows);
+                end
+                agg.(c) = v;
+            end
         end
 
         function vars = displayVars(tool)
@@ -522,6 +548,22 @@ classdef DatasetBrowser < handle
 
             data = [table(marker, status, VariableNames=["open", "review"]), ...
                 tool.ViewTable(:, vars)];
+            % Reassigning Data resets the uitable's interactive column sort,
+            % so bake the user's last sort into the data itself. ViewTable is
+            % permuted along with it: selection and styles index into Data
+            % rows, which must stay row-for-row aligned with ViewTable.
+            if tool.SortVar ~= "" ...
+                    && ismember(tool.SortVar, string(data.Properties.VariableNames))
+                try
+                    [data, perm] = sortrows(data, tool.SortVar, tool.SortDir);
+                    tool.ViewTable = tool.ViewTable(perm, :);
+                    status = status(perm);
+                    isLoaded = isLoaded(perm);
+                    tags = tags(perm);
+                catch
+                    % unsortable column type - leave the order as-is
+                end
+            end
             tool.Table.Data = data;
             tool.Table.ColumnName = [{''}, {'review'}, cellstr(vars(:)')];
             tool.Table.ColumnWidth = [{26}, {78}, repmat({'auto'}, 1, numel(vars))];
@@ -567,6 +609,49 @@ classdef DatasetBrowser < handle
                 lockMsg = "  [LOCKED]";
             end
             tool.setInfo(sprintf("%d rows shown (%s).%s", n, tool.RowKind, lockMsg));
+        end
+
+        function onDisplaySort(tool, evt)
+            %ONDISPLAYSORT Remember which column the user sorted (and in which
+            %   direction) so renderTable can re-apply it after resetting Data.
+            if string(evt.Interaction) ~= "sort"
+                return
+            end
+            var = string(evt.InteractionVariable);
+            if var == ""
+                return
+            end
+            col = tool.Table.DisplayData.(var);
+            asc = tool.safeIssorted(col, "ascend");
+            desc = tool.safeIssorted(col, "descend");
+            if desc && ~asc
+                tool.SortVar = var;
+                tool.SortDir = "descend";
+            elseif asc
+                tool.SortVar = var;
+                tool.SortDir = "ascend";
+            else
+                tool.SortVar = "";   % cycled back to unsorted
+            end
+        end
+
+        function tf = safeIssorted(~, col, dir)
+            %SAFEISSORTED issorted that treats unsortable types as unsorted.
+            try
+                tf = issorted(col, dir);
+            catch
+                tf = false;
+            end
+        end
+
+        function row = rowOfEntry(tool, tg, un)
+            %ROWOFENTRY Current ViewTable row of an entry, [] if not shown.
+            hit = string(tool.ViewTable.recording_tag) == tg;
+            if tool.RowKind == "units" && un ~= "" ...
+                    && ismember("unit", string(tool.ViewTable.Properties.VariableNames))
+                hit = hit & string(tool.ViewTable.unit) == un;
+            end
+            row = find(hit, 1);
         end
 
         function onRowSelected(tool, ~)
@@ -921,7 +1006,11 @@ classdef DatasetBrowser < handle
             [lvl, tg, un] = tool.entryOfRow(row);
             tool.applyState(lvl, tg, un, st, []);
             tool.renderTable();
-            tool.Table.Selection = row;
+            % The render may have re-sorted the rows - re-find the entry.
+            row = tool.rowOfEntry(tg, un);
+            if ~isempty(row)
+                tool.Table.Selection = row;
+            end
         end
 
         function setNoteOfSelected(tool, txt)
