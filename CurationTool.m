@@ -30,7 +30,9 @@ classdef CurationTool < handle
         GlobalIdx double       % global spike indices shown (time order)
         ClusterOf double       % cluster id per shown spike
         IsiNextMs double       % ISI to the next spike in the same cluster, ms
-        Scores double          % nSpikes-by-3 joint PCA scores of the waveforms
+        Scores double          % nSpikes-by-3 joint PCA scores (displayed)
+        ScoresFull double      % nSpikes-by-(up to 10) PCA scores (clustered)
+        TsneXY double = []     % cached 2-D t-SNE embedding ([] until computed)
         WaveUV double          % nSpikes-by-nSamples waveforms in microvolts
         WaveTimeMs double      % 1-by-nSamples waveform sample times, ms
 
@@ -40,8 +42,9 @@ classdef CurationTool < handle
         LineSegs cell = {}     % placed waveform lines; spikes must cross ALL
         FoundLabels double = []      % k-means labels from Find cluster ([] = none)
 
-        ClusterMethod string = "kmeans"   % "kmeans" | "gmm"
+        ClusterMethod string = "gmm"      % "kmeans" | "gmm" | "dbscan"
         ClusterK = "auto"                 % "auto" or a positive integer
+        ClusterPCs double = 6             % how many PCs feed Find clusters
         SettingsMenus struct = struct()
 
         UIFigure               matlab.ui.Figure
@@ -57,12 +60,15 @@ classdef CurationTool < handle
     end
 
     properties (Constant, Access = private)
+        PrefGroup = "SpikeVisualizationApp"
         MinMs = 0.2
         MaxMs = 1000
         NumBins = 64
         RefractoryMs = 2
         MaxWaveformsToPlot = 150
         SelectColor = [0 0 0]
+        PCChoices = [3 6 10]     % selectable PC counts for Find clusters
+        MaxTsneSpikes = 8000     % t-SNE embeds at most this many spikes
     end
 
     methods
@@ -78,10 +84,22 @@ classdef CurationTool < handle
             tool.ClusterIds = unique(clusterIds(:))';
             tool.computeData();
             tool.buildUI();
+            % Restore the time-window split if it was open at last close.
+            if getpref(tool.PrefGroup, "curationWindowTool", false)
+                tool.launchWindowTool();
+            end
             tool.refreshAll();
         end
 
         function delete(tool)
+            % Remember whether the time-window split was open, so the next
+            % CurationTool can restore it.
+            try
+                setpref(tool.PrefGroup, "curationWindowTool", ...
+                    ~isempty(tool.WindowTool) && isvalid(tool.WindowTool));
+            catch
+                % prefs are a convenience - never block closing
+            end
             if ~isempty(tool.WindowTool) && isvalid(tool.WindowTool)
                 delete(tool.WindowTool);
             end
@@ -125,9 +143,8 @@ classdef CurationTool < handle
                 polyXY (:, 2) double
             end
             tool.LineSegs = {};
-            [ax1, ax2] = tool.pcColumns();
-            inside = inpolygon(tool.Scores(:, ax1), tool.Scores(:, ax2), ...
-                polyXY(:, 1), polyXY(:, 2));
+            [x, y] = tool.viewCoords();
+            inside = inpolygon(x, y, polyXY(:, 1), polyXY(:, 2));
             if any(tool.SelMask)
                 tool.SelMask = inside & tool.SelMask;
             else
@@ -135,7 +152,8 @@ classdef CurationTool < handle
             end
             tool.SelSource = "pc";
             tool.SelectedRange = [];
-            tool.setInfo(sprintf("%d spikes selected in PC space.", sum(tool.SelMask)));
+            tool.setInfo(sprintf("%d spikes selected in the scatter.", ...
+                sum(tool.SelMask)));
             tool.refreshAll();
         end
 
@@ -220,15 +238,22 @@ classdef CurationTool < handle
             %FINDCLUSTERS Auto-split the shown spikes across PC features.
             %   Colours the scatter by the found clusters (overriding the source
             %   clusters); pick one in the Found dropdown to select/move it.
-            X = tool.Scores(:, 1:min(3, size(tool.Scores, 2)));
+            X = tool.ScoresFull(:, 1:min(tool.ClusterPCs, size(tool.ScoresFull, 2)));
             if size(X, 1) < 10
                 tool.setInfo("Too few spikes to cluster.");
                 return
             end
-            k = tool.resolveK(X);
-            tool.setInfo(sprintf("Finding %d clusters (%s)...", k, tool.ClusterMethod));
-            drawnow;
-            tool.FoundLabels = tool.runClustering(X, k);
+            if tool.ClusterMethod == "dbscan"
+                tool.setInfo("Finding clusters (dbscan)...");
+                drawnow;
+                tool.FoundLabels = tool.runDbscan(X);
+            else
+                k = tool.resolveK(X);
+                tool.setInfo(sprintf("Finding %d clusters (%s)...", ...
+                    k, tool.ClusterMethod));
+                drawnow;
+                tool.FoundLabels = tool.runClustering(X, k);
+            end
             tool.SelMask = false(numel(tool.GlobalIdx), 1);
             tool.SelSource = "found";
             tool.SelectedRange = [];
@@ -236,8 +261,14 @@ classdef CurationTool < handle
             tool.pickBestView(X);
             tool.updateFoundDropdown();
             tool.FoundDropdown.Value = tool.FoundDropdown.ItemsData{1};   % (all)
-            tool.setInfo(sprintf("Found %d clusters (%s). Pick one in 'Found' " + ...
-                "to select it, then Move.", k, tool.ClusterMethod));
+            nFound = numel(unique(tool.FoundLabels(tool.FoundLabels > 0)));
+            msg = sprintf("Found %d clusters (%s, %d PCs).", nFound, ...
+                tool.ClusterMethod, size(X, 2));
+            nNoise = sum(tool.FoundLabels < 0);
+            if nNoise > 0
+                msg = msg + sprintf(" %d spikes flagged as noise.", nNoise);
+            end
+            tool.setInfo(msg + " Pick one in 'Found' to select it, then Move.");
             tool.refreshAll();
         end
 
@@ -311,14 +342,17 @@ classdef CurationTool < handle
             tool.WaveTimeMs = t;
 
             if size(tool.WaveUV, 1) >= 3 && ~isempty(tool.WaveUV)
-                [~, sc] = pca(tool.WaveUV, NumComponents=min(3, size(tool.WaveUV, 2)));
-                if size(sc, 2) < 3
-                    sc(:, end+1:3) = 0;
-                end
+                nc = min([10, size(tool.WaveUV, 2), size(tool.WaveUV, 1) - 1]);
+                [~, sc] = pca(tool.WaveUV, NumComponents=nc);
             else
                 sc = zeros(numel(tool.GlobalIdx), 3);
             end
-            tool.Scores = sc;
+            if size(sc, 2) < 3
+                sc(:, end+1:3) = 0;
+            end
+            tool.ScoresFull = sc;
+            tool.Scores = sc(:, 1:3);
+            tool.TsneXY = [];   % embedding is stale for the new spike set
 
             tool.SelMask = false(numel(tool.GlobalIdx), 1);
             tool.FoundLabels = [];
@@ -366,10 +400,27 @@ classdef CurationTool < handle
             labels = kmeans(X, k, Replicates=3);
         end
 
+        function labels = runDbscan(~, X)
+            %RUNDBSCAN Density-based clustering (no k needed; -1 = noise).
+            %   Epsilon comes from the standard kNN-distance heuristic: the
+            %   90th percentile of each point's distance to its minpts-th
+            %   neighbour, which sits near the elbow of the k-distance curve.
+            minpts = max(10, 2 * size(X, 2));
+            [~, d] = knnsearch(X, X, K=minpts);
+            epsilon = quantile(d(:, end), 0.90);
+            if ~(epsilon > 0)
+                epsilon = max(eps, std(X(:)) / 10);   % degenerate features
+            end
+            labels = dbscan(X, epsilon, minpts);
+        end
+
         function pickBestView(tool, X)
             %PICKBESTVIEW Show the 2-D PC projection that best separates the
             %   found clusters (auto-switches the PC dropdown if a better view
             %   than the current one exists).
+            if string(tool.PCDropdown.Value) == "t-SNE"
+                return   % keep the embedding view; found colours show there
+            end
             pairs = [1 2; 1 3; 2 3];
             names = ["PC1 vs PC2", "PC1 vs PC3", "PC2 vs PC3"];
             sub = tool.subsample((1:size(X, 1))', 3000);   % silhouette is O(n^2)
@@ -464,9 +515,9 @@ classdef CurationTool < handle
             pcCell.Layout.Column = 2;
             pcCell.ColumnWidth = {"fit", "1x"};
             pcCell.Padding = [0 0 0 0];
-            uilabel(pcCell, Text="PC view:", HorizontalAlignment="right");
+            uilabel(pcCell, Text="View:", HorizontalAlignment="right");
             tool.PCDropdown = uidropdown(pcCell, ...
-                Items=["PC1 vs PC2", "PC1 vs PC3", "PC2 vs PC3"], ...
+                Items=["PC1 vs PC2", "PC1 vs PC3", "PC2 vs PC3", "t-SNE"], ...
                 ValueChangedFcn=@(~, ~) tool.refreshPC());
             uilabel(head, Text="");
 
@@ -499,6 +550,8 @@ classdef CurationTool < handle
             clug = uigridlayout(clu, [1 2]);
             clug.Padding = [4 2 4 2];
             uibutton(clug, Text="Find clusters", BackgroundColor=[0.9 0.9 1], ...
+                Tooltip="Right-click to switch method (k-means / Gaussian mixture)", ...
+                ContextMenu=tool.SettingsMenus.methodCtx, ...
                 ButtonPushedFcn=@(~, ~) tool.findClusters());
             tool.FoundDropdown = uidropdown(clug, Items={'(select found)'}, ...
                 ValueChangedFcn=@(s, ~) tool.selectFound(s.Value));
@@ -525,9 +578,30 @@ classdef CurationTool < handle
             m = uimenu(tool.UIFigure, Text="Settings");
             method = uimenu(m, Text="Find-cluster method");
             tool.SettingsMenus.kmeans = uimenu(method, Text="k-means", ...
-                Checked="on", MenuSelectedFcn=@(~, ~) tool.setMethod("kmeans"));
+                MenuSelectedFcn=@(~, ~) tool.setMethod("kmeans"));
             tool.SettingsMenus.gmm = uimenu(method, Text="Gaussian mixture", ...
                 MenuSelectedFcn=@(~, ~) tool.setMethod("gmm"));
+            tool.SettingsMenus.dbscan = uimenu(method, Text="DBSCAN (density)", ...
+                MenuSelectedFcn=@(~, ~) tool.setMethod("dbscan"));
+            % Same choices on right-click of the "Find clusters" button.
+            cm = uicontextmenu(tool.UIFigure);
+            tool.SettingsMenus.kmeansCtx = uimenu(cm, Text="k-means", ...
+                MenuSelectedFcn=@(~, ~) tool.setMethod("kmeans"));
+            tool.SettingsMenus.gmmCtx = uimenu(cm, Text="Gaussian mixture", ...
+                MenuSelectedFcn=@(~, ~) tool.setMethod("gmm"));
+            tool.SettingsMenus.dbscanCtx = uimenu(cm, Text="DBSCAN (density)", ...
+                MenuSelectedFcn=@(~, ~) tool.setMethod("dbscan"));
+            tool.SettingsMenus.methodCtx = cm;
+            feat = uimenu(m, Text="Cluster on");
+            tool.SettingsMenus.pcs = gobjects(1, numel(tool.PCChoices));
+            for i = 1:numel(tool.PCChoices)
+                c = tool.PCChoices(i);
+                tool.SettingsMenus.pcs(i) = uimenu(feat, ...
+                    Text=string(c) + " PCs", ...
+                    MenuSelectedFcn=@(~, ~) tool.setClusterPCs(c));
+            end
+            tool.setMethod(tool.ClusterMethod);       % sync the check marks
+            tool.setClusterPCs(tool.ClusterPCs);
             num = uimenu(m, Text="Number of clusters");
             tool.SettingsMenus.auto = uimenu(num, Text="Auto (estimate)", ...
                 Checked="on", MenuSelectedFcn=@(~, ~) tool.setClusterK("auto"));
@@ -549,6 +623,43 @@ classdef CurationTool < handle
                 delete(tool.WindowTool);
             end
             tool.WindowTool = TimeWindowTool(tool.App, tool);
+            tool.arrangeWithWindowTool();
+        end
+
+        function arrangeWithWindowTool(tool)
+            %ARRANGEWITHWINDOWTOOL Tile this window and the time-window split
+            %   side by side (Curation left, split right) on the monitor the
+            %   Curation window is on, so neither covers the other.
+            cf = tool.UIFigure;
+            wf = tool.WindowTool.figureHandle();
+            scr = tool.monitorOf(cf);
+            gap = 10;                        % between/around the windows
+            topPad = 90;                     % OS title bar above the figure
+            botPad = 60;                     % taskbar
+            availW = scr(3) - 3 * gap;
+            availH = scr(4) - topPad - botPad;
+            curW = min(cf.Position(3), round(availW * 0.55));
+            wtW = min(wf.Position(3), availW - curW);
+            yTop = scr(2) + botPad + availH;
+            curH = min(cf.Position(4), availH);
+            wtH = min(wf.Position(4), availH);
+            cf.Position = [scr(1) + gap, yTop - curH, curW, curH];
+            wf.Position = [scr(1) + 2 * gap + curW, yTop - wtH, wtW, wtH];
+        end
+
+        function scr = monitorOf(~, fig)
+            %MONITOROF The monitor rect [x y w h] containing the figure centre.
+            mons = groot().MonitorPositions;
+            scr = mons(1, :);
+            c = fig.Position(1:2) + fig.Position(3:4) / 2;
+            for i = 1:size(mons, 1)
+                p = mons(i, :);
+                if c(1) >= p(1) && c(1) < p(1) + p(3) ...
+                        && c(2) >= p(2) && c(2) < p(2) + p(4)
+                    scr = p;
+                    break
+                end
+            end
         end
 
         function launchRecoverTool(tool)
@@ -560,10 +671,19 @@ classdef CurationTool < handle
 
         function setMethod(tool, method)
             tool.ClusterMethod = method;
-            tool.SettingsMenus.kmeans.Checked = ...
-                matlab.lang.OnOffSwitchState(method == "kmeans");
-            tool.SettingsMenus.gmm.Checked = ...
-                matlab.lang.OnOffSwitchState(method == "gmm");
+            for nm = ["kmeans", "gmm", "dbscan"]
+                on = matlab.lang.OnOffSwitchState(nm == method);
+                tool.SettingsMenus.(nm).Checked = on;
+                tool.SettingsMenus.(nm + "Ctx").Checked = on;
+            end
+        end
+
+        function setClusterPCs(tool, n)
+            tool.ClusterPCs = n;
+            for i = 1:numel(tool.PCChoices)
+                tool.SettingsMenus.pcs(i).Checked = ...
+                    matlab.lang.OnOffSwitchState(tool.PCChoices(i) == n);
+            end
         end
 
         function setClusterK(tool, k)
@@ -589,7 +709,9 @@ classdef CurationTool < handle
                 return
             end
             g = unique(tool.FoundLabels);
-            tool.FoundDropdown.Items = ["(all found)"; "found " + string(g(:))];
+            names = "found " + string(g(:));
+            names(g < 0) = "noise";   % dbscan outliers
+            tool.FoundDropdown.Items = ["(all found)"; names];
             tool.FoundDropdown.ItemsData = [{[]}; num2cell(g(:))];
         end
 
@@ -670,7 +792,9 @@ classdef CurationTool < handle
                 masks = arrayfun(@(v) tool.FoundLabels == v, g, ...
                     UniformOutput=false);
                 colors = foundPalette(numel(g));
+                colors(g < 0, :) = 0.55;   % grey for dbscan noise
                 names = "found " + string(g(:));
+                names(g < 0) = "noise";
             else
                 cids = tool.ClusterIds;
                 masks = arrayfun(@(c) tool.ClusterOf == c, cids, ...
@@ -685,11 +809,9 @@ classdef CurationTool < handle
 
         function refreshPC(tool)
             ax = tool.PCAxes;
+            [x, y, xName, yName] = tool.viewCoords();
             cla(ax);
             hold(ax, "on");
-            [ax1, ax2] = tool.pcColumns();
-            x = tool.Scores(:, ax1);
-            y = tool.Scores(:, ax2);
             [masks, colors, names] = tool.colorGroups();
             handles = gobjects(1, numel(masks));
             for k = 1:numel(masks)
@@ -704,12 +826,67 @@ classdef CurationTool < handle
             if numel(names) > 1
                 legend(ax, handles, names, Location="best", Box="off");
             end
-            labels = tool.PCDropdown.Value;
-            title(ax, "PC features  (" + labels + ")");
-            parts = split(labels, " vs ");
-            xlabel(ax, parts(1));
-            ylabel(ax, parts(2));
+            if xName == "t-SNE 1"
+                title(ax, sprintf("t-SNE embedding  (of %d PCs)", ...
+                    size(tool.ScoresFull, 2)));
+            else
+                title(ax, "PC features  (" + string(tool.PCDropdown.Value) + ")");
+            end
+            xlabel(ax, xName);
+            ylabel(ax, yName);
             axis(ax, "tight");
+        end
+
+        function [x, y, xName, yName] = viewCoords(tool)
+            %VIEWCOORDS Scatter coordinates for the current view (PC pair or
+            %   t-SNE). t-SNE coordinates are NaN for spikes left out of the
+            %   embedding, which scatter and inpolygon both ignore.
+            if string(tool.PCDropdown.Value) == "t-SNE"
+                xy = tool.tsneCoords();
+                x = xy(:, 1);
+                y = xy(:, 2);
+                xName = "t-SNE 1";
+                yName = "t-SNE 2";
+            else
+                [ax1, ax2] = tool.pcColumns();
+                x = tool.Scores(:, ax1);
+                y = tool.Scores(:, ax2);
+                parts = split(string(tool.PCDropdown.Value), " vs ");
+                xName = parts(1);
+                yName = parts(2);
+            end
+        end
+
+        function xy = tsneCoords(tool)
+            %TSNECOORDS Lazily computed 2-D t-SNE of the clustering PCs,
+            %   cached until the spike set changes (computeData clears it).
+            if ~isempty(tool.TsneXY)
+                xy = tool.TsneXY;
+                return
+            end
+            n = size(tool.ScoresFull, 1);
+            xy = nan(n, 2);
+            sub = tool.subsample((1:n)', tool.MaxTsneSpikes);
+            if numel(sub) >= 12
+                note = "";
+                if numel(sub) < n
+                    note = sprintf(" (%d of %d spikes)", numel(sub), n);
+                end
+                tool.setInfo(sprintf("Computing t-SNE embedding%s - this " + ...
+                    "can take a while...", note));
+                drawnow;
+                try
+                    xy(sub, :) = tsne(tool.ScoresFull(sub, :), ...
+                        Perplexity=min(30, floor((numel(sub) - 1) / 3)));
+                    tool.setInfo("t-SNE ready" + note + ". Lasso and Find " + ...
+                        "clusters work in this view too.");
+                catch err
+                    tool.setInfo("t-SNE failed: " + err.message);
+                end
+            else
+                tool.setInfo("Too few spikes for a t-SNE embedding.");
+            end
+            tool.TsneXY = xy;
         end
 
         function refreshWave(tool)

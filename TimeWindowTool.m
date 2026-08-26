@@ -62,6 +62,10 @@ classdef TimeWindowTool < handle
             end
         end
 
+        function h = figureHandle(tool)
+            h = tool.UIFigure;
+        end
+
         function setCurationSelection(tool, globalIdx)
             %SETCURATIONSELECTION Reflect the Curation selection here (live link).
             tool.CurationSelIdx = globalIdx;
