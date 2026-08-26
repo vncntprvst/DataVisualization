@@ -69,7 +69,7 @@ classdef SpikeVisualizationApp < handle
         ScopeMenuAll matlab.ui.container.Menu
         TraceYLim double = []              % fixed voltage limits for the trace
         UpdatingTrace logical = false      % guards the trace XLim listener
-        RealignMode string = "peak"        % "peak" | "trough" | "firstpeak"
+        RealignMode string = "peak"   % "peak" | "mainpeak" | "trough" | "firstpeak"
         RealignMenus struct = struct()     % checkable realign-target menu items
 
         CorrLayout             matlab.ui.container.GridLayout   % CCG matrix host
@@ -1461,13 +1461,15 @@ classdef SpikeVisualizationApp < handle
             app.Spikes.wfMaxADC(sel) = double(max(app.Spikes.waveforms(sel, :), [], 2));
             app.Spikes.amplitudePP(sel) = app.Spikes.wfMaxADC(sel) - app.Spikes.wfMinADC(sel);
             app.refreshAll();
-            app.setInfo(sprintf("Realigned %d cluster(s) to their waveform peak.", ...
-                numel(cids)));
+            app.setInfo(sprintf("Realigned %d cluster(s) to the %s.", ...
+                numel(cids), app.realignLabel(app.RealignMode)));
         end
 
         function sampleIdx = alignmentSample(app, meanWaveform)
             %ALIGNMENTSAMPLE Sample of the feature to realign to, per RealignMode.
             switch app.RealignMode
+                case "mainpeak"
+                    [~, sampleIdx] = max(meanWaveform);
                 case "trough"
                     [~, sampleIdx] = min(meanWaveform);
                 case "firstpeak"
@@ -1624,9 +1626,11 @@ classdef SpikeVisualizationApp < handle
                 MenuSelectedFcn=@(~, ~) app.setThresholdScope("all"));
 
             ra = uimenu(opt, Text="Realign to");
-            app.RealignMenus.peak = uimenu(ra, Text="Largest peak", Checked="on", ...
-                MenuSelectedFcn=@(~, ~) app.setRealignMode("peak"));
-            app.RealignMenus.trough = uimenu(ra, Text="Trough (negative)", ...
+            app.RealignMenus.peak = uimenu(ra, Text="Largest deflection", ...
+                Checked="on", MenuSelectedFcn=@(~, ~) app.setRealignMode("peak"));
+            app.RealignMenus.mainpeak = uimenu(ra, Text="Main peak (positive)", ...
+                MenuSelectedFcn=@(~, ~) app.setRealignMode("mainpeak"));
+            app.RealignMenus.trough = uimenu(ra, Text="Main trough (negative)", ...
                 MenuSelectedFcn=@(~, ~) app.setRealignMode("trough"));
             app.RealignMenus.firstpeak = uimenu(ra, Text="First peak", ...
                 MenuSelectedFcn=@(~, ~) app.setRealignMode("firstpeak"));
@@ -1659,15 +1663,35 @@ classdef SpikeVisualizationApp < handle
             app.PETHWindow = PETHTool(app);
         end
 
+        function realignTo(app, mode)
+            %REALIGNTO Set the alignment target and realign the selection now
+            %   (used by the right-click menu on the Realign button).
+            app.setRealignMode(mode);
+            app.realignSelected();
+        end
+
+        function s = realignLabel(~, mode)
+            %REALIGNLABEL Human-readable name of a realign mode.
+            switch mode
+                case "mainpeak"
+                    s = "main peak (positive)";
+                case "trough"
+                    s = "main trough (negative)";
+                case "firstpeak"
+                    s = "first peak";
+                otherwise
+                    s = "largest deflection";
+            end
+        end
+
         function setRealignMode(app, mode)
             app.RealignMode = mode;
-            app.RealignMenus.peak.Checked = ...
-                matlab.lang.OnOffSwitchState(mode == "peak");
-            app.RealignMenus.trough.Checked = ...
-                matlab.lang.OnOffSwitchState(mode == "trough");
-            app.RealignMenus.firstpeak.Checked = ...
-                matlab.lang.OnOffSwitchState(mode == "firstpeak");
-            app.setInfo("Realign target set to: " + mode);
+            for nm = ["peak", "mainpeak", "trough", "firstpeak"]
+                on = matlab.lang.OnOffSwitchState(nm == mode);
+                app.RealignMenus.(nm).Checked = on;
+                app.RealignMenus.(nm + "Ctx").Checked = on;
+            end
+            app.setInfo("Realign target set to: " + app.realignLabel(mode));
         end
 
         % --- add-on scripts (Options > Run script) ---
@@ -1888,7 +1912,18 @@ classdef SpikeVisualizationApp < handle
             m = uibutton(g, Text="Merge selected", ...
                 ButtonPushedFcn=@(~, ~) app.mergeSelected());
             m.Layout.Row = 2; m.Layout.Column = 1;
-            r = uibutton(g, Text="Realign selected", ...
+            % Right-click the button to pick the target and realign in one go.
+            cm = uicontextmenu(app.UIFigure);
+            targets = ["peak", "mainpeak", "trough", "firstpeak"];
+            for i = 1:numel(targets)
+                md = targets(i);
+                app.RealignMenus.(md + "Ctx") = uimenu(cm, ...
+                    Text="Align to " + app.realignLabel(md), ...
+                    Checked=matlab.lang.OnOffSwitchState(md == app.RealignMode), ...
+                    MenuSelectedFcn=@(~, ~) app.realignTo(md));
+            end
+            r = uibutton(g, Text="Realign selected", ContextMenu=cm, ...
+                Tooltip="Right-click to pick the alignment target and realign", ...
                 ButtonPushedFcn=@(~, ~) app.realignSelected());
             r.Layout.Row = 2; r.Layout.Column = 2;
             ci = uibutton(g, Text="Change ID...", ...

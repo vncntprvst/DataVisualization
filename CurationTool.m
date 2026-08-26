@@ -152,8 +152,14 @@ classdef CurationTool < handle
             end
             tool.SelSource = "pc";
             tool.SelectedRange = [];
-            tool.setInfo(sprintf("%d spikes selected in the scatter.", ...
-                sum(tool.SelMask)));
+            msg = sprintf("%d spikes selected in the scatter.", ...
+                sum(tool.SelMask));
+            hidden = sum(isnan(x));   % spikes with no t-SNE coordinates
+            if hidden > 0
+                msg = msg + sprintf(" WARNING: %d spikes are not in the " + ...
+                    "t-SNE subsample and could not be selected.", hidden);
+            end
+            tool.setInfo(msg);
             tool.refreshAll();
         end
 
@@ -302,6 +308,17 @@ classdef CurationTool < handle
             tool.setInfo(sprintf("%d spikes selected (from time-window lasso).", ...
                 sum(tool.SelMask)));
             tool.refreshAll();
+        end
+
+        function adoptCluster(tool, newIds)
+            %ADOPTCLUSTER Add split-off cluster id(s) to the shown set and
+            %   refresh every panel (used by the time-window band split).
+            arguments
+                tool
+                newIds (1, :) double
+            end
+            tool.ClusterIds = unique([tool.ClusterIds, newIds]);
+            tool.refreshAfterEdit();
         end
     end
 
@@ -827,8 +844,14 @@ classdef CurationTool < handle
                 legend(ax, handles, names, Location="best", Box="off");
             end
             if xName == "t-SNE 1"
-                title(ax, sprintf("t-SNE embedding  (of %d PCs)", ...
-                    size(tool.ScoresFull, 2)));
+                nEmb = sum(~isnan(x));
+                if nEmb < numel(x)
+                    title(ax, sprintf("t-SNE  (showing %d of %d spikes)", ...
+                        nEmb, numel(x)));
+                else
+                    title(ax, sprintf("t-SNE embedding  (of %d PCs)", ...
+                        size(tool.ScoresFull, 2)));
+                end
             else
                 title(ax, "PC features  (" + string(tool.PCDropdown.Value) + ")");
             end
@@ -880,6 +903,15 @@ classdef CurationTool < handle
                         Perplexity=min(30, floor((numel(sub) - 1) / 3)));
                     tool.setInfo("t-SNE ready" + note + ". Lasso and Find " + ...
                         "clusters work in this view too.");
+                    if numel(sub) < n
+                        uialert(tool.UIFigure, sprintf("Only %d of %d " + ...
+                            "spikes are embedded (evenly subsampled over " + ...
+                            "time). The rest are not drawn in this view, " + ...
+                            "and a lasso here cannot select them. For a " + ...
+                            "selection that must cover every spike, use " + ...
+                            "Find clusters or a PC view.", numel(sub), n), ...
+                            "t-SNE view is subsampled", Icon="warning");
+                    end
                 catch err
                     tool.setInfo("t-SNE failed: " + err.message);
                 end
