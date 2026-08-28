@@ -623,19 +623,35 @@ classdef SpikeVisualizationApp < handle
             fs = app.Spikes.samplingRate;
             a = sort(app.Spikes.spikeTimes(app.Spikes.clusters == cidA)) / fs * 1000;
             b = sort(app.Spikes.spikeTimes(app.Spikes.clusters == cidB)) / fs * 1000;
-            % Cap the reference train for responsiveness (shape is preserved).
-            maxRef = 15000;
-            if numel(a) > maxRef
-                a = a(round(linspace(1, numel(a), maxRef)));
-            end
-            edges = -app.ISIMaxMs:app.ISIBinMs:app.ISIMaxMs;
+            a = a(:);
+            b = b(:);
+            W = app.ISIMaxMs;
+            edges = -W:app.ISIBinMs:W;
             lags = edges(1:end-1) + app.ISIBinMs / 2;
-            counts = zeros(1, numel(lags));
+            % Two-pointer sweep over the sorted trains: collect every
+            % pairwise lag within +-W, then bin ONCE. The old per-spike
+            % histcounts loop cost ~0.6 s per refresh on a 60k-spike
+            % cluster; this is exact (no reference-train cap) and runs in
+            % milliseconds.
+            nb = numel(b);
+            lo = 1;
+            hi = 1;
+            chunks = cell(numel(a), 1);
             for k = 1:numel(a)
-                d = b - a(k);
-                d = d(abs(d) <= app.ISIMaxMs);
-                counts = counts + histcounts(d, edges);
+                while lo <= nb && b(lo) < a(k) - W
+                    lo = lo + 1;
+                end
+                if hi < lo
+                    hi = lo;
+                end
+                while hi <= nb && b(hi) <= a(k) + W
+                    hi = hi + 1;
+                end
+                if hi > lo
+                    chunks{k} = b(lo:hi-1) - a(k);
+                end
             end
+            counts = histcounts(vertcat(chunks{:}), edges);
             if cidA == cidB
                 counts(abs(lags) < app.ISIBinMs) = 0;   % drop the zero-lag peak
             end

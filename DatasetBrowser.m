@@ -444,6 +444,16 @@ classdef DatasetBrowser < handle
                 end
                 agg.(c) = v;
             end
+            % n_original: how many of the recording's units were in the
+            % original manuscript (in_original == "original"; per-unit column).
+            if ismember("in_original", string(t.Properties.VariableNames))
+                v = zeros(n, 1);
+                for i = 1:n
+                    rows = string(t.recording_tag) == tags(i);
+                    v(i) = sum(string(t.in_original(rows)) == "original");
+                end
+                agg.n_original = v;
+            end
         end
 
         function vars = displayVars(tool)
