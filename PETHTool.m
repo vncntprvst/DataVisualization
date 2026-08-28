@@ -64,7 +64,7 @@ classdef PETHTool < handle
             ctl.RowHeight = {26, 16, "1x", 16, 26, 16, 26, 16, 26, 26, 26, 26, "fit"};
             ctl.Padding = [6 6 6 6];
 
-            b = uibutton(ctl, Text="Load events...", ...
+            b = uibutton(ctl, Text="Load events", ...
                 ButtonPushedFcn=@(~, ~) tool.loadDialog());
             b.Layout.Row = 1; b.Layout.Column = [1 2];
             lbl = uilabel(ctl, Text="Events", FontWeight="bold");
@@ -108,7 +108,7 @@ classdef PETHTool < handle
                 tool.setEvents(LoadEvents(string(source)));
             catch err
                 tool.setInfo("No events loaded: " + err.message + ...
-                    "  Use 'Load events...'.");
+                    "  Use 'Load events'.");
             end
         end
 

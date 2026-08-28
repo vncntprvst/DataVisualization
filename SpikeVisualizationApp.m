@@ -70,6 +70,7 @@ classdef SpikeVisualizationApp < handle
         TraceYLim double = []              % fixed voltage limits for the trace
         UpdatingTrace logical = false      % guards the trace XLim listener
         RealignMode string = "peak"   % "peak" | "mainpeak" | "trough" | "firstpeak"
+        RealignScope string = "cluster"    % "cluster" (between) | "spike" (within)
         RealignMenus struct = struct()     % checkable realign-target menu items
 
         CorrLayout             matlab.ui.container.GridLayout   % CCG matrix host
@@ -133,6 +134,26 @@ classdef SpikeVisualizationApp < handle
         function f = figureHandle(app)
             %FIGUREHANDLE Return the underlying uifigure (for scripting/testing).
             f = app.UIFigure;
+        end
+    end
+
+    methods (Static)
+        function logEvent(msg)
+            %LOGEVENT Append a timestamped line to the session event log
+            %   (<tempdir>\SpikeVizEvents.log). Used to pinpoint UI stalls:
+            %   a slow operation shows as a start line with a late (or
+            %   missing) end line. Open/close per call so lines survive a
+            %   hard freeze.
+            try
+                fid = fopen(fullfile(tempdir, "SpikeVizEvents.log"), "a");
+                if fid ~= -1
+                    fprintf(fid, "%s  %s\n", ...
+                        char(datetime("now", Format="HH:mm:ss.SSS")), msg);
+                    fclose(fid);
+                end
+            catch
+                % logging must never break the app
+            end
         end
     end
 
@@ -234,6 +255,8 @@ classdef SpikeVisualizationApp < handle
         end
 
         function refreshAll(app)
+            t0 = tic;
+            SpikeVisualizationApp.logEvent("app.refreshAll start");
             app.plotTrace();            % sets the trace window, needed for scope
             app.recomputeHighlight();
             app.plotWaveforms();
@@ -242,6 +265,7 @@ classdef SpikeVisualizationApp < handle
             app.plotISI();
             app.plotCorrelograms();
             app.plotFeatures();
+            SpikeVisualizationApp.logEvent(sprintf("app.refreshAll end (%.2f s)", toc(t0)));
         end
 
         function refreshHighlightPanels(app)
@@ -391,16 +415,36 @@ classdef SpikeVisualizationApp < handle
             if isempty(cids)
                 return
             end
-            cid = app.dominantCluster(cids);
-            isiMs = app.isiMsOf(cid);
+            cids = reshape(cids, 1, []);
             edges = logspace(log10(app.ISIMinMs), log10(app.ISIHistMaxMs), 64);
-            histogram(ax, isiMs, edges, FaceColor=app.clusterColor(cid), ...
-                EdgeColor="none");
+            alpha = 1;
+            if numel(cids) > 1
+                alpha = 0.45;   % overlay, like the Curation ISI panel
+            end
+            hold(ax, "on");
+            parts = strings(1, numel(cids));
+            for k = 1:numel(cids)
+                cid = cids(k);
+                isiMs = app.isiMsOf(cid);
+                histogram(ax, isiMs, edges, FaceColor=app.clusterColor(cid), ...
+                    FaceAlpha=alpha, EdgeColor="none");
+                pctViol = 100 * sum(isiMs < app.RefractoryMs) / max(1, numel(isiMs));
+                parts(k) = sprintf("c%d %.2f%%", cid, pctViol);
+            end
+            hold(ax, "off");
             set(ax, XScale="log");
             xline(ax, app.RefractoryMs, "--", Color=[0.6 0 0]);
-            pctViol = 100 * sum(isiMs < app.RefractoryMs) / max(1, numel(isiMs));
-            title(ax, sprintf("ISI  (cluster %d)  %.2f%% < %g ms", ...
-                cid, pctViol, app.RefractoryMs));
+            if isscalar(cids)
+                title(ax, sprintf("ISI  (cluster %d)  %s < %g ms", ...
+                    cids(1), extractAfter(parts(1), " "), app.RefractoryMs));
+            else
+                shown = parts(1:min(4, end));
+                if numel(parts) > 4
+                    shown(end + 1) = "...";
+                end
+                title(ax, "ISI  " + join(shown, " | ") + ...
+                    sprintf(" < %g ms", app.RefractoryMs));
+            end
             xlabel(ax, "ISI (ms, log)");
             ylabel(ax, "Count");
             xlim(ax, [app.ISIMinMs app.ISIHistMaxMs]);
@@ -632,9 +676,11 @@ classdef SpikeVisualizationApp < handle
                     || isnan(app.Spikes.numSamples)
                 return
             end
+            SpikeVisualizationApp.logEvent("ensureTraces: opening " + app.Spikes.datPath);
             app.Traces = memmapfile(app.Spikes.datPath, ...
                 Format={'int16', [app.Spikes.numChannels app.Spikes.numSamples], 'raw'});
             app.computeTraceYLim();
+            SpikeVisualizationApp.logEvent("ensureTraces: done");
             ok = true;
         end
 
@@ -865,7 +911,10 @@ classdef SpikeVisualizationApp < handle
                 return
             end
             try
-                saved = readtable(csv, TextType="string");
+                % Delimiter forced: auto-detection picks SPACE on files
+                % whose notes are long, mis-parsing valid CSV.
+                saved = readtable(csv, TextType="string", Delimiter=",", ...
+                    VariableNamingRule="preserve");
             catch
                 return   % unreadable/legacy file: keep the Phy group labels
             end
@@ -914,17 +963,28 @@ classdef SpikeVisualizationApp < handle
 
         function saveClassification(app)
             if isempty(app.Spikes) || ~isfield(app.Spikes, "phyDir")
-                app.setInfo("Nothing to save.");
+                uialert(app.UIFigure, "No Phy folder is loaded, so there " + ...
+                    "is nowhere to save the labels.", "Nothing saved", ...
+                    Icon="warning");
                 return
             end
             outFile = fullfile(app.Spikes.phyDir, "cluster_curation.csv");
-            writetable(app.Classification, outFile);
+            try
+                writetable(app.Classification, outFile);
+            catch err
+                uialert(app.UIFigure, "Could not write " + outFile + ...
+                    newline + err.message, "Labels NOT saved");
+                return
+            end
             app.setInfo("Saved labels to " + outFile);
         end
 
         function saveSorting(app)
+            SpikeVisualizationApp.logEvent("saveSorting start");
             if ~isfield(app.Spikes, "phyDir") || app.Spikes.sourceType ~= "phy"
-                app.setInfo("Save sorting only supported for Phy sources.");
+                uialert(app.UIFigure, "Saving the sorting is only " + ...
+                    "supported for Phy sources - nothing was written.", ...
+                    "Nothing saved", Icon="warning");
                 return
             end
             % All per-spike arrays are written together in one time-sorted order
@@ -950,11 +1010,14 @@ classdef SpikeVisualizationApp < handle
                 app.saveArraysAtomic(targets, datas);
             catch err
                 app.setInfo("Save failed: " + err.message);
+                uialert(app.UIFigure, "The sorting was NOT saved:" + ...
+                    newline + err.message, "Save failed");
                 return
             end
             app.saveClassification();
             app.setInfo(sprintf("Saved sorting (%d arrays) + labels; originals " + ...
                 "backed up as *.bak.npy.", numel(targets)));
+            SpikeVisualizationApp.logEvent("saveSorting end");
         end
 
         function saveArraysAtomic(app, targets, datas)
@@ -1091,10 +1154,12 @@ classdef SpikeVisualizationApp < handle
             if isempty(ids)
                 return
             end
+            SpikeVisualizationApp.logEvent("openCuration start, ids " + mat2str(ids));
             if ~isempty(app.CurateTool) && isvalid(app.CurateTool)
                 delete(app.CurateTool);
             end
             app.CurateTool = CurationTool(app, ids);
+            SpikeVisualizationApp.logEvent("openCuration end");
         end
 
         function refreshCompanions(app)
@@ -1270,6 +1335,7 @@ classdef SpikeVisualizationApp < handle
                 app.setInfo("Select at least two clusters to merge.");
                 return
             end
+            SpikeVisualizationApp.logEvent("applyMerge start " + mat2str(clusterIds'));
             app.pushUndo();
             newId = min(clusterIds);
             app.Spikes.clusters(ismember(app.Spikes.clusters, clusterIds)) = newId;
@@ -1280,6 +1346,7 @@ classdef SpikeVisualizationApp < handle
             app.refreshAll();
             app.setInfo(sprintf("Merged clusters %s into %d.", ...
                 num2str(clusterIds'), newId));
+            SpikeVisualizationApp.logEvent("applyMerge end");
         end
 
         function changeClusterId(app, oldId, newId)
@@ -1429,10 +1496,12 @@ classdef SpikeVisualizationApp < handle
         end
 
         function realignSelected(app)
-            %REALIGNSELECTED Shift each selected cluster's spike times so its mean
-            %   waveform peak lands at the sample the spike time is anchored to,
-            %   then re-extract the waveforms. Aligns time-shifted duplicate
-            %   clusters so they overlay (and can then be merged).
+            %REALIGNSELECTED Shift spike times so the alignment feature lands at
+            %   the anchored sample, then re-extract the waveforms. Scope
+            %   "cluster" shifts each cluster by its mean-waveform offset
+            %   (aligns time-shifted duplicates so they overlay and can be
+            %   merged); scope "spike" aligns every spike to its own waveform
+            %   (removes within-cluster jitter).
             if ~app.ensureTraces()
                 app.setInfo("Realign needs the raw data file.");
                 return
@@ -1443,15 +1512,29 @@ classdef SpikeVisualizationApp < handle
             end
             app.pushUndo();
             target = app.Spikes.waveformWindow(1) + 1;   % spike-time sample index
-            for cid = cids'
-                idx = app.Spikes.clusters == cid;
-                if ~any(idx)
-                    continue
+            if app.RealignScope == "spike"
+                % Each spike aligns to the feature of its OWN waveform -
+                % removes jitter within a cluster (noisy waveforms move
+                % with their noise; undo if it degrades the mean).
+                for k = find(ismember(app.Spikes.clusters, cids))'
+                    wf = double(app.Spikes.waveforms(k, :));
+                    shift = app.alignmentSample(wf) - target;
+                    if shift ~= 0
+                        app.Spikes.spikeTimes(k) = app.Spikes.spikeTimes(k) + shift;
+                    end
                 end
-                m = mean(app.Spikes.waveforms(idx, :), 1);
-                shift = app.alignmentSample(m) - target;
-                if shift ~= 0
-                    app.Spikes.spikeTimes(idx) = app.Spikes.spikeTimes(idx) + shift;
+            else
+                % Whole clusters shift by their mean-waveform offset.
+                for cid = cids'
+                    idx = app.Spikes.clusters == cid;
+                    if ~any(idx)
+                        continue
+                    end
+                    m = mean(app.Spikes.waveforms(idx, :), 1);
+                    shift = app.alignmentSample(m) - target;
+                    if shift ~= 0
+                        app.Spikes.spikeTimes(idx) = app.Spikes.spikeTimes(idx) + shift;
+                    end
                 end
             end
             sel = ismember(app.Spikes.clusters, cids);
@@ -1461,8 +1544,12 @@ classdef SpikeVisualizationApp < handle
             app.Spikes.wfMaxADC(sel) = double(max(app.Spikes.waveforms(sel, :), [], 2));
             app.Spikes.amplitudePP(sel) = app.Spikes.wfMaxADC(sel) - app.Spikes.wfMinADC(sel);
             app.refreshAll();
-            app.setInfo(sprintf("Realigned %d cluster(s) to the %s.", ...
-                numel(cids), app.realignLabel(app.RealignMode)));
+            scopeStr = "between clusters";
+            if app.RealignScope == "spike"
+                scopeStr = "per spike";
+            end
+            app.setInfo(sprintf("Realigned %d cluster(s) to the %s (%s).", ...
+                numel(cids), app.realignLabel(app.RealignMode), scopeStr));
         end
 
         function sampleIdx = alignmentSample(app, meanWaveform)
@@ -1634,11 +1721,17 @@ classdef SpikeVisualizationApp < handle
                 MenuSelectedFcn=@(~, ~) app.setRealignMode("trough"));
             app.RealignMenus.firstpeak = uimenu(ra, Text="First peak", ...
                 MenuSelectedFcn=@(~, ~) app.setRealignMode("firstpeak"));
+            app.RealignMenus.clusterScope = uimenu(ra, Separator="on", ...
+                Text="Whole clusters (between them)", Checked="on", ...
+                MenuSelectedFcn=@(~, ~) app.setRealignScope("cluster"));
+            app.RealignMenus.spikeScope = uimenu(ra, ...
+                Text="Each spike (within cluster)", ...
+                MenuSelectedFcn=@(~, ~) app.setRealignScope("spike"));
 
             tools = uimenu(app.UIFigure, Text="Tools");
-            uimenu(tools, Text="PETH / event alignment...", ...
+            uimenu(tools, Text="PETH / event alignment", ...
                 MenuSelectedFcn=@(~, ~) app.launchPETH());
-            uimenu(tools, Text="Dataset browser...", ...
+            uimenu(tools, Text="Dataset browser", ...
                 MenuSelectedFcn=@(~, ~) app.launchDatasetBrowser());
         end
 
@@ -1692,6 +1785,22 @@ classdef SpikeVisualizationApp < handle
                 app.RealignMenus.(nm + "Ctx").Checked = on;
             end
             app.setInfo("Realign target set to: " + app.realignLabel(mode));
+        end
+
+        function setRealignScope(app, scope)
+            app.RealignScope = scope;
+            onC = matlab.lang.OnOffSwitchState(scope == "cluster");
+            onS = matlab.lang.OnOffSwitchState(scope == "spike");
+            app.RealignMenus.clusterScope.Checked = onC;
+            app.RealignMenus.spikeScope.Checked = onS;
+            app.RealignMenus.clusterScopeCtx.Checked = onC;
+            app.RealignMenus.spikeScopeCtx.Checked = onS;
+            if scope == "spike"
+                app.setInfo("Realign scope: each spike within the cluster.");
+            else
+                app.setInfo("Realign scope: whole clusters, shifted " + ...
+                    "relative to each other.");
+            end
         end
 
         % --- add-on scripts (Options > Run script) ---
@@ -1854,9 +1963,9 @@ classdef SpikeVisualizationApp < handle
             g.Layout.Row = row;
             g.Padding = [0 0 0 0];
             g.ColumnWidth = {"1x", "1x", 70};
-            uibutton(g, Text="Load Phy folder...", ...
+            uibutton(g, Text="Load Phy folder", ...
                 ButtonPushedFcn=@(~, ~) app.promptForSource());
-            uibutton(g, Text="Load file (.mat)...", ...
+            uibutton(g, Text="Load file (.mat)", ...
                 ButtonPushedFcn=@(~, ~) app.loadFileDialog());
             uibutton(g, Text="Reload", ...
                 ButtonPushedFcn=@(~, ~) app.reloadData());
@@ -1922,11 +2031,19 @@ classdef SpikeVisualizationApp < handle
                     Checked=matlab.lang.OnOffSwitchState(md == app.RealignMode), ...
                     MenuSelectedFcn=@(~, ~) app.realignTo(md));
             end
+            app.RealignMenus.clusterScopeCtx = uimenu(cm, Separator="on", ...
+                Text="Whole clusters (between them)", ...
+                Checked=matlab.lang.OnOffSwitchState(app.RealignScope == "cluster"), ...
+                MenuSelectedFcn=@(~, ~) app.setRealignScope("cluster"));
+            app.RealignMenus.spikeScopeCtx = uimenu(cm, ...
+                Text="Each spike (within cluster)", ...
+                Checked=matlab.lang.OnOffSwitchState(app.RealignScope == "spike"), ...
+                MenuSelectedFcn=@(~, ~) app.setRealignScope("spike"));
             r = uibutton(g, Text="Realign selected", ContextMenu=cm, ...
                 Tooltip="Right-click to pick the alignment target and realign", ...
                 ButtonPushedFcn=@(~, ~) app.realignSelected());
             r.Layout.Row = 2; r.Layout.Column = 2;
-            ci = uibutton(g, Text="Change ID...", ...
+            ci = uibutton(g, Text="Change ID", ...
                 ButtonPushedFcn=@(~, ~) app.changeIdSelected());
             ci.Layout.Row = 3; ci.Layout.Column = 1;
             d = uibutton(g, Text="Discard selected", BackgroundColor=[1 0.8 0.8], ...

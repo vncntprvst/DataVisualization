@@ -40,7 +40,10 @@ classdef TimeWindowTool < handle
 
         Suppress logical = false
         FocusSec double        % time the trace excerpt is centred on
-        AmpYLim double
+        FocusColor double = [0 0.6 0]   % marker colour: green/red = bar, grey = scrub
+        TraceSlider    matlab.ui.control.Slider   % scrub the trace excerpt
+        AmpYLim double         % full (data-derived) y-range of the amp plot
+        AmpXFull double = []   % full x-range last applied to the amp plot
 
         CurationSelIdx double = []   % app spike indices selected in Curation
         PlotIdx double = []          % app spike index behind each amp point
@@ -66,10 +69,13 @@ classdef TimeWindowTool < handle
             tool.CurationSelIdx = curate.globalSelection();
             w = app.timeWindowSec();
             tool.FocusSec = w(1);
+            SpikeVisualizationApp.logEvent("TimeWindowTool ctor start");
             tool.buildUI();
             tool.redrawAmp();
+            SpikeVisualizationApp.logEvent("TimeWindowTool amp plot done");
             tool.plotTrace();
             tool.updateInfo();
+            SpikeVisualizationApp.logEvent("TimeWindowTool ctor end");
         end
 
         function delete(tool)
@@ -96,19 +102,23 @@ classdef TimeWindowTool < handle
 
         function buildUI(tool)
             tool.UIFigure = uifigure(Name="Time-window split", ...
-                Position=[160 120 1000 660], ...
+                Position=[160 120 1000 682], ...
                 CloseRequestFcn=@(~, ~) delete(tool));
-            g = uigridlayout(tool.UIFigure, [4 1]);
-            g.RowHeight = {"1x", "1x", 34, 34};
+            g = uigridlayout(tool.UIFigure, [5 1]);
+            g.RowHeight = {"1x", "1x", 22, 34, 34};
             g.Padding = [6 6 6 6];
 
             tool.AmpAxes = uiaxes(g);
             tool.AmpAxes.Layout.Row = 1;
             tool.TraceAxes = uiaxes(g);
             tool.TraceAxes.Layout.Row = 2;
+            tool.TraceSlider = uislider(g, Limits=[0 1], Value=0, ...
+                MajorTicks=[], MinorTicks=[], ...
+                ValueChangedFcn=@(~, e) tool.onTraceSlider(e));
+            tool.TraceSlider.Layout.Row = 3;
 
             btns = uigridlayout(g, [1 6]);
-            btns.Layout.Row = 3;
+            btns.Layout.Row = 4;
             btns.Padding = [0 0 0 0];
             btns.ColumnWidth = {110, 110, 115, 120, 160, "1x"};
             uibutton(btns, Text="Lasso select", BackgroundColor=[0.9 0.9 1], ...
@@ -116,16 +126,20 @@ classdef TimeWindowTool < handle
             uibutton(btns, Text="Split bands", BackgroundColor=[0.9 1 0.9], ...
                 Tooltip="Detect horizontal amplitude bands (drift-tolerant)", ...
                 ButtonPushedFcn=@(~, ~) tool.splitBands());
-            uibutton(btns, Text="Snap start -> 0", ...
+            uibutton(btns, Text="Snap start", ...
+                Tooltip="Start bar to the left edge of the view " + ...
+                "(0 when not zoomed)", ...
                 ButtonPushedFcn=@(~, ~) tool.snapStart());
-            uibutton(btns, Text="Snap stop -> end", ...
+            uibutton(btns, Text="Snap stop", ...
+                Tooltip="Stop bar to the right edge of the view " + ...
+                "(recording end when not zoomed)", ...
                 ButtonPushedFcn=@(~, ~) tool.snapStop());
             uibutton(btns, Text="Revert (whole recording)", ...
                 ButtonPushedFcn=@(~, ~) tool.revert());
             tool.InfoLabel = uilabel(btns, Text="");
 
             bandRow = uigridlayout(g, [1 4]);
-            bandRow.Layout.Row = 4;
+            bandRow.Layout.Row = 5;
             bandRow.Padding = [0 0 0 0];
             bandRow.ColumnWidth = {200, 160, 200, "1x"};
             tool.BandDropdown = uidropdown(bandRow, Items={'(no bands yet)'}, ...
@@ -149,6 +163,13 @@ classdef TimeWindowTool < handle
 
         function plotAmplitude(tool)
             ax = tool.AmpAxes;
+            % A toolbar zoom to an epoch must survive redraws (snapping and
+            % selection updates replot this panel) - remember whether the
+            % view differs from the full range we last applied.
+            oldX = ax.XLim;
+            oldY = ax.YLim;
+            wasZoomed = ~isempty(tool.AmpXFull) && ...
+                (~isequal(oldX, tool.AmpXFull) || ~isequal(oldY, tool.AmpYLim));
             cla(ax);
             hold(ax, "on");
             s = tool.App.Spikes;
@@ -167,16 +188,31 @@ classdef TimeWindowTool < handle
                 lab(tf) = tool.BandLabels(loc(tf));
             end
             if any(lab > 0)
+                % Grey follows the CURRENT bars, re-evaluated on every
+                % redraw: outside-window spikes grey, band-labelled spikes in
+                % their band colour, in-window spikes without a band label
+                % (window moved since the split) in default cluster colours.
+                w = tool.App.timeWindowSec();
+                inWin = tool.PlotX >= w(1) & tool.PlotX <= w(2);
                 k = max(lab);
                 pal = lines(k);
                 hs = gobjects(1, k);
                 for b = 1:k
-                    m = lab == b;
+                    m = lab == b & inWin;
                     hs(b) = scatter(ax, tool.PlotX(m), tool.PlotY(m), 4, ...
                         pal(b, :), "filled", MarkerFaceAlpha=0.3);
                 end
-                if any(lab == 0)
-                    scatter(ax, tool.PlotX(lab == 0), tool.PlotY(lab == 0), ...
+                rest = lab == 0 & inWin;
+                for cid = tool.ClusterIds
+                    m = rest & (s.clusters(allIdx) == cid);
+                    if any(m)
+                        scatter(ax, tool.PlotX(m), tool.PlotY(m), 4, ...
+                            tool.App.clusterColor(cid), "filled", ...
+                            MarkerFaceAlpha=0.3);
+                    end
+                end
+                if any(~inWin)
+                    scatter(ax, tool.PlotX(~inWin), tool.PlotY(~inWin), ...
                         4, [0.7 0.7 0.7], "filled", MarkerFaceAlpha=0.3);
                 end
                 legend(ax, hs, "band " + string(1:k), Location="best", ...
@@ -197,8 +233,27 @@ classdef TimeWindowTool < handle
             title(ax, sprintf("Amplitude vs time (drag bars; %d selected)", sum(hi)));
             xlabel(ax, "Time (s)");
             ylabel(ax, "Peak-to-peak (\muV)");
-            xlim(ax, [0 tool.duration()]);
-            tool.AmpYLim = ylim(ax);
+            % Fixed, data-derived limits: ylim(ax) is stale before the axes
+            % first renders, which used to give the boundary bars a tiny
+            % vertical extent (invisible until some later redraw). The small
+            % x padding keeps the bars grabbable at 0 / end of recording.
+            dur = tool.duration();
+            tool.AmpXFull = [-0.01 * dur, 1.01 * dur];
+            if isempty(tool.PlotY)
+                tool.AmpYLim = [0 1];
+            else
+                lo = min(tool.PlotY);
+                hi2 = max(tool.PlotY);
+                pad = 0.05 * max(hi2 - lo, eps);
+                tool.AmpYLim = [lo - pad, hi2 + pad];
+            end
+            if wasZoomed
+                xlim(ax, oldX);   % keep the user's epoch view
+                ylim(ax, oldY);
+            else
+                xlim(ax, tool.AmpXFull);
+                ylim(ax, tool.AmpYLim);
+            end
         end
 
         function splitBands(tool)
@@ -219,6 +274,7 @@ classdef TimeWindowTool < handle
                 tool.InfoLabel.Text = "Too few spikes in the window to find bands.";
                 return
             end
+            SpikeVisualizationApp.logEvent(sprintf("splitBands start (%d spikes)", n));
             [lab, counts] = tool.bandsFromRatio( ...
                 log2(max(a, eps) / max(median(a), eps)));
             trend = tool.bandTrend(t, a, lab == 1, w);
@@ -238,6 +294,7 @@ classdef TimeWindowTool < handle
             tool.BandMoveBtn.Enable = en;
             tool.BandMoveAllBtn.Enable = en;
             tool.redrawAmp();
+            SpikeVisualizationApp.logEvent("splitBands end");
             epoch = "";
             if w(1) > 0 || w(2) < tool.duration()
                 epoch = sprintf(" in %.1f-%.1f s", w(1), w(2));
@@ -420,8 +477,12 @@ classdef TimeWindowTool < handle
 
         function lassoSelect(tool)
             %LASSOSELECT Freehand-select amplitude points -> Curation selection.
-            roi = drawfreehand(tool.AmpAxes, Color=[0.1 0.1 0.1]);
-            if isempty(roi) || ~isvalid(roi) || size(roi.Position, 1) < 3
+            roi = drawInteractive(tool.AmpAxes, "freehand");
+            if isempty(roi) || ~isvalid(roi)
+                return
+            end
+            if size(roi.Position, 1) < 3
+                delete(roi);
                 return
             end
             poly = roi.Position;
@@ -439,9 +500,11 @@ classdef TimeWindowTool < handle
             w = tool.App.timeWindowSec();
             yl = tool.AmpYLim;
             tool.StartLine = images.roi.Line(tool.AmpAxes, ...
-                Position=[w(1) yl(1); w(1) yl(2)], Color=[0 0.6 0], LineWidth=1.5);
+                Position=[w(1) yl(1); w(1) yl(2)], Color=[0 0.6 0], ...
+                LineWidth=3, Deletable=false);
             tool.StopLine = images.roi.Line(tool.AmpAxes, ...
-                Position=[w(2) yl(1); w(2) yl(2)], Color=[0.85 0 0], LineWidth=1.5);
+                Position=[w(2) yl(1); w(2) yl(2)], Color=[0.85 0 0], ...
+                LineWidth=3, Deletable=false);
             addlistener(tool.StartLine, "MovingROI", ...
                 @(s, ~) tool.constrainVertical(s));
             addlistener(tool.StopLine, "MovingROI", ...
@@ -464,7 +527,23 @@ classdef TimeWindowTool < handle
                 return
             end
             tool.FocusSec = mean(tool.movedLine(which).Position(:, 1));
+            tool.FocusColor = tool.barColor(which);
             tool.applyWindow();
+            tool.plotTrace();
+        end
+
+        function c = barColor(~, which)
+            if which == "start"
+                c = [0 0.6 0];
+            else
+                c = [0.85 0 0];
+            end
+        end
+
+        function onTraceSlider(tool, event)
+            %ONTRACESLIDER Scrub the trace excerpt through the recording.
+            tool.FocusSec = event.Value * tool.duration();
+            tool.FocusColor = [0.35 0.35 0.35];   % scrubbed, not at a bar
             tool.plotTrace();
         end
 
@@ -486,14 +565,22 @@ classdef TimeWindowTool < handle
         function plotTrace(tool)
             ax = tool.TraceAxes;
             cla(ax);
+            % Announce before the read: if the raw file is slow to answer
+            % (cold disk, antivirus), the stall is labelled on screen.
+            title(ax, "Reading raw trace...");
+            drawnow;
+            SpikeVisualizationApp.logEvent("plotTrace: reading excerpt");
             [tSec, uv] = tool.App.traceExcerpt(tool.FocusSec, 0.5);
+            SpikeVisualizationApp.logEvent("plotTrace: excerpt read");
             if isempty(tSec)
                 title(ax, "Raw trace unavailable");
                 return
             end
             plot(ax, tSec, uv, Color=[0 0 0 0.8], LineWidth=0.1);
             hold(ax, "on");
-            xline(ax, tool.FocusSec, "-", Color=[0.85 0 0], LineWidth=1.5);
+            % Marker colour matches the bar that put the focus here (green =
+            % start, red = stop, grey = timeline scrub).
+            xline(ax, tool.FocusSec, "-", Color=tool.FocusColor, LineWidth=1.5);
             s = tool.App.Spikes;
             yb = double(min(uv));
             for cid = tool.ClusterIds
@@ -509,23 +596,36 @@ classdef TimeWindowTool < handle
             xlabel(ax, "Time (s)");
             ylabel(ax, "Voltage (\muV)");
             axis(ax, "tight");
+            if ~isempty(tool.TraceSlider) && isvalid(tool.TraceSlider)
+                tool.TraceSlider.Value = ...
+                    min(1, max(0, tool.FocusSec / tool.duration()));
+            end
         end
 
         function snapStart(tool)
+            %SNAPSTART Start bar to the left edge of the current view -
+            %   0 normally, the epoch's start when zoomed in.
+            xl = xlim(tool.AmpAxes);
+            x = min(max(xl(1), 0), tool.duration());
             tool.Suppress = true;
-            tool.StartLine.Position = [0 tool.AmpYLim(1); 0 tool.AmpYLim(2)];
+            tool.StartLine.Position = [x tool.AmpYLim(1); x tool.AmpYLim(2)];
             tool.Suppress = false;
-            tool.FocusSec = 0;
+            tool.FocusSec = x;
+            tool.FocusColor = tool.barColor("start");
             tool.applyWindow();
             tool.plotTrace();
         end
 
         function snapStop(tool)
-            d = tool.duration();
+            %SNAPSTOP Stop bar to the right edge of the current view -
+            %   the recording's end normally, the epoch's end when zoomed in.
+            xl = xlim(tool.AmpAxes);
+            x = min(max(xl(2), 0), tool.duration());
             tool.Suppress = true;
-            tool.StopLine.Position = [d tool.AmpYLim(1); d tool.AmpYLim(2)];
+            tool.StopLine.Position = [x tool.AmpYLim(1); x tool.AmpYLim(2)];
             tool.Suppress = false;
-            tool.FocusSec = d;
+            tool.FocusSec = x;
+            tool.FocusColor = tool.barColor("stop");
             tool.applyWindow();
             tool.plotTrace();
         end
@@ -546,4 +646,39 @@ classdef TimeWindowTool < handle
                 w(1), w(2), sum(inWin));
         end
     end
+end
+
+% =========================================================================
+function roi = drawInteractive(ax, kind)
+%DRAWINTERACTIVE Draw an ROI with the axes interactions parked first.
+%   A toolbar-toggled pan/zoom otherwise swallows the mouse: the draw never
+%   starts, the callback blocks forever, and the whole app freezes. Returns
+%   [] if the draw errors or is aborted (e.g. the window closes mid-draw).
+try
+    fig = ancestor(ax, "figure");
+    zoom(fig, "off");
+    pan(fig, "off");
+catch
+    % modes already off, or the figure is closing
+end
+disableDefaultInteractivity(ax);
+cleanup = onCleanup(@() restoreInteractivity(ax));
+SpikeVisualizationApp.logEvent("drawInteractive: arming " + kind);
+try
+    if kind == "line"
+        roi = drawline(ax, Color=[0.2 0.2 0.2]);
+    else
+        roi = drawfreehand(ax, Color=[0.2 0.2 0.2]);
+    end
+    SpikeVisualizationApp.logEvent("drawInteractive: draw finished");
+catch err
+    roi = [];
+    SpikeVisualizationApp.logEvent("drawInteractive FAILED: " + err.message);
+end
+end
+
+function restoreInteractivity(ax)
+if isvalid(ax)
+    enableDefaultInteractivity(ax);
+end
 end

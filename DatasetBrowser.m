@@ -38,8 +38,8 @@ classdef DatasetBrowser < handle
 
         UserColumns string = string.empty   % user-chosen Units columns ([] = preset)
         ColPicker      matlab.ui.Figure       % the column-chooser window
-        SortVar string = ""        % displayed column the user last sorted by
-        SortDir string = "ascend"  % "ascend" | "descend"
+        SortVars string = string.empty   % sort chain, primary first (max 4)
+        SortDirs string = string.empty   % "ascend"/"descend" per SortVars entry
 
         UIFigure       matlab.ui.Figure
         DatasetLabel   matlab.ui.control.Label
@@ -130,18 +130,18 @@ classdef DatasetBrowser < handle
             barA.Layout.Row = 1;
             barA.ColumnWidth = {120, "1x", 120, "1x", 90, 70, 55, 80, 130};
             barA.Padding = [0 0 0 0];
-            uibutton(barA, Text="Load dataset...", ...
+            uibutton(barA, Text="Load dataset", ...
                 ButtonPushedFcn=@(~, ~) tool.loadDatasetDialog());
             tool.DatasetLabel = uilabel(barA, Text="(no dataset)", ...
                 FontColor=[0.3 0.3 0.3]);
-            uibutton(barA, Text="Sortings root...", ...
+            uibutton(barA, Text="Sortings root", ...
                 ButtonPushedFcn=@(~, ~) tool.chooseRootDialog());
             tool.RootLabel = uilabel(barA, Text="", FontColor=[0.3 0.3 0.3]);
-            uibutton(barA, Text="Columns...", ...
+            uibutton(barA, Text="Columns", ...
                 ButtonPushedFcn=@(~, ~) tool.chooseColumnsDialog());
             uibutton(barA, Text="Refresh", ...
-                Tooltip="Re-read saved sortings: update curation labels/notes " + ...
-                "and add units you created", ...
+                Tooltip="Re-read saved sortings (curation labels/notes, new " + ...
+                "units) and the review sidecar", ...
                 ButtonPushedFcn=@(~, ~) tool.refreshFromDisk());
             tool.LockBox = uicheckbox(barA, Text="Lock", ...
                 Tooltip="Lock review state (no changes are saved)", ...
@@ -175,8 +175,12 @@ classdef DatasetBrowser < handle
             mid.ColumnWidth = {"1x", 300};
             mid.Padding = [0 0 0 0];
 
+            cm = uicontextmenu(tool.UIFigure);
+            uimenu(cm, Text="Clear sorting", ...
+                MenuSelectedFcn=@(~, ~) tool.clearSorting());
             tool.Table = uitable(mid, ColumnSortable=true, ...
                 SelectionType="row", Multiselect="off", RowName={}, ...
+                ContextMenu=cm, ...
                 SelectionChangedFcn=@(s, e) tool.onRowSelected(e), ...
                 DisplayDataChangedFcn=@(~, e) tool.onDisplaySort(e), ...
                 DoubleClickedFcn=@(s, e) tool.onOpen());
@@ -264,7 +268,7 @@ classdef DatasetBrowser < handle
 
         function tryLoadDataset(tool, source)
             if source == "" || ~isfile(source)
-                tool.setInfo("Load a dataset with 'Load dataset...' " + ...
+                tool.setInfo("Load a dataset with 'Load dataset' " + ...
                     "(default not found: " + source + ").");
                 return
             end
@@ -549,13 +553,15 @@ classdef DatasetBrowser < handle
             data = [table(marker, status, VariableNames=["open", "review"]), ...
                 tool.ViewTable(:, vars)];
             % Reassigning Data resets the uitable's interactive column sort,
-            % so bake the user's last sort into the data itself. ViewTable is
-            % permuted along with it: selection and styles index into Data
-            % rows, which must stay row-for-row aligned with ViewTable.
-            if tool.SortVar ~= "" ...
-                    && ismember(tool.SortVar, string(data.Properties.VariableNames))
+            % so bake the user's sort chain into the data itself (primary key
+            % first, earlier sorts as tie breakers). ViewTable is permuted
+            % along with it: selection and styles index into Data rows, which
+            % must stay row-for-row aligned with ViewTable.
+            avail = ismember(tool.SortVars, string(data.Properties.VariableNames));
+            if any(avail)
                 try
-                    [data, perm] = sortrows(data, tool.SortVar, tool.SortDir);
+                    [data, perm] = sortrows(data, ...
+                        cellstr(tool.SortVars(avail)), cellstr(tool.SortDirs(avail)));
                     tool.ViewTable = tool.ViewTable(perm, :);
                     status = status(perm);
                     isLoaded = isLoaded(perm);
@@ -608,12 +614,21 @@ classdef DatasetBrowser < handle
             if tool.Locked
                 lockMsg = "  [LOCKED]";
             end
-            tool.setInfo(sprintf("%d rows shown (%s).%s", n, tool.RowKind, lockMsg));
+            sortMsg = "";
+            if any(avail)
+                arrows = repmat("^", 1, numel(tool.SortDirs));
+                arrows(tool.SortDirs == "descend") = "v";
+                sortMsg = "  sort: " + ...
+                    join(tool.SortVars(avail) + arrows(avail), " > ");
+            end
+            tool.setInfo(sprintf("%d rows shown (%s).%s%s", ...
+                n, tool.RowKind, sortMsg, lockMsg));
         end
 
         function onDisplaySort(tool, evt)
-            %ONDISPLAYSORT Remember which column the user sorted (and in which
-            %   direction) so renderTable can re-apply it after resetting Data.
+            %ONDISPLAYSORT Maintain the multi-column sort chain: the clicked
+            %   column becomes the primary key, earlier sorts stay as tie
+            %   breakers. Re-clicking a column just updates its direction.
             if string(evt.Interaction) ~= "sort"
                 return
             end
@@ -621,27 +636,46 @@ classdef DatasetBrowser < handle
             if var == ""
                 return
             end
-            col = tool.Table.DisplayData.(var);
-            asc = tool.safeIssorted(col, "ascend");
-            desc = tool.safeIssorted(col, "descend");
-            if desc && ~asc
-                tool.SortVar = var;
-                tool.SortDir = "descend";
-            elseif asc
-                tool.SortVar = var;
-                tool.SortDir = "ascend";
+            % The immediate re-render below resets uitable's own sort cycle,
+            % so the widget cannot tell us the direction - we own the state:
+            % a new column starts ascending, re-clicking the primary column
+            % toggles its direction.
+            if ~isempty(tool.SortVars) && tool.SortVars(1) == var
+                if tool.SortDirs(1) == "ascend"
+                    tool.SortDirs(1) = "descend";
+                else
+                    tool.SortDirs(1) = "ascend";
+                end
             else
-                tool.SortVar = "";   % cycled back to unsorted
+                keep = tool.SortVars ~= var;
+                tool.SortVars = [var, reshape(tool.SortVars(keep), 1, [])];
+                tool.SortDirs = ["ascend", reshape(tool.SortDirs(keep), 1, [])];
+                if numel(tool.SortVars) > 4
+                    tool.SortVars = tool.SortVars(1:4);
+                    tool.SortDirs = tool.SortDirs(1:4);
+                end
+            end
+            % Bake immediately: uitable's own display sort is single-column,
+            % so only a re-render shows the chained order. Keep the selected
+            % entry selected across the rebuild.
+            row = tool.selectedRow();
+            tg = ""; un = "";
+            if ~isempty(row)
+                [~, tg, un] = tool.entryOfRow(row);
+            end
+            tool.renderTable();
+            if tg ~= ""
+                r = tool.rowOfEntry(tg, un);
+                if ~isempty(r)
+                    tool.Table.Selection = r;
+                end
             end
         end
 
-        function tf = safeIssorted(~, col, dir)
-            %SAFEISSORTED issorted that treats unsortable types as unsorted.
-            try
-                tf = issorted(col, dir);
-            catch
-                tf = false;
-            end
+        function clearSorting(tool)
+            tool.SortVars = string.empty;
+            tool.SortDirs = string.empty;
+            tool.applyFilters();   % re-derive ViewTable in dataset order
         end
 
         function row = rowOfEntry(tool, tg, un)
@@ -663,7 +697,11 @@ classdef DatasetBrowser < handle
             end
             [lvl, tg, un] = tool.entryOfRow(row);
             v = tool.getEntry(tool.statusKey(lvl, tg, un));
-            head = "review: " + v.status;
+            [st, inherited] = tool.getStatus(lvl, tg, un);
+            head = "review: " + st;
+            if inherited
+                head = head + "   (from recording)";
+            end
             if v.modified ~= ""
                 head = head + "   (modified " + v.modified + ")";
             end
@@ -764,7 +802,10 @@ classdef DatasetBrowser < handle
                     continue
                 end
                 try
-                    C = readtable(cc, TextType="string");
+                    % Delimiter forced: auto-detection picks SPACE on files
+                    % whose notes are long, mis-parsing valid CSV.
+                    C = readtable(cc, TextType="string", Delimiter=",", ...
+                        VariableNamingRule="preserve");
                 catch
                     continue
                 end
@@ -915,6 +956,10 @@ classdef DatasetBrowser < handle
             tool.RawTable = tool.Dataset.table;
             tool.augmentTable();
             tool.scanCuration(true);
+            % Also merge the review sidecar back in, so edits made outside
+            % this browser (scripts, another session) are picked up; rows in
+            % the file win over the in-memory copy of the same entry.
+            tool.loadSidecar();
             tool.populateFilters();
             tool.applyFilters();
         end
@@ -957,8 +1002,19 @@ classdef DatasetBrowser < handle
             end
         end
 
-        function s = getStatus(tool, lvl, tg, un)
+        function [s, inherited] = getStatus(tool, lvl, tg, un)
+            %GETSTATUS Effective review status. A unit with no status of its
+            %   own inherits its recording's status (inherited = true then);
+            %   setting the unit's own status still overrides it.
             s = tool.getEntry(tool.statusKey(lvl, tg, un)).status;
+            inherited = false;
+            if lvl == "unit" && s == "unverified"
+                rs = tool.getEntry(tool.statusKey("recording", tg, "")).status;
+                if rs ~= "unverified"
+                    s = rs;
+                    inherited = true;
+                end
+            end
         end
 
         function c = statusColor(~, st)

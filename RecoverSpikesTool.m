@@ -36,6 +36,7 @@ classdef RecoverSpikesTool < handle
         InfoLabel              matlab.ui.control.Label
 
         ThresholdLine = images.roi.Line.empty   % draggable detection level
+        TraceSlider matlab.ui.control.Slider    % scrub the trace excerpt
         SuppressLineEvents logical = false
         TraceCenterSec double = NaN              % raw-trace pan/zoom state
         TraceHalfSec double = 0.125
@@ -79,8 +80,8 @@ classdef RecoverSpikesTool < handle
                 WindowScrollWheelFcn=@(~, e) tool.onScroll(e), ...
                 WindowKeyPressFcn=@(~, e) tool.onKey(e), ...
                 CloseRequestFcn=@(~, ~) delete(tool));
-            g = uigridlayout(tool.UIFigure, [4 1]);
-            g.RowHeight = {"1x", "1x", 32, 18};
+            g = uigridlayout(tool.UIFigure, [5 1]);
+            g.RowHeight = {"1x", "1x", 22, 32, 18};
             g.RowSpacing = 6;
             g.Padding = [6 6 6 6];
 
@@ -88,9 +89,13 @@ classdef RecoverSpikesTool < handle
             tool.AmpAxes.Layout.Row = 1;
             tool.TraceAxes = uiaxes(g);
             tool.TraceAxes.Layout.Row = 2;
+            tool.TraceSlider = uislider(g, Limits=[0 1], Value=0, ...
+                MajorTicks=[], MinorTicks=[], ...
+                ValueChangedFcn=@(~, e) tool.onTraceSlider(e));
+            tool.TraceSlider.Layout.Row = 3;
 
             ctl = uigridlayout(g, [1 16]);
-            ctl.Layout.Row = 3;
+            ctl.Layout.Row = 4;
             ctl.Padding = [0 0 0 0];
             ctl.ColumnSpacing = 5;
             ctl.ColumnWidth = {"fit", 55, "fit", 55, "fit", 55, "fit", 55, ...
@@ -109,6 +114,8 @@ classdef RecoverSpikesTool < handle
             uilabel(ctl, Text="thr uV", HorizontalAlignment="right");
             tool.ThreshField = uieditfield(ctl, "numeric", ...
                 Value=tool.defaultThreshold(tool.defaultTarget(ids)), ...
+                Tooltip="Signed detection level: negative catches downward " + ...
+                "deflections, positive upward (the line sits where it detects)", ...
                 ValueChangedFcn=@(~, ~) tool.onThreshFieldChanged());
             uilabel(ctl, Text="min corr", HorizontalAlignment="right");
             tool.CorrField = uieditfield(ctl, "numeric", Value=0.8, ...
@@ -127,7 +134,14 @@ classdef RecoverSpikesTool < handle
                 ButtonPushedFcn=@(~, ~) tool.clearCandidates());
 
             tool.InfoLabel = uilabel(g, Text="");
-            tool.InfoLabel.Layout.Row = 4;
+            tool.InfoLabel.Layout.Row = 5;
+        end
+
+        function onTraceSlider(tool, event)
+            %ONTRACESLIDER Scrub the trace excerpt through the recording.
+            s = tool.App.Spikes;
+            tool.TraceCenterSec = event.Value * s.numSamples / s.samplingRate;
+            tool.plotTrace();
         end
 
         function cid = defaultTarget(tool, ids)
@@ -137,13 +151,15 @@ classdef RecoverSpikesTool < handle
         end
 
         function thr = defaultThreshold(tool, cid)
-            % ~40% of the template's dominant peak, a starting point to tune.
+            % ~40% of the template's dominant peak. SIGNED: the sign picks
+            % the detection side (negative = downward deflections).
             idx = tool.App.Spikes.clusters == cid;
             uv = tool.uvScale();
             template = mean(double(tool.App.Spikes.waveforms(idx, :)), 1) * uv;
-            thr = round(0.4 * max(abs(template)));
-            if ~isfinite(thr) || thr <= 0
-                thr = 50;
+            [m, tPeak] = max(abs(template));
+            thr = round(0.4 * m) * sign(template(tPeak));
+            if ~isfinite(thr) || thr == 0
+                thr = -50;
             end
         end
 
@@ -155,22 +171,6 @@ classdef RecoverSpikesTool < handle
             s = 1;
             if isfield(tool.App.Spikes, "uvPerADC")
                 s = tool.App.Spikes.uvPerADC;
-            end
-        end
-
-        function p = currentPolarity(tool)
-            %CURRENTPOLARITY Sign of the target template's dominant deflection.
-            s = tool.App.Spikes;
-            cid = tool.targetCluster();
-            idx = s.clusters == cid;
-            p = -1;
-            if any(idx) && ~isempty(s.waveforms)
-                template = mean(double(s.waveforms(idx, :)), 1);
-                [~, tPeak] = max(abs(template));
-                p = sign(template(tPeak));
-                if p == 0
-                    p = -1;
-                end
             end
         end
 
@@ -241,10 +241,11 @@ classdef RecoverSpikesTool < handle
             end
             tool.ThresholdLine = images.roi.Line.empty;
             if isvalid(ax)
-                yv = tool.currentPolarity() * tool.ThreshField.Value;
+                yv = tool.ThreshField.Value;   % signed: drawn where it detects
                 xl = xlim(ax);
                 roi = images.roi.Line(ax, Position=[xl(1) yv; xl(2) yv], ...
-                    Color=[0.85 0 0], LineWidth=1, MarkerSize=0.1);
+                    Color=[0.85 0 0], LineWidth=2.5, MarkerSize=0.1, ...
+                    Deletable=false);
                 addlistener(roi, "MovingROI", @(src, ~) tool.constrainThreshLine(src));
                 addlistener(roi, "ROIMoved", @(~, ~) tool.onThreshLineMoved());
                 tool.ThresholdLine = roi;
@@ -253,7 +254,7 @@ classdef RecoverSpikesTool < handle
         end
 
         function constrainThreshLine(tool, roi)
-            if tool.SuppressLineEvents
+            if tool.SuppressLineEvents || ~isvalid(roi)
                 return
             end
             ym = mean(roi.Position(:, 2));
@@ -267,7 +268,17 @@ classdef RecoverSpikesTool < handle
                 return
             end
             ym = mean(tool.ThresholdLine.Position(:, 2));
-            tool.ThreshField.Value = max(1, round(abs(ym)));
+            thr = round(ym);
+            if thr == 0   % keep a definite side; 0 has no polarity
+                if ym < 0
+                    thr = -1;
+                else
+                    thr = 1;
+                end
+            end
+            tool.ThreshField.Value = thr;
+            SpikeVisualizationApp.logEvent(sprintf( ...
+                "recover thr drag: ym=%.1f -> thr=%d", ym, thr));
             tool.detect();
         end
 
@@ -288,8 +299,18 @@ classdef RecoverSpikesTool < handle
             pre = s.waveformWindow(1);
             post = s.waveformWindow(2);
             template = mean(double(s.waveforms(idx, :)), 1) * uvScl;   % microvolts
-            [~, tPeak] = max(abs(template));
-            polarity = sign(template(tPeak));
+            % The threshold's SIGN picks the detection side (drag the line
+            % across zero to hunt the opposite lobe); align candidates on
+            % the template's extremum on that side.
+            detPol = sign(tool.ThreshField.Value);
+            if detPol == 0
+                [~, tp] = max(abs(template));
+                detPol = sign(template(tp));
+                if detPol == 0
+                    detPol = -1;
+                end
+            end
+            [~, tPeak] = max(template * detPol);
             offset = tPeak - (pre + 1);
 
             fs = s.samplingRate;
@@ -308,8 +329,14 @@ classdef RecoverSpikesTool < handle
             end
 
             refr = round(fs * tool.RefractoryMs / 1000);
-            [~, locs] = findpeaks(uv * polarity, ...
-                MinPeakHeight=tool.ThreshField.Value, MinPeakDistance=refr);
+            [~, locs] = findpeaks(uv * detPol, ...
+                MinPeakHeight=abs(tool.ThreshField.Value), MinPeakDistance=refr);
+            if numel(locs) > 20000
+                tool.setInfo(sprintf("%d raw crossings at thr %d uV - too " + ...
+                    "many to score. Move the threshold further from zero.", ...
+                    numel(locs), tool.ThreshField.Value));
+                return
+            end
             spkTimes = first - 1 + locs - offset;   % candidate spike sample times
 
             % Keep candidates whose snippet matches the template shape.
@@ -458,6 +485,11 @@ classdef RecoverSpikesTool < handle
             ylabel(ax, "Voltage (\muV)");
             xlim(ax, [tSec(1) tSec(end)]);
             tool.drawThresholdLine();
+            if ~isempty(tool.TraceSlider) && isvalid(tool.TraceSlider)
+                dur = s.numSamples / fs;
+                tool.TraceSlider.Value = ...
+                    min(1, max(0, tool.TraceCenterSec / dur));
+            end
         end
 
         function setInfo(tool, msg)

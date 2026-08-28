@@ -82,13 +82,19 @@ classdef CurationTool < handle
                 clusterIds = app.selectedClusterIds();
             end
             tool.ClusterIds = unique(clusterIds(:))';
+            SpikeVisualizationApp.logEvent("CurationTool ctor start, clusters " + ...
+                mat2str(tool.ClusterIds));
             tool.computeData();
+            SpikeVisualizationApp.logEvent("CurationTool computeData done");
             tool.buildUI();
+            SpikeVisualizationApp.logEvent("CurationTool buildUI done");
             % Restore the time-window split if it was open at last close.
             if getpref(tool.PrefGroup, "curationWindowTool", false)
                 tool.launchWindowTool();
+                SpikeVisualizationApp.logEvent("CurationTool windowtool auto-open done");
             end
             tool.refreshAll();
+            SpikeVisualizationApp.logEvent("CurationTool ctor end");
         end
 
         function delete(tool)
@@ -250,12 +256,12 @@ classdef CurationTool < handle
                 return
             end
             if tool.ClusterMethod == "dbscan"
-                tool.setInfo("Finding clusters (dbscan)...");
+                tool.setInfo("Finding clusters (dbscan)");
                 drawnow;
                 tool.FoundLabels = tool.runDbscan(X);
             else
                 k = tool.resolveK(X);
-                tool.setInfo(sprintf("Finding %d clusters (%s)...", ...
+                tool.setInfo(sprintf("Finding %d clusters (%s)", ...
                     k, tool.ClusterMethod));
                 drawnow;
                 tool.FoundLabels = tool.runClustering(X, k);
@@ -483,8 +489,14 @@ classdef CurationTool < handle
                 end
                 tool.SelMask = mask;
             end
-            tool.setInfo(sprintf("%d line(s) placed; %d spikes cross all of them.", ...
-                numel(tool.LineSegs), sum(tool.SelMask)));
+            parts = strings(1, numel(tool.ClusterIds));
+            for k = 1:numel(tool.ClusterIds)
+                parts(k) = sprintf("c%d: %d", tool.ClusterIds(k), ...
+                    sum(tool.SelMask & tool.ClusterOf == tool.ClusterIds(k)));
+            end
+            tool.setInfo(sprintf("%d line(s) placed; %d spikes cross all " + ...
+                "of them (%s).", numel(tool.LineSegs), sum(tool.SelMask), ...
+                join(parts, ", ")));
         end
 
         function refreshAfterEdit(tool)
@@ -492,8 +504,19 @@ classdef CurationTool < handle
             tool.SelSource = "";
             tool.SelectedRange = [];
             tool.LineSegs = {};
-            tool.FoundLabels = [];
+            oldIdx = tool.GlobalIdx;
+            oldLabels = tool.FoundLabels;
             tool.computeData();
+            % Keep the found clusters across edits (Move/Merge keep every
+            % spike in the shown set): remap the labels onto the recomputed
+            % spike order. They clear only when spikes actually left the
+            % view - or on the next Find clusters / Clear.
+            if ~isempty(oldLabels)
+                [tf, loc] = ismember(tool.GlobalIdx, oldIdx);
+                if all(tf)
+                    tool.FoundLabels = oldLabels(loc);
+                end
+            end
             tool.updateMoveDropdown();
             tool.updateFoundDropdown();
             tool.UIFigure.Name = tool.windowName();
@@ -501,12 +524,16 @@ classdef CurationTool < handle
         end
 
         function refreshAll(tool)
+            t0 = tic;
+            SpikeVisualizationApp.logEvent("curation.refreshAll start");
             tool.refreshISI();
             tool.refreshPC();
             tool.refreshWave();
             if ~isempty(tool.WindowTool) && isvalid(tool.WindowTool)
                 tool.WindowTool.setCurationSelection(tool.globalSelection());
             end
+            SpikeVisualizationApp.logEvent(sprintf( ...
+                "curation.refreshAll end (%.2f s)", toc(t0)));
         end
 
         function name = windowName(tool)
@@ -527,7 +554,13 @@ classdef CurationTool < handle
             head = uigridlayout(outer, [1 3]);
             head.Layout.Row = 1;
             head.Padding = [0 0 0 0];
-            uilabel(head, Text="");
+            recCell = uigridlayout(head, [1 2]);
+            recCell.ColumnWidth = {"fit", "1x"};
+            recCell.Padding = [0 0 0 0];
+            uibutton(recCell, Text="Recover spikes", ...
+                Tooltip="Find missed below-threshold spikes for the shown " + ...
+                "clusters (same as Tools > Recover missing spikes)", ...
+                ButtonPushedFcn=@(~, ~) tool.launchRecoverTool());
             pcCell = uigridlayout(head, [1 2]);
             pcCell.Layout.Column = 2;
             pcCell.ColumnWidth = {"fit", "1x"};
@@ -629,18 +662,24 @@ classdef CurationTool < handle
             end
 
             tools = uimenu(tool.UIFigure, Text="Tools");
-            uimenu(tools, Text="Time-window split...", ...
+            uimenu(tools, Text="Time-window split", ...
                 MenuSelectedFcn=@(~, ~) tool.launchWindowTool());
-            uimenu(tools, Text="Recover missing spikes...", ...
+            uimenu(tools, Text="Recover missing spikes", ...
                 MenuSelectedFcn=@(~, ~) tool.launchRecoverTool());
         end
 
         function launchWindowTool(tool)
-            if ~isempty(tool.WindowTool) && isvalid(tool.WindowTool)
-                delete(tool.WindowTool);
+            try
+                if ~isempty(tool.WindowTool) && isvalid(tool.WindowTool)
+                    delete(tool.WindowTool);
+                end
+                tool.WindowTool = TimeWindowTool(tool.App, tool);
+                tool.arrangeWithWindowTool();
+                figure(tool.WindowTool.figureHandle());   % never open hidden
+            catch err
+                uialert(tool.UIFigure, "Time-window split failed to open:" + ...
+                    newline + err.message, "Tool error");
             end
-            tool.WindowTool = TimeWindowTool(tool.App, tool);
-            tool.arrangeWithWindowTool();
         end
 
         function arrangeWithWindowTool(tool)
@@ -680,10 +719,15 @@ classdef CurationTool < handle
         end
 
         function launchRecoverTool(tool)
-            if ~isempty(tool.RecoverTool) && isvalid(tool.RecoverTool)
-                delete(tool.RecoverTool);
+            try
+                if ~isempty(tool.RecoverTool) && isvalid(tool.RecoverTool)
+                    delete(tool.RecoverTool);
+                end
+                tool.RecoverTool = RecoverSpikesTool(tool.App, tool);
+            catch err
+                uialert(tool.UIFigure, "Recover missing spikes failed " + ...
+                    "to open:" + newline + err.message, "Tool error");
             end
-            tool.RecoverTool = RecoverSpikesTool(tool.App, tool);
         end
 
         function setMethod(tool, method)
@@ -733,8 +777,12 @@ classdef CurationTool < handle
         end
 
         function circleISI(tool)
-            roi = drawfreehand(tool.ISIAxes, Color=[0.2 0.2 0.2]);
-            if isempty(roi) || ~isvalid(roi) || size(roi.Position, 1) < 3
+            roi = drawInteractive(tool.ISIAxes, "freehand");
+            if isempty(roi) || ~isvalid(roi)
+                return
+            end
+            if size(roi.Position, 1) < 3
+                delete(roi);
                 return
             end
             xRange = [min(roi.Position(:, 1)), max(roi.Position(:, 1))];
@@ -743,8 +791,12 @@ classdef CurationTool < handle
         end
 
         function lassoPC(tool)
-            roi = drawfreehand(tool.PCAxes, Color=[0.2 0.2 0.2]);
-            if isempty(roi) || ~isvalid(roi) || size(roi.Position, 1) < 3
+            roi = drawInteractive(tool.PCAxes, "freehand");
+            if isempty(roi) || ~isvalid(roi)
+                return
+            end
+            if size(roi.Position, 1) < 3
+                delete(roi);
                 return
             end
             poly = roi.Position;
@@ -753,8 +805,12 @@ classdef CurationTool < handle
         end
 
         function lineSelect(tool)
-            roi = drawline(tool.WaveAxes, Color=[0.2 0.2 0.2]);
-            if isempty(roi) || ~isvalid(roi) || size(roi.Position, 1) < 2
+            roi = drawInteractive(tool.WaveAxes, "line");
+            if isempty(roi) || ~isvalid(roi)
+                return
+            end
+            if size(roi.Position, 1) < 2
+                delete(roi);
                 return
             end
             p = roi.Position;
@@ -898,6 +954,8 @@ classdef CurationTool < handle
                 tool.setInfo(sprintf("Computing t-SNE embedding%s - this " + ...
                     "can take a while...", note));
                 drawnow;
+                SpikeVisualizationApp.logEvent(sprintf("tsne start (%d spikes)", ...
+                    numel(sub)));
                 try
                     xy(sub, :) = tsne(tool.ScoresFull(sub, :), ...
                         Perplexity=min(30, floor((numel(sub) - 1) / 3)));
@@ -915,6 +973,7 @@ classdef CurationTool < handle
                 catch err
                     tool.setInfo("t-SNE failed: " + err.message);
                 end
+                SpikeVisualizationApp.logEvent("tsne end");
             else
                 tool.setInfo("Too few spikes for a t-SNE embedding.");
             end
@@ -933,7 +992,22 @@ classdef CurationTool < handle
                     plot(ax, t, tool.WaveUV(ci, :)', Color=[colors(k, :) 0.15]);
                 end
             end
-            sel = tool.subsample(find(tool.SelMask), tool.MaxWaveformsToPlot);
+            selIdx = find(tool.SelMask);
+            sel = [];
+            if ~isempty(selIdx)
+                % Subsample the selection overlay PER colour group, so a small
+                % cluster's selected spikes stay visible next to a dominant
+                % one (a plain time-uniform subsample is proportional to
+                % cluster size and hides the minority cluster entirely).
+                per = max(20, floor(tool.MaxWaveformsToPlot / numel(masks)));
+                for k = 1:numel(masks)
+                    gi = selIdx(masks{k}(selIdx));
+                    sel = [sel; tool.subsample(gi, per)]; %#ok<AGROW>
+                end
+                if isempty(sel)
+                    sel = tool.subsample(selIdx, tool.MaxWaveformsToPlot);
+                end
+            end
             if ~isempty(sel)
                 plot(ax, t, tool.WaveUV(sel, :)', ...
                     Color=[tool.SelectColor 0.35], LineWidth=0.5);
@@ -979,6 +1053,40 @@ classdef CurationTool < handle
 end
 
 % =========================================================================
+function roi = drawInteractive(ax, kind)
+%DRAWINTERACTIVE Draw an ROI with the axes interactions parked first.
+%   A toolbar-toggled pan/zoom otherwise swallows the mouse: the draw never
+%   starts, the callback blocks forever, and the whole app freezes. Returns
+%   [] if the draw errors or is aborted (e.g. the window closes mid-draw).
+try
+    fig = ancestor(ax, "figure");
+    zoom(fig, "off");
+    pan(fig, "off");
+catch
+    % modes already off, or the figure is closing
+end
+disableDefaultInteractivity(ax);
+cleanup = onCleanup(@() restoreInteractivity(ax));
+SpikeVisualizationApp.logEvent("drawInteractive: arming " + kind);
+try
+    if kind == "line"
+        roi = drawline(ax, Color=[0.2 0.2 0.2]);
+    else
+        roi = drawfreehand(ax, Color=[0.2 0.2 0.2]);
+    end
+    SpikeVisualizationApp.logEvent("drawInteractive: draw finished");
+catch err
+    roi = [];
+    SpikeVisualizationApp.logEvent("drawInteractive FAILED: " + err.message);
+end
+end
+
+function restoreInteractivity(ax)
+if isvalid(ax)
+    enableDefaultInteractivity(ax);
+end
+end
+
 function pal = foundPalette(k)
     %FOUNDPALETTE k well-separated colours for found clusters (golden-angle).
     pal = zeros(k, 3);
