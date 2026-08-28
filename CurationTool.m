@@ -818,6 +818,39 @@ classdef CurationTool < handle
             tool.selectByLine(p(1, :), p(2, :));
         end
 
+        function colors = foundColors(tool, g, masks)
+            %FOUNDCOLORS Colours for found groups, reusing the source
+            %   clusters' colours where a group largely IS an existing
+            %   cluster (greedy best-overlap matching, biggest overlap
+            %   first), so Find changes as few colours as possible. Groups
+            %   left over (split-off parts, extras) get palette colours.
+            nG = numel(g);
+            cids = tool.ClusterIds;
+            N = zeros(nG, numel(cids));
+            for i = 1:nG
+                if g(i) < 0
+                    continue   % dbscan noise never claims a cluster colour
+                end
+                for j = 1:numel(cids)
+                    N(i, j) = sum(tool.ClusterOf(masks{i}) == cids(j));
+                end
+            end
+            colors = nan(nG, 3);
+            while true
+                [v, k] = max(N(:));
+                if v <= 0
+                    break
+                end
+                [i, j] = ind2sub(size(N), k);
+                colors(i, :) = tool.App.clusterColor(cids(j));
+                N(i, :) = -1;   % each group and each cluster used once
+                N(:, j) = -1;
+            end
+            pal = foundPalette(nG);
+            left = find(isnan(colors(:, 1)));
+            colors(left, :) = pal(left, :);
+        end
+
         function refreshISI(tool)
             ax = tool.ISIAxes;
             cla(ax);
@@ -864,7 +897,7 @@ classdef CurationTool < handle
                 g = unique(tool.FoundLabels);
                 masks = arrayfun(@(v) tool.FoundLabels == v, g, ...
                     UniformOutput=false);
-                colors = foundPalette(numel(g));
+                colors = tool.foundColors(g, masks);
                 colors(g < 0, :) = 0.55;   % grey for dbscan noise
                 names = "found " + string(g(:));
                 names(g < 0) = "noise";

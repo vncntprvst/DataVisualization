@@ -565,10 +565,9 @@ classdef TimeWindowTool < handle
         function plotTrace(tool)
             ax = tool.TraceAxes;
             cla(ax);
-            % Announce before the read: if the raw file is slow to answer
-            % (cold disk, antivirus), the stall is labelled on screen.
-            title(ax, "Reading raw trace...");
-            drawnow;
+            % NO drawnow here: forcing a graphics flush mid teardown/rebuild
+            % of the companion windows stalled the whole app (see the
+            % 14:00:18 hang in SpikeVizEvents.log, 2026-08-28).
             SpikeVisualizationApp.logEvent("plotTrace: reading excerpt");
             [tSec, uv] = tool.App.traceExcerpt(tool.FocusSec, 0.5);
             SpikeVisualizationApp.logEvent("plotTrace: excerpt read");
