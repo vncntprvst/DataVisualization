@@ -148,7 +148,11 @@ function waveforms = extractWaveforms(datPath, numSamples, numChannels, ...
     numSpikes = numel(spikeTimes);
     waveforms = zeros(numSpikes, windowLength, "single");
 
-    starts = round(spikeTimes) - preSamples;          % 0-based-safe below
+    % spike_times.npy holds 0-BASED sample indices (Phy/KiloSort), so
+    % sample t lives at MATLAB index t+1. Without the +1 every waveform
+    % is cut one sample early, which shifts the template off the trough
+    % and costs sensitivity wherever waveforms are matched.
+    starts = round(spikeTimes) - preSamples + 1;
     for k = 1:numSpikes
         idx = starts(k):(starts(k) + windowLength - 1);
         valid = idx >= 1 & idx <= numSamples;
@@ -193,7 +197,7 @@ function score = alignmentScore(datPath, nCh, ns, times)
 %ALIGNMENTSCORE Fraction of waveform troughs within +/-2 samples of their
 %   median position (high for a correctly-read channel, low for interleaved).
     score = -inf;
-    times = times(times > 50 & times < ns - 50);
+    times = times(times > 50 & times < ns - 51);
     if numel(times) < 20
         return
     end
@@ -201,7 +205,7 @@ function score = alignmentScore(datPath, nCh, ns, times)
     map = memmapfile(datPath, Format={'int16', [nCh ns], 'raw'});
     troughs = zeros(numel(times), 1);
     for i = 1:numel(times)
-        w = single(map.Data.raw(1, times(i) - 40:times(i) + 40));
+        w = single(map.Data.raw(1, times(i) - 40 + 1:times(i) + 40 + 1));
         [~, troughs(i)] = min(w);
     end
     score = mean(abs(troughs - median(troughs)) <= 2);

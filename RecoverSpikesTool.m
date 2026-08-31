@@ -337,14 +337,17 @@ classdef RecoverSpikesTool < handle
                     numel(locs), tool.ThreshField.Value));
                 return
             end
-            spkTimes = first - 1 + locs - offset;   % candidate spike sample times
+            % uv(j) is MATLAB index first+j-1, i.e. 0-BASED sample
+            % first+j-2; candidate times are stored 0-based like
+            % spike_times.npy, so accepting one lands on the trough.
+            spkTimes = first - 2 + locs - offset;
 
             % Keep candidates whose snippet matches the template shape.
             score = nan(numel(spkTimes), 1);
             amp = nan(numel(spkTimes), 1);
             for k = 1:numel(spkTimes)
-                lo = spkTimes(k) - first + 1 - pre;
-                hi = spkTimes(k) - first + 1 + post;
+                lo = spkTimes(k) - first + 2 - pre;   % 0-based -> uv index
+                hi = spkTimes(k) - first + 2 + post;
                 if lo >= 1 && hi <= numel(uv)
                     snip = uv(lo:hi);
                     score(k) = corr(snip(:), template(:));

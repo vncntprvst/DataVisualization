@@ -535,7 +535,9 @@ classdef SpikeVisualizationApp < handle
             [first, last] = app.traceWindowBounds();
             ch = app.Spikes.dataChannel + 1;
             excerpt = single(app.Traces.Data.raw(ch, first:last)) * sc;
-            tSec = (first:last) / fs;
+            % MATLAB index i holds 0-based sample i-1, and spike times
+            % are 0-based, so shift the axis to put markers on troughs
+            tSec = (first - 1:last - 1) / fs;
             plot(ax, tSec, excerpt, Color=[0 0 0 0.8], LineWidth=0.1);
             hold(ax, "on");
             yMarker = app.TraceYLim(1) + 0.03 * diff(app.TraceYLim);
@@ -1279,7 +1281,9 @@ classdef SpikeVisualizationApp < handle
                 scv = app.Spikes.uvPerADC;
             end
             uv = raw * scv;
-            tSec = (first:last) / fs;
+            % MATLAB index i holds 0-based sample i-1, and spike times
+            % are 0-based, so shift the axis to put markers on troughs
+            tSec = (first - 1:last - 1) / fs;
         end
 
         function w = timeWindowSec(app)
@@ -1597,7 +1601,7 @@ classdef SpikeVisualizationApp < handle
             channelData = single(app.Traces.Data.raw(ch, :));
             times = round(times(:));
             wf = zeros(numel(times), windowLength, "single");
-            starts = times - w(1);
+            starts = times - w(1) + 1;   % 0-based spike time -> MATLAB index
             for k = 1:numel(times)
                 idx = starts(k):(starts(k) + windowLength - 1);
                 valid = idx >= 1 & idx <= numSamples;
