@@ -1579,7 +1579,8 @@ classdef SpikeVisualizationApp < handle
                     [~, sampleIdx] = max(meanWaveform);
                 case "trough"
                     [~, sampleIdx] = min(meanWaveform);
-                case "firstpeak"
+                case "firstpeak"   % first deflection either way: findpeaks
+                                   % on |w|, so an early trough counts
                     absWf = abs(meanWaveform);
                     [~, locs] = findpeaks(absWf, MinPeakHeight=0.3 * max(absWf));
                     if isempty(locs)
@@ -1739,7 +1740,7 @@ classdef SpikeVisualizationApp < handle
                 MenuSelectedFcn=@(~, ~) app.setRealignMode("mainpeak"));
             app.RealignMenus.trough = uimenu(ra, Text="Main trough (negative)", ...
                 MenuSelectedFcn=@(~, ~) app.setRealignMode("trough"));
-            app.RealignMenus.firstpeak = uimenu(ra, Text="First peak", ...
+            app.RealignMenus.firstpeak = uimenu(ra, Text="First deflection", ...
                 MenuSelectedFcn=@(~, ~) app.setRealignMode("firstpeak"));
             app.RealignMenus.clusterScope = uimenu(ra, Separator="on", ...
                 Text="Whole clusters (between them)", Checked="on", ...
@@ -1791,7 +1792,7 @@ classdef SpikeVisualizationApp < handle
                 case "trough"
                     s = "main trough (negative)";
                 case "firstpeak"
-                    s = "first peak";
+                    s = "first deflection";
                 otherwise
                     s = "largest deflection";
             end
